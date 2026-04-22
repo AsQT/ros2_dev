@@ -1,0 +1,36 @@
+[move_pose_cartesian_server-4] [INFO] [1776766274.713413492] [move_pose_cartesian_server]: Execute started
+[move_pose_cartesian_server-4] [INFO] [1776766274.713587589] [move_pose_cartesian_server]: Calling executor_->moveToPoseCartesian()
+[move_group-1] [INFO] [1776766274.798670936] [move_group.moveit.moveit.ros.move_group.cartesian_path_service_capability]: Received request to compute Cartesian path
+[move_group-1] [INFO] [1776766274.798833112] [move_group.moveit.moveit.ros.move_group.cartesian_path_service_capability]: Attempting to follow 2 waypoints for link 'tcp_link' using a step of 0.010000 m and jump threshold 0.000000 (in global reference frame)
+[move_group-1] [INFO] [1776766274.809467145] [move_group.moveit.moveit.ros.move_group.cartesian_path_service_capability]: Computed Cartesian path with 54 points (followed 100.000000% of requested trajectory)
+[move_pose_cartesian_server-4] [INFO] [1776766274.810760583] [moveit_visual_tools]: No planning scene passed into moveit_visual_tools, creating one.
+[move_pose_cartesian_server-4] [INFO] [1776766274.810807527] [moveit_visual_tools]: Loading planning scene monitor
+[move_pose_cartesian_server-4] [INFO] [1776766274.812869635] [planning_scene_interface_95055255925024.move_pose_cartesian_server.moveit.ros.rdf_loader]: Loaded robot model in 0.00196343 seconds
+[move_pose_cartesian_server-4] [INFO] [1776766274.812918833] [planning_scene_interface_95055255925024.move_pose_cartesian_server.moveit.core.robot_model]: Loading robot model 'robot'...
+[move_pose_cartesian_server-4] [INFO] [1776766274.935239320] [planning_scene_interface_95055255925024.move_pose_cartesian_server.moveit.kinematics.kdl_kinematics_plugin]: Joint weights for group 'arm': 1 1 1 1 1 1
+[move_pose_cartesian_server-4] [INFO] [1776766275.362200651] [planning_scene_interface_95055255925024.move_pose_cartesian_server.moveit.ros.planning_scene_monitor]: Publishing maintained planning scene on 'monitored_planning_scene'
+[move_pose_cartesian_server-4] [INFO] [1776766275.362400879] [planning_scene_interface_95055255925024.move_pose_cartesian_server.moveit.ros.planning_scene_monitor]: Stopping existing planning scene publisher.
+[move_pose_cartesian_server-4] [INFO] [1776766275.362705774] [planning_scene_interface_95055255925024.move_pose_cartesian_server.moveit.ros.planning_scene_monitor]: Stopped publishing maintained planning scene.
+[move_pose_cartesian_server-4] [INFO] [1776766275.363903410] [planning_scene_interface_95055255925024.move_pose_cartesian_server.moveit.ros.planning_scene_monitor]: Publishing maintained planning scene on 'planning_scene'
+[move_pose_cartesian_server-4] [INFO] [1776766275.364112317] [moveit_visual_tools]: Publishing planning scene on planning_scene
+[move_pose_cartesian_server-4] [INFO] [1776766275.366966705] [move_pose_cartesian_server.moveit.ros.move_group_interface]: Execute request accepted
+[move_group-1] [INFO] [1776766275.367281042] [move_group.moveit.moveit.ros.move_group.clear_octomap_service]: Execution request received
+[move_group-1] [INFO] [1776766275.367385876] [move_group.moveit.moveit.plugins.simple_controller_manager]: Returned 2 controllers in list
+[move_group-1] [INFO] [1776766275.367441105] [move_group.moveit.moveit.plugins.simple_controller_manager]: Returned 2 controllers in list
+[move_group-1] [INFO] [1776766275.367643412] [move_group.moveit.moveit.ros.trajectory_execution_manager]: Validating trajectory with allowed_start_tolerance 0.01
+[move_pose_cartesian_server-4] [ERROR] [1776766275.367505182] [move_pose_cartesian_server.rclcpp_action]: unknown goal response, ignoring...
+[move_group-1] [INFO] [1776766275.398328064] [move_group.moveit.moveit.ros.trajectory_execution_manager]: Starting trajectory execution ...
+[move_group-1] [INFO] [1776766275.398419199] [move_group.moveit.moveit.plugins.simple_controller_manager]: Returned 2 controllers in list
+[move_group-1] [INFO] [1776766275.398457992] [move_group.moveit.moveit.plugins.simple_controller_manager]: Returned 2 controllers in list
+[move_group-1] [INFO] [1776766275.398778861] [moveit.simple_controller_manager.follow_joint_trajectory_controller_handle]: sending trajectory to arm_controller
+[move_group-1] [INFO] [1776766275.399833364] [moveit.simple_controller_manager.follow_joint_trajectory_controller_handle]: arm_controller started execution
+[move_group-1] [INFO] [1776766275.399865737] [moveit.simple_controller_manager.follow_joint_trajectory_controller_handle]: Goal request accepted!
+[move_pose_cartesian_server-4] [INFO] [1776766275.400947645] [move_pose_cartesian_server.moveit.ros.move_group_interface]: Execute request aborted
+[move_pose_cartesian_server-4] [ERROR] [1776766275.401487958] [move_pose_cartesian_server.moveit.ros.move_group_interface]: MoveGroupInterface::execute() failed or timeout reached
+[move_pose_cartesian_server-4] [INFO] [1776766275.401601488] [move_pose_cartesian_server]: Returned from moveToPoseCartesian(), ok=false
+[move_pose_cartesian_server-4] [ERROR] [1776766275.401622997] [move_pose_cartesian_server]: Aborting goal: Execution of Cartesian path failed
+[move_group-1] [INFO] [1776766278.400614966] [moveit.simple_controller_manager.follow_joint_trajectory_controller_handle]: Controller 'arm_controller' successfully finished
+[move_group-1] [INFO] [1776766278.998337996] [move_group.moveit.moveit.ros.trajectory_execution_manager]: Completed trajectory execution with status SUCCEEDED ...
+[move_group-1] [INFO] [1776766278.998548763] [move_group.moveit.moveit.ros.move_group.clear_octomap_service]: Execution completed: SUCCEEDED
+[move_pose_cartesian_server-4] [ERROR] [1776766278.999111121] [move_pose_cartesian_server.rclcpp_action]: unknown result response, ignoring...
+

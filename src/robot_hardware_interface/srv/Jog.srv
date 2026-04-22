@@ -1,0 +1,7 @@
+uint8 id
+float64 vel   # rad/s
+uint8 dir     # 0=NEG, 1=POS
+---
+bool ok
+uint8 error_code
+string message

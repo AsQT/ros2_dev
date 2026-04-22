@@ -1,0 +1,67 @@
+<?xml version="1.0" ?>
+<sdf version="1.9">
+  <world name="arm_and_table">
+    
+    <plugin filename="gz-sim-scene-broadcaster-system" name="gz::sim::systems::SceneBroadcaster"></plugin>
+    <plugin filename="gz-sim-sensors-system" name="gz::sim::systems::Sensors"><render_engine>ogre2</render_engine></plugin>
+    <plugin filename="gz-sim-physics-system" name="gz::sim::systems::Physics"></plugin>
+    <plugin filename="gz-sim-user-commands-system" name="gz::sim::systems::UserCommands"></plugin>
+
+    <scene>
+      <ambient>0.4 0.4 0.4 1</ambient>
+      <background>0.7 0.7 0.7 1</background>
+      <shadows>true</shadows>
+    </scene>
+
+    <light type="directional" name="sun">
+      <cast_shadows>true</cast_shadows>
+      <pose>0 0 10 0 0 0</pose>
+      <diffuse>0.8 0.8 0.8 1</diffuse>
+      <specular>0.2 0.2 0.2 1</specular>
+      <direction>-0.5 0.1 -0.9</direction>
+    </light>
+
+    <model name="ground_plane">
+      <static>true</static>
+      <link name="link">
+        <collision name="collision"><geometry><plane><normal>0 0 1</normal><size>100 100</size></plane></geometry></collision>
+        <visual name="visual"><geometry><plane><normal>0 0 1</normal><size>100 100</size></plane></geometry><material><ambient>0.8 0.8 0.8 1</ambient><diffuse>0.8 0.8 0.8 1</diffuse></material></visual>
+      </link>
+    </model>
+
+    <model name="table">
+      <static>true</static>
+      <pose>0 0 0 0 0 0</pose> 
+
+      <link name="link">
+        <collision name="surface">
+            <pose>0 0 1.0 0 0 0</pose>
+            <geometry><box><size>1.5 0.8 0.03</size></box></geometry>
+            <surface><friction><ode><mu>0.5</mu><mu2>0.5</mu2></ode></friction></surface>
+        </collision>        
+        <visual name="surface_visual">
+            <pose>0 0 1.0 0 0 0</pose>
+            <geometry><box><size>1.5 0.8 0.03</size></box></geometry>
+            <material><ambient>0.90 0.90 0.90 1</ambient><diffuse>0.95 0.95 0.95 1</diffuse><specular>0.15 0.15 0.15 1</specular></material>
+        </visual>
+
+        <visual name="table_top_tex">
+            <pose>0 0 1.0155 0 0 0</pose>
+              <geometry>
+                <mesh>
+                  <uri>file://table/table_top.obj</uri>
+                </mesh>
+              </geometry>
+            <cast_shadows>false</cast_shadows>
+        </visual>
+
+          
+        <visual name="leg1"><pose>0.68 0.38 0.5 0 0 0</pose><geometry><cylinder><radius>0.02</radius><length>1.0</length></cylinder></geometry><material><ambient>0.5 0.5 0.5 1</ambient></material></visual>
+        <visual name="leg2"><pose>0.68 -0.38 0.5 0 0 0</pose><geometry><cylinder><radius>0.02</radius><length>1.0</length></cylinder></geometry><material><ambient>0.5 0.5 0.5 1</ambient></material></visual>
+        <visual name="leg3"><pose>-0.68 -0.38 0.5 0 0 0</pose><geometry><cylinder><radius>0.02</radius><length>1.0</length></cylinder></geometry><material><ambient>0.5 0.5 0.5 1</ambient></material></visual>
+        <visual name="leg4"><pose>-0.68 0.38 0.5 0 0 0</pose><geometry><cylinder><radius>0.02</radius><length>1.0</length></cylinder></geometry><material><ambient>0.5 0.5 0.5 1</ambient></material></visual>
+      </link>
+    </model>
+
+  </world>
+</sdf>

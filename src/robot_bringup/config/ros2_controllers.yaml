@@ -1,0 +1,54 @@
+# This config file is used by ros2_control
+controller_manager:
+  ros__parameters:
+    update_rate: 100  # Hz
+
+    arm_controller:
+      type: joint_trajectory_controller/JointTrajectoryController
+
+    gripper_controller:
+      type: joint_trajectory_controller/JointTrajectoryController
+
+    joint_state_broadcaster:
+      type: joint_state_broadcaster/JointStateBroadcaster
+
+arm_controller:
+  ros__parameters:
+    joints:
+      - joint_1
+      - joint_2
+      - joint_3
+      - joint_4
+      - joint_5
+      - joint_6
+    command_interfaces:
+      - position
+      - velocity
+    state_interfaces:
+      - position
+      - velocity
+    allow_nonzero_velocity_at_trajectory_end: true
+
+    # Nới lỏng dung sai để Controller
+    constraints:
+      goal_time: 1.0 # Cho phép trễ 1 giây so với dự tính
+      stopped_velocity_tolerance: 0.05
+      joint_1: {trajectory: 0.2, goal: 0.1}
+      joint_2: {trajectory: 0.2, goal: 0.1}
+      joint_3: {trajectory: 0.2, goal: 0.1}
+      joint_4: {trajectory: 0.2, goal: 0.1}
+      joint_5: {trajectory: 0.2, goal: 0.1}
+      joint_6: {trajectory: 0.2, goal: 0.1}
+    # -------------------------
+
+gripper_controller:
+  ros__parameters:
+    joints:
+      - joint_gl
+      - joint_gr
+    command_interfaces:
+      - position
+    state_interfaces:
+      - position
+      - velocity
+    allow_nonzero_velocity_at_trajectory_end: true

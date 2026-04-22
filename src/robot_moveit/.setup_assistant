@@ -1,0 +1,27 @@
+moveit_setup_assistant_config:
+  urdf:
+    package:        robot_description
+    relative_path:  urdf/robot.urdf.xacro
+  srdf:
+    relative_path:  config/robot.srdf
+  package_settings:
+    author_name:    MinhQuang
+    author_email:   Tranminhquang617@outlook.com.vn
+    generated_timestamp: 1765276505
+  control_xacro:
+    command:
+      - position
+      - velocity
+    state:
+      - position
+      - velocity
+  modified_urdf:
+    xacros:
+      - control_xacro
+  control_xacro:
+    command:
+      - position
+      - velocity
+    state:
+      - position
+      - velocity

@@ -1,0 +1,10 @@
+# Default initial positions for robot's ros2_control fake system
+initial_positions:
+                  joint_1: 1.57
+                  joint_2: 0
+                  joint_3: 1.57
+                  joint_4: 0
+                  joint_5: 0
+                  joint_6: 0
+                  joint_gl: 0
+                  joint_gr: 0

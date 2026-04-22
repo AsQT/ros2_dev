@@ -1,0 +1,85 @@
+<?xml version="1.0"?>
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro">
+
+  <xacro:macro  name  ="base_camera"
+              params  ="parent_link 
+                        base_link     := camera_link 
+                        camera_name   := camera 
+                        frame_name    := frame">
+
+    <link       name  ="${base_link}">
+      <inertial>
+        <origin xyz   ="0 0 0" rpy  ="0 0 0"/>
+        <mass   value ="0.1"/>
+        <inertia  ixx ="0.1"   ixy  ="0" ixz="0" iyy="0.1" iyz="0" izz="0.1"/>
+      </inertial>
+      <visual>
+        <geometry>
+          <mesh filename  ="package://robot_description/meshes/astra_cam.stl"/>
+        </geometry>
+        <material   name  ="black"/>
+      </visual>
+      <collision>
+        <geometry>
+          <mesh filename  ="package://robot_description/meshes/astra_cam.stl"/>
+        </geometry>
+      </collision>
+    </link>
+    <link           name  ="${base_link}_optical"/>
+
+    <joint          name  ="${base_link}_joint"         type  ="fixed">
+      <parent       link  ="${parent_link}"/>
+      <child        link  ="${base_link}"/>
+      <origin       xyz   ="0.6 0 1.0" rpy="${pi} 0 ${pi/2}"/>
+    </joint>
+
+    <joint          name  ="${base_link}_optical_joint" type  ="fixed">
+      <parent       link  ="${base_link}"/>
+      <child        link  ="${base_link}_optical"/>
+      <origin       xyz   ="0 0 0" rpy="0 0 0"/>
+    </joint>
+
+    <gazebo reference="${base_link}">
+      <sensor name="astra_rgb" type="camera">
+        <pose>0 0 0 0 ${-pi/2} 0</pose>
+        <always_on>true</always_on>
+        <update_rate>30</update_rate>
+        <visualize>true</visualize>
+        <topic>astra/rgb/image_raw</topic>
+        <camera>
+          <image>
+            <width>640</width>
+            <height>480</height>
+            <format>R8G8B8</format>
+          </image>
+          <clip>
+            <near>0.05</near>
+            <far>8.0</far>
+          </clip>
+        </camera>
+      </sensor>
+    </gazebo>
+
+    <gazebo reference="${base_link}">
+      <sensor name="astra_depth" type="depth">
+        <pose>0 0 0 0 ${-pi/2} 0</pose>
+        <always_on>true</always_on>
+        <update_rate>30</update_rate>
+        <visualize>true</visualize>
+        <topic>astra/depth/image_raw</topic>
+        <camera>
+          <image>
+            <width>640</width>
+            <height>480</height>
+          </image>
+          <clip>
+            <near>0.05</near>
+            <far>8.0</far>
+          </clip>
+        </camera>
+      </sensor>
+    </gazebo>
+      
+  </xacro:macro>
+</robot>
+

@@ -1,0 +1,39 @@
+<?xml version="1.0"?>
+<package format="3">
+  <name>robot_hardware_interface</name>
+  <version>0.0.1</version>
+  <description>ROS2 C++ RS485 hardware node using AA BB ... AA FF framing + byte stuffing + Modbus CRC16 (from provided protocol).</description>
+
+  <maintainer email="you@example.com">you</maintainer>
+  <license>MIT</license>
+
+  <buildtool_depend>ament_cmake</buildtool_depend>
+  <buildtool_depend>rosidl_default_generators</buildtool_depend>
+
+  <depend>rclcpp</depend>
+  <depend>std_msgs</depend>
+  <depend>sensor_msgs</depend>
+  <depend>trajectory_msgs</depend>
+  <depend>std_srvs</depend>
+
+  <depend>hardware_interface</depend>
+
+  <depend>pluginlib</depend>
+
+  <depend>rclcpp_lifecycle</depend>
+
+    <exec_depend>rclpy</exec_depend>
+
+  <exec_depend>python3-qtpy</exec_depend>
+
+  <exec_depend>python3-pyqt5</exec_depend>
+
+  <exec_depend>rosidl_default_runtime</exec_depend>
+
+  <member_of_group>rosidl_interface_packages</member_of_group>
+
+<export>
+    <build_type>ament_cmake</build_type>
+    <hardware_interface plugin="${prefix}/plugin.xml"/>
+  </export>
+</package>

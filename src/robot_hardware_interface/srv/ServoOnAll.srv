@@ -1,0 +1,5 @@
+uint8 state  # 0=OFF, 1=ON
+---
+bool ok
+uint8 error_code
+string message

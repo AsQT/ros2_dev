@@ -1,0 +1,21 @@
+[spawner-6] [INFO] [1767236820.983660981] [ros2_control_controller_spawner_arm_controller]: KeyboardInterrupt received! Exiting....
+[INFO] [spawner-7]: process has finished cleanly [pid 8564]
+[INFO] [spawner-6]: process has finished cleanly [pid 8563]
+[gazebo-2] Warning [Utils.cc:132] [/sdf/model[@name="robot"]/link[@name="base_link"]/sensor[@name="astra_rgb"]/gz_frame_id:<urdf-string>:L0]: XML Element[gz_frame_id], child of element[sensor], not defined in SDF. Copying[gz_frame_id] as children of [sensor].
+[gazebo-2] Warning [Utils.cc:132] [/sdf/model[@name="robot"]/link[@name="base_link"]/sensor[@name="astra_depth"]/gz_frame_id:<urdf-string>:L0]: XML Element[gz_frame_id], child of element[sensor], not defined in SDF. Copying[gz_frame_id] as children of [sensor].
+[gazebo-2] [INFO] [1767236821.322406565] [gz_ros_control]: [gz_ros2_control] Fixed joint [virtual_joint] (Entity=51)] is skipped
+[gazebo-2] [INFO] [1767236821.323731769] [gz_ros_control]: Loading controller_manager
+[gazebo-2] [INFO] [1767236821.331928217] [controller_manager]: Using ROS clock for triggering controller manager cycles.
+[gazebo-2] [INFO] [1767236821.336265604] [controller_manager]: Subscribing to '/robot_description' topic for robot description.
+[gazebo-2] [WARN] [1767236821.340940498] [gz_ros_control]: Waiting RM to load and initialize hardware...
+[INFO] [robot_state_publisher-1]: process has finished cleanly [pid 8557]
+[INFO] [spawner-5]: process has finished cleanly [pid 8562]
+[gazebo-2] [WARN] [1767236822.335110462] [controller_manager]: Waiting for data on 'robot_description' topic to finish initialization
+[gazebo-2] [WARN] [1767236823.335054335] [controller_manager]: Waiting for data on 'robot_description' topic to finish initialization
+[gazebo-2] [WARN] [1767236823.341124532] [gz_ros_control]: Waiting RM to load and initialize hardware...
+[gazebo-2] [WARN] [1767236824.335037967] [controller_manager]: Waiting for data on 'robot_description' topic to finish initialization
+[gazebo-2] [WARN] [1767236825.335068255] [controller_manager]: Waiting for data on 'robot_description' topic to finish initialization
+[gazebo-2] [WARN] [1767236825.341562241] [gz_ros_control]: Waiting RM to load and initialize hardware...
+[ERROR] [gazebo-2]: process[gazebo-2] failed to terminate '5' seconds after receiving 'SIGINT', escalating to 'SIGTERM'
+[INFO] [gazebo-2]: sending signal 'SIGTERM' to process[gazebo-2]
+[ERROR] [gazebo-2]: process has died [pid 8558, exit code -15, cmd 'ruby /opt/ros/jazzy/opt/gz_tools_vendor/bin/gz sim -r /home/minhquang/ros2/install/robot_description/share/robot_description/worlds/table/arm_on_the_table.sdf --force-version 8'].

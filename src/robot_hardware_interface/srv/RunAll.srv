@@ -1,0 +1,6 @@
+float64 pos   # rad
+float64 vel   # rad/s
+---
+bool ok
+uint8 error_code
+string message

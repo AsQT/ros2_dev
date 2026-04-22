@@ -1,0 +1,4 @@
+---
+bool ok
+uint8 error_code
+string message
