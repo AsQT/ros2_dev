@@ -71,11 +71,11 @@ namespace robot_hardware_interface {
     bool is_connected() const;
 
     std::optional<std::vector<uint8_t>> exchange(
-        uint8_t cmd,
-        const std::vector<uint8_t>& payload = {},
-        bool wait_reply = true,
-        std::optional<uint8_t> expected_cmd = std::nullopt,
-        double timeout_s = 0.5);
+                  uint8_t cmd,
+                  const std::vector<uint8_t>& payload = {},
+                  bool wait_reply = true,
+                  std::optional<uint8_t> expected_cmd = std::nullopt,
+                  double timeout_s = 0.5);
 
     void servo_on_axis(uint8_t axis_id);
     void servo_off_axis(uint8_t axis_id);
@@ -90,11 +90,12 @@ namespace robot_hardware_interface {
     std::vector<uint32_t> status_all(double timeout_s = 0.5);
     void run_all(const std::vector<double>& pos6_deg, const std::vector<double>& vel6_deg_s);
     std::pair<std::vector<double>, std::vector<double>> get_pos_all(double timeout_s);
+
     std::tuple<
                 std::vector<double>, 
                 std::vector<double>, 
                 std::vector<uint16_t>
-    > get_all_state(double timeout_s);
+            > get_all_state(double timeout_s);
 
   private:
     std::vector<uint8_t> build_frame(uint8_t cmd, const std::vector<uint8_t>& payload);
@@ -105,7 +106,6 @@ namespace robot_hardware_interface {
     static int32_t unpack_i32_le(const uint8_t* p);
     static uint32_t unpack_u32_le(const uint8_t* p);
     static uint16_t unpack_u16_le(const uint8_t* p);
-
     static double clamp(double v, double lo, double hi);
 
     mutable std::mutex io_mtx_;

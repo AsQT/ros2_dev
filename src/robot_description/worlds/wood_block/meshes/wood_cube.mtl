@@ -4,7 +4,7 @@ Kd 1 1 1
 Ks 0 0 0
 d 1
 illum 1
-map_Kd ./top.jpg
+map_Kd ./id_0.png
 
 newmtl MAT_BOTTOM
 Ka 1 1 1
@@ -12,7 +12,7 @@ Kd 1 1 1
 Ks 0 0 0
 d 1
 illum 1
-map_Kd ./bottom.jpg
+map_Kd ./id_1.png
 
 newmtl MAT_LEFT
 Ka 1 1 1
@@ -20,7 +20,7 @@ Kd 1 1 1
 Ks 0 0 0
 d 1
 illum 1
-map_Kd ./left.jpg
+map_Kd ./id_2.png
 
 newmtl MAT_RIGHT
 Ka 1 1 1
@@ -28,7 +28,7 @@ Kd 1 1 1
 Ks 0 0 0
 d 1
 illum 1
-map_Kd ./right.jpg
+map_Kd ./id_3.png
 
 newmtl MAT_FRONT
 Ka 1 1 1
@@ -36,7 +36,7 @@ Kd 1 1 1
 Ks 0 0 0
 d 1
 illum 1
-map_Kd ./front.jpg
+map_Kd ./id_4.png
 
 newmtl MAT_BACK
 Ka 1 1 1
@@ -44,4 +44,4 @@ Kd 1 1 1
 Ks 0 0 0
 d 1
 illum 1
-map_Kd ./back.jpg
+map_Kd ./id_5.png

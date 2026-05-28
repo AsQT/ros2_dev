@@ -17,7 +17,6 @@ find_package(moveit_core REQUIRED)
 find_package(moveit_msgs REQUIRED)
 find_package(moveit_visual_tools REQUIRED)
 find_package(Eigen3 REQUIRED)
-#find_package(moveit_configs_utils REQUIRED)
 
 include_directories(include)
 
@@ -26,6 +25,8 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   "action/MoveToPose.action"
   "action/MoveToPoseCartesian.action"
   "action/CheckerBoard.action"
+  "action/MoveGripper.action"
+  "action/PickPlace.action"
   DEPENDENCIES geometry_msgs
 )
 
@@ -44,6 +45,20 @@ ament_target_dependencies(
   moveit_visual_tools
 )
 target_link_libraries(moveit_executor Eigen3::Eigen)
+
+add_library(gripper_executor SHARED
+  src/gripper_executor.cpp)
+
+ament_target_dependencies(
+  gripper_executor
+  rclcpp
+  geometry_msgs
+  moveit_ros_planning_interface
+  moveit_core
+  moveit_msgs
+
+)
+target_link_libraries(gripper_executor Eigen3::Eigen)
 
 ## action 
 add_executable(gohome_server src/gohome_server.cpp)
@@ -104,6 +119,32 @@ target_link_libraries(checker_board_server
   "${cpp_typesupport_target}"
 )
 
+add_executable(move_gripper_server src/move_gripper_server.cpp)
+ament_target_dependencies(move_gripper_server
+  rclcpp
+  rclcpp_action
+  moveit_ros_planning_interface
+)
+target_link_libraries(move_gripper_server
+  gripper_executor
+)
+rosidl_target_interfaces(move_gripper_server
+  ${PROJECT_NAME} "rosidl_typesupport_cpp"
+)
+
+add_executable(pickplace_server src/pickplace_server.cpp)
+ament_target_dependencies(pickplace_server
+  rclcpp
+  rclcpp_action
+  moveit_ros_planning_interface
+)
+target_link_libraries(pickplace_server
+  moveit_executor
+  gripper_executor
+)
+rosidl_target_interfaces(pickplace_server
+  ${PROJECT_NAME} "rosidl_typesupport_cpp"
+)
 #_________________________________________________________________
 add_executable(task_manager_client src/task_manager_client.cpp)
 ament_target_dependencies(task_manager_client
@@ -118,6 +159,7 @@ target_link_libraries(task_manager_client
 
 install(TARGETS
   moveit_executor
+  gripper_executor
   ARCHIVE DESTINATION lib
   LIBRARY DESTINATION lib
   RUNTIME DESTINATION bin
@@ -128,6 +170,8 @@ install(TARGETS
   move_to_pose_server
   move_pose_cartesian_server
   checker_board_server
+  move_gripper_server
+  pickplace_server
 
   task_manager_client
 

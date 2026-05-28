@@ -7,12 +7,10 @@ rs485_hw:
     pos_timeout_s: 0.35
     status_timeout_s: 0.5
     all_token: 153
-    joint_names: ["joint_1","joint_2","joint_3","joint_4","joint_5","joint_6","joint_gl","joint_gl"] #,"joint_gripper"
+    joint_names: ["joint_1","joint_2","joint_3","joint_4","joint_5","joint_6","joint_gl","joint_gl"] 
     # Axis IDs on STM32 firmware are usually 1-based (1..N). Change if your firmware is 0-based.
     axis_ids: [0,1,2,3,4,5,6,7]
 
-    # Protocol bytes (frame starts with 0xAA, header1 and ends with 0xAA, tail1)
-    # Many firmwares use AA-CC ... AA-EE. If you see "Timeout waiting TAIL", try tail1=238 (0xEE).
-    proto_header1: 187   # 0xBB (default). Use 204 (0xCC) if your firmware uses AA-CC.
-    proto_tail1:   255   # 0xFF (default). Use 238 (0xEE) if your firmware uses AA-EE.
+    proto_header1: 187   # 0xBB (default). 
+    proto_tail1:   255   # 0xFF (default). 
     proto_stuff:   170   # 0xAA

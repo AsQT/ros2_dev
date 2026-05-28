@@ -1,18 +1,12 @@
 {
-    "ROS2.distro": "jazzy",
+    "ros.distro": "jazzy",
     "python.autoComplete.extraPaths": [
-        "/home/minhquang/ros2/install/robot_pee_gui/lib/python3.12/site-packages",
-        "/home/minhquang/ros2/install/robot_moveit_gui/lib/python3.12/site-packages",
-        "/home/minhquang/ros2/install/robot_gui/lib/python3.12/site-packages",
-        "/home/minhquang/ros2/install/robot_hardware_interface/lib/python3.12/site-packages",
         "/opt/ros/jazzy/lib/python3.12/site-packages"
     ],
     "python.analysis.extraPaths": [
-        "/home/minhquang/ros2/install/robot_pee_gui/lib/python3.12/site-packages",
-        "/home/minhquang/ros2/install/robot_moveit_gui/lib/python3.12/site-packages",
-        "/home/minhquang/ros2/install/robot_gui/lib/python3.12/site-packages",
-        "/home/minhquang/ros2/install/robot_hardware_interface/lib/python3.12/site-packages",
         "/opt/ros/jazzy/lib/python3.12/site-packages"
     ],
-    "C_Cpp.errorSquiggles": "disabled"
+    "C_Cpp.errorSquiggles": "disabled",
+    "ROS2.distro": "jazzy",
+    "cmake.sourceDirectory": "/home/minhquang/ros2/src/astra_camera"
 }

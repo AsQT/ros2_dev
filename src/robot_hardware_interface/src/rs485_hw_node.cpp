@@ -37,9 +37,7 @@ double rad2deg(double rad) { return rad * 180.0 / M_PI; }
 class Rs485HwNode : public rclcpp::Node {
 public:
   Rs485HwNode() : Node("rs485_hw") {
-    // ======================
-    // Parameters
-    // ======================
+    /*___________ Parameters ______________*/
     declare_parameter<std::string>("port", "");
     declare_parameter<int>("baudrate", 115200);
     declare_parameter<double>("serial_timeout_s", 0.2);
@@ -49,22 +47,20 @@ public:
     declare_parameter<double>("status_timeout_s", 0.5);
     declare_parameter<int>("all_token", 153);
 
-    // Protocol bytes (frame = [0xAA, header1] ... [0xAA, tail1])
+    /*_______ Protocol bytes (frame = [0xAA, header1] ... [0xAA, tail1]) ______*/
     declare_parameter<int>("proto_header1", 0xBB);
     declare_parameter<int>("proto_tail1", 0xFF);
     declare_parameter<int>("proto_stuff", 0xAA);
 
-    // (Giữ lại cho tương thích, hiện HOME đã là SERVO_HOME_AX)
     declare_parameter<std::vector<double>>("home_positions_rad", std::vector<double>{});
     declare_parameter<double>("home_vel_rad_s", 0.5);
 
     declare_parameter<std::vector<std::string>>(
       "joint_names",
-      std::vector<std::string>{"joint_1","joint_2","joint_3","joint_4","joint_5","joint_6","joint_gl","joint_gr"}
-    );
+      std::vector<std::string>{"joint_1","joint_2","joint_3","joint_4","joint_5","joint_6","joint_gl","joint_gr"});
     declare_parameter<std::vector<int64_t>>("axis_ids", std::vector<int64_t>{0,1,2,3,4,5,6,7});
 
-    // Cache joint_names / axis_ids
+    /*_____ Cache joint_names / axis_ids ___________*/
     joint_names_ = get_parameter("joint_names").as_string_array();
     {
       auto ids64 = get_parameter("axis_ids").as_integer_array();
@@ -77,7 +73,6 @@ public:
       axis_ids_.resize(joint_names_.size());
       for (size_t i = 0; i < axis_ids_.size(); ++i) axis_ids_[i] = static_cast<int>(i);
     }
-
     // Keep sizes consistent
     {
       const size_t n = std::min(joint_names_.size(), axis_ids_.size());
@@ -85,16 +80,11 @@ public:
       axis_ids_.resize(n);
     }
 
-    // ======================
-    // Publishers
-    // ======================
+    /*_____________ Publishers _______________*/ 
     pub_joint_states_ = create_publisher<sensor_msgs::msg::JointState>("/joint_states", 10);
     pub_connected_    = create_publisher<std_msgs::msg::Bool>("/hardware/connected", 10);
-    //pub_flags_ =        create_publisher<std_msgs::msg::UInt16MultiArray>("/hardware/status_flags", 10);
     pub_status_flag_ = create_publisher<robot_hardware_interface::msg::FlagStatus>( "/hardware/flags", 10);
-    // ======================
-    // Subscribers
-    // ======================
+    /*_____________ Subscribers _______________*/ 
     sub_servo_axis_ = create_subscription<std_msgs::msg::UInt8MultiArray>(
       "/rs485_hw/cmd_servo_axis", 10,
       [this](std_msgs::msg::UInt8MultiArray::SharedPtr m){ on_servo_axis(m); });
@@ -115,9 +105,7 @@ public:
       "/rs485_hw/joint_trajectory", 10,
       [this](trajectory_msgs::msg::JointTrajectory::SharedPtr m){ on_joint_traj(m); });
 
-    // ======================
-    // Services
-    // ======================
+    /*__________ Services ____________*/ 
     srv_connect_ = create_service<std_srvs::srv::Trigger>(
       "/rs485_hw/connect",
       [this](const std::shared_ptr<std_srvs::srv::Trigger::Request>,
@@ -174,9 +162,7 @@ public:
       [this](const std::shared_ptr<robot_hardware_interface::srv::StopAll::Request> req,
              std::shared_ptr<robot_hardware_interface::srv::StopAll::Response> res){ on_stop_all(req, res); });
 
-    // ======================
-    // Timers
-    // ======================
+    /*__________Timers ____________*/ 
     double poll_status_hz = get_parameter("poll_status_hz").as_double();
 
     if (poll_status_hz > 0.0) poll_status_hz = std::max(0.1, poll_status_hz);
@@ -199,10 +185,7 @@ public:
 
 private:
   static constexpr size_t kStatusAxes = 6;
-
-  // ======================
-  // Helpers
-  // ======================
+  /*___________ Helpers _______________*/ 
   void publish_connected(bool ok) {
     std_msgs::msg::Bool m; m.data = ok;
     pub_connected_->publish(m);
@@ -213,16 +196,13 @@ private:
   static inline bool has_flag(uint32_t v, uint32_t mask) {
     return (v & mask) != 0u;
   }
-  // ======================
-  // Core services
-  // ======================
+  /* __________________ Core services ______________*/ 
   void on_connect(std::shared_ptr<std_srvs::srv::Trigger::Response> res) {
     try {
       auto port = get_parameter("port").as_string();
       auto baud = static_cast<int>(get_parameter("baudrate").as_int());
       auto to_s = get_parameter("serial_timeout_s").as_double();
       if (port.empty()) throw std::runtime_error("port param empty");
-
       // Apply protocol bytes BEFORE connecting
       robot_hardware_interface::ProtocolBytes p = client_.protocol();
       p.header1 = static_cast<uint8_t>(get_parameter("proto_header1").as_int() & 0xFF);
@@ -263,9 +243,7 @@ private:
   }
 
   void on_poll_now(std::shared_ptr<std_srvs::srv::Trigger::Response> res) {
-    //poll_status();
     poll_all();
-    //poll_positions();
     RCLCPP_INFO(get_logger(), "on_poll_now");
     res->success = true;
     res->message = "OK";
@@ -288,9 +266,7 @@ private:
 void publish_status(const std::vector<uint16_t> & flag_s)
 {
   robot_hardware_interface::msg::FlagStatus msg;
-
   const size_t n = std::min(flag_s.size(), msg.axes.size());
-
   for (size_t axis = 0; axis < n; ++axis) {
     const uint16_t st = flag_s[axis];
     auto & a = msg.axes[axis];
@@ -307,15 +283,12 @@ void publish_status(const std::vector<uint16_t> & flag_s)
     a.emg           = (st & 0x0200) != 0;
     a.stop          = (st & 0x0400) != 0;
     a.communi_err   = (st & 0x8000) != 0;
-
     a.status_f      = st;
   }
 
   pub_status_flag_->publish(msg);
 }
-  // ======================
-  // Typed service handlers
-  // ======================
+  /*___________ Typed service handlers _______________*/ 
   void on_servo_on_axis(const std::shared_ptr<robot_hardware_interface::srv::ServoOnAxis::Request> req,
                         std::shared_ptr<robot_hardware_interface::srv::ServoOnAxis::Response> res) {
     try {
@@ -397,7 +370,6 @@ void publish_status(const std::vector<uint16_t> & flag_s)
 
       const uint8_t axis = req->id;
 
-      // kiểm tra axis có nằm trong axis_ids_
       auto it = std::find(axis_ids_.begin(), axis_ids_.end(), static_cast<int>(axis));
       if (it == axis_ids_.end()) {
         throw std::runtime_error("axis id not found in axis_ids param");
@@ -419,7 +391,6 @@ void publish_status(const std::vector<uint16_t> & flag_s)
                     std::shared_ptr<robot_hardware_interface::srv::StopAxis::Response> res) {
     try {
       if (!connected()) throw std::runtime_error("Not connected");
-      // Protocol defines: JOG vel=0 => stop.
       client_.jog(req->id, true, 0.0);
       res->ok = true;
       res->error_code = 0;
@@ -470,16 +441,6 @@ void publish_status(const std::vector<uint16_t> & flag_s)
     std::vector<uint16_t> flag_s;
     try {
       std::tie(pos_deg, vel_deg_s, flag_s) = client_.get_all_state(to);
-      /*
-      if (!pos_deg.empty() && !vel_deg_s.empty()) {
-        RCLCPP_INFO(
-          get_logger(),
-          "J1 raw pos = %.3f deg | vel = %.3f deg/s",
-          pos_deg[0],
-          vel_deg_s[0]
-        );
-      }
-      */ 
     } catch (const std::exception &e) {
       if (auto clk = get_clock()) {
         RCLCPP_WARN_THROTTLE(get_logger(), *clk, 2000, "poll_positions(get_pos_all): %s", e.what());
@@ -504,7 +465,6 @@ void publish_status(const std::vector<uint16_t> & flag_s)
           avail, n_cfg, avail);
       }
     }
-
     const size_t m = std::min(n_cfg, avail);
 
     sensor_msgs::msg::JointState js;
@@ -514,32 +474,16 @@ void publish_status(const std::vector<uint16_t> & flag_s)
     js.position.resize(m);
     js.velocity.resize(m);
 
-    
-    /*
-    RCLCPP_INFO(
-      get_logger(),
-      "J1 pos = %.3f rad | vel = %.3f rad/s | flag = 0x%04X",
-      js.position[5],
-      js.velocity[5],
-      static_cast<unsigned int>(flag_s[5])
-    );
-    */
     for (size_t i = 0; i < m; ++i) {
       js.position[i] = deg2rad(pos_deg[i]);
       js.velocity[i] = deg2rad(vel_deg_s[i]);
     }
     //std_msgs::msg::UInt16MultiArray msg;
-
     //msg.data = flag_s;
-
-    //pub_flags_->publish(msg);
     pub_joint_states_->publish(js);
     publish_status(flag_s);
   }
-
-  // ======================
-  // Subscribers handlers
-  // ======================
+  /*__________ Subscribers handlers __________________*/
   void on_servo_axis(const std_msgs::msg::UInt8MultiArray::SharedPtr msg) {
     if (!connected() || msg->data.size() < 2) return;
     const uint8_t id = msg->data[0];
@@ -582,7 +526,6 @@ void publish_status(const std::vector<uint16_t> & flag_s)
     const size_t n = axis_ids_.size();
     if (n == 0) return;
     if (msg->data.size() < 2 * n) return;
-
     // Firmware optimized RUN_ALL for exactly 6 axes
     if (n == 6) {
       std::vector<double> pos(6), vel(6);
@@ -595,7 +538,6 @@ void publish_status(const std::vector<uint16_t> & flag_s)
       }
       return;
     }
-
     // Otherwise: per-axis
     try {
       for (size_t i = 0; i < n; ++i) {
@@ -616,7 +558,6 @@ void publish_status(const std::vector<uint16_t> & flag_s)
     const size_t n = axis_ids_.size();
     if (n == 0) return;
     if (p.positions.size() < n) return;
-
     // Firmware optimized RUN_ALL for exactly 6 axes
     if (n == 6) {
       std::vector<double> pos_deg(6), vel_deg_s(6, 10.0);
@@ -653,28 +594,27 @@ private:
 
   rclcpp::Publisher<sensor_msgs::msg::JointState>::SharedPtr pub_joint_states_;
   rclcpp::Publisher<std_msgs::msg::Bool>::SharedPtr pub_connected_;
-  //rclcpp::Publisher<std_msgs::msg::UInt16MultiArray>::SharedPtr pub_flags_;
   rclcpp::Publisher<robot_hardware_interface::msg::FlagStatus>::SharedPtr pub_status_flag_;
 
 
-  rclcpp::Subscription<std_msgs::msg::UInt8MultiArray>::SharedPtr sub_servo_axis_;
-  rclcpp::Subscription<std_msgs::msg::Float64MultiArray>::SharedPtr sub_run_axis_;
-  rclcpp::Subscription<std_msgs::msg::Float64MultiArray>::SharedPtr sub_jog_;
-  rclcpp::Subscription<std_msgs::msg::Float64MultiArray>::SharedPtr sub_run_all_;
-  rclcpp::Subscription<trajectory_msgs::msg::JointTrajectory>::SharedPtr sub_traj_;
+  rclcpp::Subscription<std_msgs::msg::        UInt8MultiArray>::SharedPtr   sub_servo_axis_;
+  rclcpp::Subscription<std_msgs::msg::        Float64MultiArray>::SharedPtr sub_run_axis_;
+  rclcpp::Subscription<std_msgs::msg::        Float64MultiArray>::SharedPtr sub_jog_;
+  rclcpp::Subscription<std_msgs::msg::        Float64MultiArray>::SharedPtr sub_run_all_;
+  rclcpp::Subscription<trajectory_msgs::msg:: JointTrajectory>::SharedPtr   sub_traj_;
 
   rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr srv_connect_;
   rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr srv_disconnect_;
   rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr srv_poll_now_;
   rclcpp::Service<std_srvs::srv::SetBool>::SharedPtr srv_servo_all_;
 
-  rclcpp::Service<robot_hardware_interface::srv::ServoOnAxis>::SharedPtr srv_servo_on_axis_;
-  rclcpp::Service<robot_hardware_interface::srv::ServoOnAll>::SharedPtr srv_servo_on_all_;
-  rclcpp::Service<robot_hardware_interface::srv::Jog>::SharedPtr srv_jog_;
-  rclcpp::Service<robot_hardware_interface::srv::Home>::SharedPtr srv_home_;
-  rclcpp::Service<robot_hardware_interface::srv::RunAxis>::SharedPtr srv_run_axis_;
-  rclcpp::Service<robot_hardware_interface::srv::StopAxis>::SharedPtr srv_stop_axis_;
-  rclcpp::Service<robot_hardware_interface::srv::StopAll>::SharedPtr srv_stop_all_;
+  rclcpp::Service<robot_hardware_interface::srv::ServoOnAxis>:: SharedPtr srv_servo_on_axis_;
+  rclcpp::Service<robot_hardware_interface::srv::ServoOnAll>::  SharedPtr srv_servo_on_all_;
+  rclcpp::Service<robot_hardware_interface::srv::Jog>::         SharedPtr srv_jog_;
+  rclcpp::Service<robot_hardware_interface::srv::Home>::        SharedPtr srv_home_;
+  rclcpp::Service<robot_hardware_interface::srv::RunAxis>::     SharedPtr srv_run_axis_;
+  rclcpp::Service<robot_hardware_interface::srv::StopAxis>::    SharedPtr srv_stop_axis_;
+  rclcpp::Service<robot_hardware_interface::srv::StopAll>::     SharedPtr srv_stop_all_;
 
   rclcpp::TimerBase::SharedPtr timer_status_;
   rclcpp::TimerBase::SharedPtr timer_pos_;

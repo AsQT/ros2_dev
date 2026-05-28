@@ -93,9 +93,8 @@ bool MoveItExecutor::goNamedTarget(
   publishText("Planning to named target: " + target_name);
 
   moveit::planning_interface::MoveGroupInterface::Plan plan;
-  //const auto plan_result = move_group_->plan(plan);
 
-  const auto plan_result = move_group_->asyncExecute(plan);
+  const auto plan_result = move_group_->execute(plan);
   std::this_thread::sleep_for(std::chrono::milliseconds(1000));
 
   if (plan_result != moveit::core::MoveItErrorCode::SUCCESS) {
@@ -172,9 +171,8 @@ bool MoveItExecutor::moveToPose(
   }
 
   publishText("Executing_pose_target");
-
-  //const auto exec_result = move_group_->execute(plan);
-  const auto exec_result = move_group_->asyncExecute(plan);
+  
+  const auto exec_result = move_group_->execute(plan);
   std::this_thread::sleep_for(std::chrono::milliseconds(1000));
   move_group_->clearPoseTargets();
 
@@ -250,7 +248,7 @@ bool MoveItExecutor::moveToPoseCartesian(
   moveit::planning_interface::MoveGroupInterface::Plan plan;
   plan.trajectory = trajectory;
 
-  const auto exec_result = move_group_->asyncExecute(plan);
+  const auto exec_result = move_group_->execute(plan);
 
   if (exec_result != moveit::core::MoveItErrorCode::SUCCESS) {
     error_msg = "Execution of Cartesian path failed";

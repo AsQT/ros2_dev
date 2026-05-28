@@ -86,7 +86,7 @@ class Backend(Node):
 
         # --- params ---
         self.declare_parameter("joint_names", ["joint_1", "joint_2", "joint_3", "joint_4", "joint_5", "joint_6","joint_gl","joint_gl"])
-        self.declare_parameter("axis_ids", [0, 1, 2, 3, 4, 5, 6, 7])  # khuyến nghị 1..6
+        self.declare_parameter("axis_ids", [0, 1, 2, 3, 4, 5, 6, 7]) 
 
         self.joint_names: List[str] = list(self.get_parameter("joint_names").value)
         self.axis_ids: List[int] = [int(x) for x in self.get_parameter("axis_ids").value]
@@ -101,7 +101,6 @@ class Backend(Node):
         # --- subscribers ---
         self.create_subscription(JointState, "/joint_states", self._on_js, 20)
         self.create_subscription(Bool, "/rs485_hw/connected", self._on_connected, 10)
-        #self.create_subscription(UInt16MultiArray, "/rs485_hw/status_flags", self._on_flags, 10)
         self.create_subscription(String, "/rs485_hw/status_text", self._on_text, 10)
 
         # --- services ---
@@ -121,10 +120,6 @@ class Backend(Node):
     def _on_connected(self, msg: Bool) -> None:
         with self._lock:
             self.connected = bool(msg.data)
-
-    #def _on_flags(self, msg: UInt16MultiArray):
-    #    raw_flags = [ax.raw_flag for ax in msg.axes]
-    #    print("flags =", raw_flags)
 
     def _on_text(self, msg: String) -> None:
         with self._lock:

@@ -43,7 +43,7 @@
       <sensor name="astra_rgb" type="camera">
         <pose>0 0 0 0 ${-pi/2} 0</pose>
         <always_on>true</always_on>
-        <update_rate>30</update_rate>
+        <update_rate>20</update_rate>
         <visualize>true</visualize>
         <topic>astra/rgb/image_raw</topic>
         <camera>
@@ -64,7 +64,7 @@
       <sensor name="astra_depth" type="depth">
         <pose>0 0 0 0 ${-pi/2} 0</pose>
         <always_on>true</always_on>
-        <update_rate>30</update_rate>
+        <update_rate>20</update_rate>
         <visualize>true</visualize>
         <topic>astra/depth/image_raw</topic>
         <camera>

@@ -19,6 +19,9 @@ from shape_msgs.msg import SolidPrimitive
 from tf2_ros import Buffer, TransformException, TransformListener
 
 from robot_gui.utils.angles import quaternion_to_rpy, rpy_to_quaternion
+from robot_task_manager.action import CheckerBoard
+from robot_task_manager.action import MoveToPose
+from robot_task_manager.action import MoveToPoseCartesian
 
 class PeeBackend(Node):
     """Backend for TF (base_link -> tcp_lik) and MoveIt plan/execute."""
@@ -40,6 +43,10 @@ class PeeBackend(Node):
         self.declare_parameter("max_velocity_scaling", 0.3)
         self.declare_parameter("max_acceleration_scaling", 0.3)
 
+        self.declare_parameter("checkerboard_action_name", "/checker_board")
+        self.declare_parameter("move_to_pose_action_name", "/move_to_pose")
+        self.declare_parameter("move_to_pose_cartesian_action_name", "/move_to_pose_cartesian")
+
         self.tf_buffer = Buffer()
         self.tf_listener = TransformListener(self.tf_buffer, self, spin_thread=False)
 
@@ -47,6 +54,24 @@ class PeeBackend(Node):
         self.execute_client = ActionClient(self, ExecuteTrajectory, self.get_parameter("execute_action_name").value)
         self.query_planners_client = self.create_client(QueryPlannerInterfaces, self.get_parameter("query_planners_service_name").value)
         self.display_pub = self.create_publisher(DisplayTrajectory, self.get_parameter("display_topic").value, 10)
+
+        self.checkerboard_client = ActionClient(
+            self,
+            CheckerBoard,
+            self.get_parameter("checkerboard_action_name").value,
+        )
+
+        self.move_to_pose_client = ActionClient(
+            self,
+            MoveToPose,
+            self.get_parameter("move_to_pose_action_name").value,
+        )
+
+        self.move_to_pose_cartesian_client = ActionClient(
+            self,
+            MoveToPoseCartesian,
+            self.get_parameter("move_to_pose_cartesian_action_name").value,
+        )
 
         self._last_planned_trajectory = None
         self._last_trajectory_start = None
@@ -289,6 +314,335 @@ class PeeBackend(Node):
 
         return True, "Execute thành công."
 
+    def call_move_to_pose_action(
+        self,
+        x: float,
+        y: float,
+        z: float,
+        roll_deg: float,
+        pitch_deg: float,
+        yaw_deg: float,
+        velocity_scale: float = 0.3,
+    ) -> Tuple[bool, str]:
+        if not self.move_to_pose_client.wait_for_server(timeout_sec=3.0):
+            return False, "Không thấy action server /move_to_pose"
+
+        qx, qy, qz, qw = rpy_to_quaternion(
+            math.radians(roll_deg),
+            math.radians(pitch_deg),
+            math.radians(yaw_deg),
+        )
+
+        goal = MoveToPose.Goal()
+
+        goal.target_pose.position.x = float(x)
+        goal.target_pose.position.y = float(y)
+        goal.target_pose.position.z = float(z)
+
+        goal.target_pose.orientation.x = qx
+        goal.target_pose.orientation.y = qy
+        goal.target_pose.orientation.z = qz
+        goal.target_pose.orientation.w = qw
+
+        goal.velocity_scale = float(velocity_scale)
+
+        send_goal_future = self.move_to_pose_client.send_goal_async(goal)
+        goal_handle = self._wait_future(send_goal_future, 10.0)
+
+        if goal_handle is None:
+            return False, "Timeout khi gửi goal MoveToPose."
+
+        if not goal_handle.accepted:
+            return False, "MoveToPose action bị từ chối."
+
+        result_future = goal_handle.get_result_async()
+        result_wrap = self._wait_future(result_future, 120.0)
+
+        if result_wrap is None:
+            return False, "Timeout khi chờ kết quả MoveToPose."
+
+        result = result_wrap.result
+
+        if not result.success:
+            return False, f"MoveToPose thất bại: {result.message}"
+
+        return True, f"MoveToPose hoàn thành: {result.message}"
+
+    def call_move_to_pose_cartesian_action(
+        self,
+        x: float,
+        y: float,
+        z: float,
+        roll_deg: float,
+        pitch_deg: float,
+        yaw_deg: float,
+        velocity_scale: float = 0.3,
+    ) -> Tuple[bool, str]:
+        if not self.move_to_pose_cartesian_client.wait_for_server(timeout_sec=3.0):
+            return False, "Không thấy action server /move_to_pose_cartesian"
+
+        qx, qy, qz, qw = rpy_to_quaternion(
+            math.radians(roll_deg),
+            math.radians(pitch_deg),
+            math.radians(yaw_deg),
+        )
+
+        goal = MoveToPoseCartesian.Goal()
+
+        goal.target_pose.position.x = float(x)
+        goal.target_pose.position.y = float(y)
+        goal.target_pose.position.z = float(z)
+
+        goal.target_pose.orientation.x = qx
+        goal.target_pose.orientation.y = qy
+        goal.target_pose.orientation.z = qz
+        goal.target_pose.orientation.w = qw
+
+        goal.velocity_scale = float(velocity_scale)
+
+        send_goal_future = self.move_to_pose_cartesian_client.send_goal_async(goal)
+        goal_handle = self._wait_future(send_goal_future, 10.0)
+
+        if goal_handle is None:
+            return False, "Timeout khi gửi goal MoveToPoseCartesian."
+
+        if not goal_handle.accepted:
+            return False, "MoveToPoseCartesian action bị từ chối."
+
+        result_future = goal_handle.get_result_async()
+        result_wrap = self._wait_future(result_future, 120.0)
+
+        if result_wrap is None:
+            return False, "Timeout khi chờ kết quả MoveToPoseCartesian."
+
+        result = result_wrap.result
+
+        if not result.success:
+            return False, f"MoveToPoseCartesian thất bại: {result.message}"
+
+        return True, f"MoveToPoseCartesian hoàn thành: {result.message}"
+
+    def call_checkerboard_action(
+        self,
+        step: float,
+        velocity_scale: float = 0.3,
+    ) -> Tuple[bool, str]:
+        if not self.checkerboard_client.wait_for_server(timeout_sec=3.0):
+            return False, "Không thấy action server /checker_board"
+
+        goal = CheckerBoard.Goal()
+
+        goal.step = float(step)
+        goal.velocity_scale = float(velocity_scale)
+
+        send_goal_future = self.checkerboard_client.send_goal_async(goal)
+        goal_handle = self._wait_future(send_goal_future, 10.0)
+
+        if goal_handle is None:
+            return False, "Timeout khi gửi goal CheckerBoard."
+
+        if not goal_handle.accepted:
+            return False, "CheckerBoard action bị từ chối."
+
+        result_future = goal_handle.get_result_async()
+        result_wrap = self._wait_future(result_future, 120.0)
+
+        if result_wrap is None:
+            return False, "Timeout khi chờ kết quả CheckerBoard."
+
+        result = result_wrap.result
+
+        if not result.success:
+            return False, f"CheckerBoard thất bại: {result.message}"
+
+        return True, f"CheckerBoard hoàn thành: {result.message}"
+    
+    def send_gui_action(
+        self,
+        action_key: str = "",
+        action_name: str = "",
+        frame_id: str = "",
+        x: float = 0.0,
+        y: float = 0.0,
+        z: float = 0.0,
+        roll_deg=None,
+        pitch_deg=None,
+        yaw_deg=None,
+        qx=None,
+        qy=None,
+        qz=None,
+        qw=None,
+        velocity_scale: float = 0.5,
+        step: float = 0.05,
+        **kwargs,
+    ) -> Tuple[bool, str]:
+
+        # Lấy tên action từ GUI
+        name = str(action_key or action_name).strip().lower()
+        name = name.replace(".action", "")
+        name = name.replace(" ", "_")
+
+        # Nếu GUI truyền roll/pitch/yaw bằng tên khác thì vẫn nhận
+        if roll_deg is None:
+            roll_deg = kwargs.get("roll", kwargs.get("r", 0.0))
+        if pitch_deg is None:
+            pitch_deg = kwargs.get("pitch", kwargs.get("p", 0.0))
+        if yaw_deg is None:
+            yaw_deg = kwargs.get("yaw", kwargs.get("yaw_deg", 0.0))
+
+        # Nếu GUI truyền quaternion thì dùng trực tiếp.
+        # Nếu không truyền quaternion thì tự đổi từ RPY sang quaternion.
+        if qx is None or qy is None or qz is None or qw is None:
+            qx, qy, qz, qw = rpy_to_quaternion(
+                math.radians(float(roll_deg)),
+                math.radians(float(pitch_deg)),
+                math.radians(float(yaw_deg)),
+            )
+        else:
+            qx = float(qx)
+            qy = float(qy)
+            qz = float(qz)
+            qw = float(qw)
+
+            # Chuẩn hóa quaternion cho chắc
+            norm = math.sqrt(qx * qx + qy * qy + qz * qz + qw * qw)
+            if norm > 1e-9:
+                qx /= norm
+                qy /= norm
+                qz /= norm
+                qw /= norm
+
+        # =====================================================
+        # MoveToPoseCartesian
+        # =====================================================
+        if name in [
+            "move_to_pose_cartesian",
+            "movetoposecartesian",
+            "move_to_pose_cartesian_action",
+        ]:
+            if not self.move_to_pose_cartesian_client.wait_for_server(timeout_sec=3.0):
+                return False, "Không thấy action server /move_to_pose_cartesian"
+
+            goal = MoveToPoseCartesian.Goal()
+
+            goal.target_pose.position.x = float(x)
+            goal.target_pose.position.y = float(y)
+            goal.target_pose.position.z = float(z)
+
+            goal.target_pose.orientation.x = qx
+            goal.target_pose.orientation.y = qy
+            goal.target_pose.orientation.z = qz
+            goal.target_pose.orientation.w = qw
+
+            goal.velocity_scale = float(velocity_scale)
+
+            send_goal_future = self.move_to_pose_cartesian_client.send_goal_async(goal)
+            goal_handle = self._wait_future(send_goal_future, 10.0)
+
+            if goal_handle is None:
+                return False, "Timeout khi gửi goal MoveToPoseCartesian."
+
+            if not goal_handle.accepted:
+                return False, "MoveToPoseCartesian action bị từ chối."
+
+            result_future = goal_handle.get_result_async()
+            result_wrap = self._wait_future(result_future, 120.0)
+
+            if result_wrap is None:
+                return False, "Timeout khi chờ kết quả MoveToPoseCartesian."
+
+            result = result_wrap.result
+
+            if not result.success:
+                return False, f"MoveToPoseCartesian thất bại: {result.message}"
+
+            return True, f"MoveToPoseCartesian hoàn thành: {result.message}"
+
+        # =====================================================
+        # MoveToPose
+        # =====================================================
+        if name in [
+            "move_to_pose",
+            "movetopose",
+            "move_to_pose_action",
+        ]:
+            if not self.move_to_pose_client.wait_for_server(timeout_sec=3.0):
+                return False, "Không thấy action server /move_to_pose"
+
+            goal = MoveToPose.Goal()
+
+            goal.target_pose.position.x = float(x)
+            goal.target_pose.position.y = float(y)
+            goal.target_pose.position.z = float(z)
+
+            goal.target_pose.orientation.x = qx
+            goal.target_pose.orientation.y = qy
+            goal.target_pose.orientation.z = qz
+            goal.target_pose.orientation.w = qw
+
+            goal.velocity_scale = float(velocity_scale)
+
+            send_goal_future = self.move_to_pose_client.send_goal_async(goal)
+            goal_handle = self._wait_future(send_goal_future, 10.0)
+
+            if goal_handle is None:
+                return False, "Timeout khi gửi goal MoveToPose."
+
+            if not goal_handle.accepted:
+                return False, "MoveToPose action bị từ chối."
+
+            result_future = goal_handle.get_result_async()
+            result_wrap = self._wait_future(result_future, 120.0)
+
+            if result_wrap is None:
+                return False, "Timeout khi chờ kết quả MoveToPose."
+
+            result = result_wrap.result
+
+            if not result.success:
+                return False, f"MoveToPose thất bại: {result.message}"
+
+            return True, f"MoveToPose hoàn thành: {result.message}"
+
+        # =====================================================
+        # CheckerBoard
+        # =====================================================
+        if name in [
+            "checkerboard",
+            "checker_board",
+            "checker_board_action",
+        ]:
+            if not self.checkerboard_client.wait_for_server(timeout_sec=3.0):
+                return False, "Không thấy action server /checker_board"
+
+            goal = CheckerBoard.Goal()
+            goal.step = float(step)
+            goal.velocity_scale = float(velocity_scale)
+
+            send_goal_future = self.checkerboard_client.send_goal_async(goal)
+            goal_handle = self._wait_future(send_goal_future, 10.0)
+
+            if goal_handle is None:
+                return False, "Timeout khi gửi goal CheckerBoard."
+
+            if not goal_handle.accepted:
+                return False, "CheckerBoard action bị từ chối."
+
+            result_future = goal_handle.get_result_async()
+            result_wrap = self._wait_future(result_future, 120.0)
+
+            if result_wrap is None:
+                return False, "Timeout khi chờ kết quả CheckerBoard."
+
+            result = result_wrap.result
+
+            if not result.success:
+                return False, f"CheckerBoard thất bại: {result.message}"
+
+            return True, f"CheckerBoard hoàn thành: {result.message}"
+
+        return False, f"Không hỗ trợ action: {action_key}"
+    
     def default_group_name(self) -> str:
         return str(self.get_parameter("group_name").value)
 

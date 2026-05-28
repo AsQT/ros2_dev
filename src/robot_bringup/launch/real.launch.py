@@ -10,6 +10,7 @@ def generate_launch_description():
     pkg_robot_hardware = get_package_share_directory("robot_hardware_interface")
     pkg_robot_gui = get_package_share_directory("robot_gui")
     robot_moveit_pkg = get_package_share_directory("robot_moveit")
+    robot_task_pkg = get_package_share_directory("robot_task_manager")
 
 
     hardware_node = os.path.join(pkg_robot_hardware, "launch", "hardware_interface.launch.py")
@@ -31,9 +32,16 @@ def generate_launch_description():
                         "moveit.launch.py",   )    ),
                 launch_arguments={ "use_mock": "false",
                                    "use_sim_time": "false",}.items(),   )
+    task_serrver = IncludeLaunchDescription(
+                PythonLaunchDescriptionSource(
+                    os.path.join(
+                        robot_task_pkg,
+                        "launch",
+                        "task_servers.launch.py",   )    ),  )
 
     return LaunchDescription(
         [
             Hardware,
             Gui,
-            moveit,  ]  )
+            moveit,
+            task_serrver,  ]  )

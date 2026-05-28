@@ -9,6 +9,8 @@
 #include "robot_task_manager/action/move_to_pose.hpp"
 #include "robot_task_manager/action/move_to_pose_cartesian.hpp"
 #include "robot_task_manager/action/checker_board.hpp"
+#include "robot_task_manager/action/move_gripper.hpp"
+#include "robot_task_manager/action/pick_place.hpp"
 
 
 class robotTaskManagerClient : public rclcpp::Node
@@ -26,6 +28,12 @@ public:
   using CheckerBoard                    = robot_task_manager::action::CheckerBoard ;
   using CheckerBoardGoalHandle          = rclcpp_action::ClientGoalHandle<CheckerBoard>;
 
+  using MoveGripper                     = robot_task_manager::action::MoveGripper;
+  using MoveGripperGoalHandle           = rclcpp_action::ClientGoalHandle<MoveGripper>;
+
+  using PickPlace                       = robot_task_manager::action::PickPlace;
+  using PickPlaceGoalHandle             = rclcpp_action::ClientGoalHandle<PickPlace>;
+
   robotTaskManagerClient()
   : Node("task_manager_client")
   {
@@ -34,6 +42,9 @@ public:
     move_to_pose_client_            = rclcpp_action::create_client<MoveToPose>(this, "move_to_pose");
     move_to_pose_cartesian_client_  = rclcpp_action::create_client<MoveToPoseCartesian>(this, "move_to_pose_cartesian");
     move_checker_board_client_      = rclcpp_action::create_client<CheckerBoard>(this, "checker_board");
+    move_gripper_client_            = rclcpp_action::create_client<MoveGripper>(this, "move_gripper");
+    pickplace_client_               = rclcpp_action::create_client<PickPlace>(this, "pickplace");
+
 
   }
 
@@ -50,6 +61,10 @@ public:
       send_move_to_pose_cartesian();
     } else if (task_name == "checker_board") {
       send_checker_board();
+    } else if (task_name == "move_gripper") {
+      send_move_gripper();
+    } else if (task_name == "pickplace") {
+      send_pickplace();
     } else {
       RCLCPP_ERROR(get_logger(), "Unknown task_name: %s", task_name.c_str());
       rclcpp::shutdown();   } }
@@ -59,6 +74,8 @@ private:
   rclcpp_action::Client<MoveToPose>::SharedPtr move_to_pose_client_;
   rclcpp_action::Client<MoveToPoseCartesian>::SharedPtr move_to_pose_cartesian_client_;
   rclcpp_action::Client<CheckerBoard>::SharedPtr move_checker_board_client_;
+  rclcpp_action::Client<MoveGripper>::SharedPtr move_gripper_client_;
+  rclcpp_action::Client<PickPlace>::SharedPtr pickplace_client_;
   /*___________________________________________________________________________*/
   void send_gohome()
   {
@@ -228,7 +245,148 @@ private:
 
     move_checker_board_client_->async_send_goal(goal, options);
   }
+/*___________________________________________________________________________*/
+  void send_move_gripper()
+  {
+    if (!move_gripper_client_->wait_for_action_server(std::chrono::seconds(5))) {
+      RCLCPP_ERROR(get_logger(), "MoveGripper server not available");
+      rclcpp::shutdown();
+      return;
+    }
 
+    MoveGripper::Goal goal;
+    goal.position = 0.03; 
+
+    rclcpp_action::Client<MoveGripper>::SendGoalOptions options;
+
+    options.goal_response_callback =
+      [this](const MoveGripperGoalHandle::SharedPtr & handle)
+      {
+        if (!handle) {
+          RCLCPP_ERROR(get_logger(), "MoveGripper goal rejected");
+        } else {
+          RCLCPP_INFO(get_logger(), "MoveGripper goal accepted");
+        }
+      };
+
+    options.feedback_callback =
+      [this](
+        MoveGripperGoalHandle::SharedPtr,
+        const std::shared_ptr<const MoveGripper::Feedback> feedback)
+      {
+        RCLCPP_INFO(
+          get_logger(),
+          "[MoveGripper feedback] %s | %.1f%%",
+          feedback->stage.c_str(),
+          feedback->progress);
+      };
+
+    options.result_callback =
+      [this](const MoveGripperGoalHandle::WrappedResult & result)
+      {
+        RCLCPP_INFO(
+          get_logger(),
+          "MoveGripper result code = %d",
+          static_cast<int>(result.code));
+
+        if (result.result) {
+          RCLCPP_INFO(
+            get_logger(),
+            "success: %s | message: %s",
+            result.result->success ? "true" : "false",
+            result.result->message.c_str());
+        }
+
+        rclcpp::shutdown();   };
+
+    move_gripper_client_->async_send_goal(goal, options);
+  }
+/*___________________________________________________________________________*/
+  void send_pickplace()
+  {
+    if (!pickplace_client_->wait_for_action_server(std::chrono::seconds(5))) {
+      RCLCPP_ERROR(get_logger(), "PickPlace server not available");
+      rclcpp::shutdown();
+      return;
+    }
+
+    PickPlace::Goal goal;
+
+    // pose_pick : z = 0.25
+    // pick_approach trong server sẽ là z = 0.25 + 0.10 = 0.35
+    goal.pose_pick.position.x = 0.40;
+    goal.pose_pick.position.y = 0.10;
+    goal.pose_pick.position.z = 0.25;
+
+    // Hướng bạn test chạy ổn
+    goal.pose_pick.orientation.x = 1.0;
+    goal.pose_pick.orientation.y = 1.0;
+    goal.pose_pick.orientation.z = 0.0;
+    goal.pose_pick.orientation.w = 0.0;
+
+    // PLACE POSE
+    // place_approach trong server sẽ là z = 0.25 + 0.10 = 0.35
+    goal.pose_place.position.x = 0.30;
+    goal.pose_place.position.y = 0.00;
+    goal.pose_place.position.z = 0.25;
+
+    // Hướng giống pick
+    goal.pose_place.orientation.x = 1.0;
+    goal.pose_place.orientation.y = 1.0;
+    goal.pose_place.orientation.z = 0.0;
+    goal.pose_place.orientation.w = 0.0;
+
+    // Độ đóng gripper khi gắp vật
+    goal.gripper = 0.01;
+
+    // Scale vận tốc
+    goal.velocity_scale = 0.5;
+
+    rclcpp_action::Client<PickPlace>::SendGoalOptions options;
+
+    options.goal_response_callback =
+      [this](const PickPlaceGoalHandle::SharedPtr & handle)
+      {
+        if (!handle) {
+          RCLCPP_ERROR(get_logger(), "PickPlace goal rejected");
+        } else {
+          RCLCPP_INFO(get_logger(), "PickPlace goal accepted");
+        }
+      };
+
+    options.feedback_callback =
+      [this](
+        PickPlaceGoalHandle::SharedPtr,
+        const std::shared_ptr<const PickPlace::Feedback> feedback)
+      {
+        RCLCPP_INFO(
+          get_logger(),
+          "[PickPlace feedback] %s | %.1f%%",
+          feedback->stage.c_str(),
+          feedback->progress);
+      };
+
+    options.result_callback =
+      [this](const PickPlaceGoalHandle::WrappedResult & result)
+      {
+        RCLCPP_INFO(
+          get_logger(),
+          "PickPlace result code = %d",
+          static_cast<int>(result.code));
+
+        if (result.result) {
+          RCLCPP_INFO(
+            get_logger(),
+            "success: %s | message: %s",
+            result.result->success ? "true" : "false",
+            result.result->message.c_str());
+        }
+
+        rclcpp::shutdown();
+      };
+
+    pickplace_client_->async_send_goal(goal, options);
+  }
 };
 /*___________________________________________________________________________*/
 int main(int argc, char ** argv)

@@ -14,8 +14,6 @@
 #include <iostream>
 
 namespace robot_hardware_interface {
-
-// NOTE:
 // Header/Tail/Stuff bytes are configurable via Rs485Client::set_protocol().
 // Defaults are defined in ProtocolBytes.
 
@@ -69,13 +67,14 @@ static speed_t baud_to_termios(int baudrate) {
     default: return B115200;
   }
 }
-/*+++++++++++++++++++++++++++++ class SerialPort +++++++++++++++++++++++++++++++++++++++++++++++++*/
+/*________________  SerialPort ________________*/
 SerialPort::~SerialPort() { close(); }
 
 void SerialPort::open(
                       const   std::string& port, 
                       int     baudrate, 
-                      double  timeout_s) {
+                      double  timeout_s) 
+{
   close();
   fd_ = ::open(port.c_str(), O_RDWR | O_NOCTTY | O_SYNC);
   if (fd_ < 0) throw std::runtime_error("open() serial failed: " + port);
@@ -87,7 +86,6 @@ void SerialPort::open(
     fd_ = -1;
     throw std::runtime_error("tcgetattr() failed");
   }
-
   cfmakeraw(&tty);
   tty.c_cflag = (tty.c_cflag & ~CSIZE) | CS8;
   tty.c_cflag |= (CLOCAL | CREAD);
@@ -126,6 +124,7 @@ void SerialPort::flush_input() {
 }
 /*__________________________________________________________________________________*/
 void SerialPort::write_all(const uint8_t* data, size_t len) {
+  
   if (fd_ < 0) throw std::runtime_error("Serial not open");
   size_t off = 0;
   while (off < len) {
@@ -156,7 +155,7 @@ bool SerialPort::read_byte(uint8_t& out)
   return false;
 }
 
-/*++++++++++++++++++++++ Rs485Client ++++++++++++++++++++++++++++++++++++++++++++++++*/
+/*____________ Rs485Client ____________*/
 void Rs485Client::set_protocol(const ProtocolBytes & p) 
 {
   std::lock_guard<std::mutex> lk(io_mtx_);
@@ -245,7 +244,7 @@ static inline const char* frame_err_str(uint8_t err_cmd)
     default:   return "Frame_ERR_UNKNOWN";
   }
 }
-/*__________________________________________________________________________________*/
+/*___________________________________________________________________*/
 static inline std::string hex_dump(const std::vector<uint8_t>& v)
 {
   std::ostringstream oss;
@@ -256,7 +255,7 @@ static inline std::string hex_dump(const std::vector<uint8_t>& v)
   }
   return oss.str();
 }
-/*--------------------- build_frame --------------------------------*/
+/*_______________ build_frame _______________*/
 std::vector<uint8_t> Rs485Client::build_frame(
                                               uint8_t cmd, 
                                               const std::vector<uint8_t>& payload) {
@@ -376,7 +375,6 @@ std::optional<std::vector<uint8_t>> Rs485Client::exchange(
                                                           bool wait_reply,
                                                           std::optional<uint8_t> expected_cmd,
                                                           double timeout_s) {
-
   std::lock_guard<std::mutex> lk(io_mtx_);
   if (!sp_.is_open()) throw std::runtime_error("Serial not connected");
 
@@ -391,8 +389,7 @@ std::optional<std::vector<uint8_t>> Rs485Client::exchange(
   auto fr = recv_frame(exp, timeout_s);
   return fr.payload;
 }
-/*__________________________________________________________________________________*/
-// --------------------- api high level  --------------------- 
+/*___________________ api high level ___________________________*/
 // ---  servo_on_axis ---
 void Rs485Client::servo_on_axis(uint8_t axis_id) {
   exchange(cmd::SERVO_ON_AXIS, {axis_id, 0x01}, false);
@@ -414,49 +411,9 @@ void Rs485Client::servo_home_axis(uint8_t axis_id) {
 double Rs485Client::get_pos_axis_deg(uint8_t axis_id, double timeout_s) {
   auto rx = exchange(cmd::GET_POS_AXIS, {axis_id}, true, cmd::GET_POS_AXIS, timeout_s);
   if (!rx.has_value() || rx->size() < 6) throw std::runtime_error("Position payload too short");
-  int32_t pos_i32 = unpack_i32_le(rx->data() + 2);// payload[2:6] for i32 pos*1000
+  int32_t pos_i32 = unpack_i32_le(rx->data() + 2);
   return static_cast<double>(pos_i32) / 1000.0;
 }
-// --- get_pos_all ---
-std::pair<std::vector<double>, std::vector<double>>
-Rs485Client::get_pos_all(double timeout_s)
-{
-  auto rx = exchange(cmd::GET_POS_ALL, {}, true, cmd::GET_POS_ALL, timeout_s);
-  if (!rx.has_value()) throw std::runtime_error("No reply for GET_POS_ALL");
-
-  constexpr size_t AXES = 8;
-  constexpr size_t BYTES_PER_AXIS = 8; // 4 pos + 4 vel
-  const size_t need_bytes = AXES * BYTES_PER_AXIS; // 64
-
-  size_t offset = 0;
-  if (rx->size() == need_bytes) {
-    offset = 0;
-  } else if (rx->size() >= need_bytes + 2) {
-    offset = 2; // nếu firmware có prefix 2 byte
-  } else {
-    throw std::runtime_error("GET_POS_ALL payload too short");
-  }
-
-  if (rx->size() < offset + need_bytes) {
-    throw std::runtime_error("GET_POS_ALL payload truncated");
-  }
-
-  std::vector<double> pos_deg(AXES, 0.0);
-  std::vector<double> vel_deg_s(AXES, 0.0);
-
-  for (size_t i = 0; i < AXES; ++i) {
-    const uint8_t* base = rx->data() + offset + i * BYTES_PER_AXIS;  // ✅ i*8
-
-    const int32_t  pos_i32 = unpack_i32_le(base + 0);
-    const uint32_t vel_u32 = unpack_u32_le(base + 4);
-
-    pos_deg[i]   = static_cast<double>(pos_i32) / 1000.0; // mdeg -> deg
-    vel_deg_s[i] = static_cast<double>(vel_u32) / 1000.0; // mdeg/s -> deg/s
-  }
-
-  return {pos_deg, vel_deg_s};
-}
-
 // --- get_all_sate ---
 std::tuple<
             std::vector<double>, 
@@ -465,13 +422,15 @@ std::tuple<
             >
 Rs485Client::get_all_state(double timeout_s)
 {
-  auto rx = exchange(cmd::STATUS_ALL, {}, true, cmd::STATUS_ALL, timeout_s);
-  if (!rx.has_value()) throw std::runtime_error("No reply for STATUS_ALL");
-
   constexpr size_t AXES = 8;
   constexpr size_t BYTES_PER_AXIS = 10; // 4 pos + 4 vel +2
   const size_t need_bytes = AXES * BYTES_PER_AXIS; // 64
+  std::vector<double> pos_deg(AXES, 0.0);
+  std::vector<double> vel_deg_s(AXES, 0.0);
+  std::vector<uint16_t> flags(AXES, 0);
 
+  auto rx = exchange(cmd::STATUS_ALL, {}, true, cmd::STATUS_ALL, timeout_s);
+  if (!rx.has_value()) throw std::runtime_error("No reply for STATUS_ALL");
   size_t offset = 0;
   if (rx->size() == need_bytes) {
     offset = 0;
@@ -485,25 +444,20 @@ Rs485Client::get_all_state(double timeout_s)
     throw std::runtime_error("STATUS_ALL payload truncated");
   }
 
-  std::vector<double> pos_deg(AXES, 0.0);
-  std::vector<double> vel_deg_s(AXES, 0.0);
-  std::vector<uint16_t> flags(AXES, 0);
-
   for (size_t i = 0; i < AXES; ++i) {
     const uint8_t* base = rx->data() + offset + i * BYTES_PER_AXIS;  // i*8
 
     const int32_t  pos_i32 = unpack_i32_le(base + 0);
-    const uint32_t vel_u32 = unpack_u32_le(base + 4);
+    const int32_t vel_u32 = unpack_u32_le(base + 4);
     const uint16_t flag_i   = unpack_u16_le(base + 8);
 
-    pos_deg[i]   = static_cast<double>(pos_i32) / 1000.0; // mdeg -> deg
-    vel_deg_s[i] = static_cast<double>(vel_u32) / 1000.0; // mdeg/s -> deg/s
-    flags[i] =  flag_i;
+    pos_deg[i]    = static_cast<double>(pos_i32) / 1000.0; // mdeg -> deg
+    vel_deg_s[i]  = static_cast<double>(vel_u32) / 1000.0; // mdeg/s -> deg/s
+    flags[i]      =  flag_i;
   }
 
   return {pos_deg, vel_deg_s, flags};
 }
-
 // --- run_axis ---
   void Rs485Client::run_axis(uint8_t axis_id, double pos_deg, double vel_deg_s) {
     pos_deg = clamp(pos_deg, -90.0, 90.0);
@@ -535,29 +489,18 @@ Rs485Client::get_all_state(double timeout_s)
     payload.insert(payload.end(), v.begin(), v.end());
     exchange(cmd::JOG, payload, false);
   }
-// --- status_all ---
-  std::vector<uint32_t> Rs485Client::status_all(double timeout_s) {
-    auto rx = exchange(cmd::STATUS_ALL, {}, true, cmd::STATUS_ALL, timeout_s);
-    if (!rx.has_value()) return {};
-    const auto& pl = rx.value();
 
-    std::vector<uint32_t> out;
-    // payload is N * 4 bytes (u32 little-endian). Support 6+ axes (e.g., 7 axes with gripper).
-    const size_t n = pl.size() / 4;
-    out.reserve(n);
-    for (size_t i = 0; i < n; ++i) out.push_back(unpack_u32_le(pl.data() + i * 4));
-    return out;
-  }
 // --- run_all ---
-  void Rs485Client::run_all(const std::vector<double>& pos6_deg, const std::vector<double>& vel6_deg_s) {
+  void Rs485Client::run_all(const std::vector<double>& pos6_deg, const std::vector<double>& vel6_deg_s) 
+  {
     if (pos6_deg.size() != 8 || vel6_deg_s.size() != 8) throw std::runtime_error("run_all needs 8 pos + 8 vel");
     std::vector<uint8_t> payload;
     payload.reserve(8 * (4 + 4));
     for (int i = 0; i < 7; ++i) {
-      double p = clamp(pos6_deg[i], -90.0, 90.0);
-      double v = clamp(vel6_deg_s[i], 5.0, 89.999);
+      double p = clamp(pos6_deg[i], -280.0, 280.0);
+      double v = clamp(vel6_deg_s[i], -100, 100);
       int32_t pi = (int32_t)llround(p * 1000.0);
-      uint32_t vu = (uint32_t)llround(v * 1000.0);
+      int32_t vu = (int32_t)llround(v * 1000.0);
       auto pb = pack_i32_le(pi);
       auto vb = pack_u32_le(vu);
       payload.insert(payload.end(), pb.begin(), pb.end());
@@ -565,5 +508,4 @@ Rs485Client::get_all_state(double timeout_s)
     }
     exchange(cmd::RUN_ALL, payload, false);
   }
-
 }  // namespace robot_hardware_interface

@@ -1,0 +1,20 @@
+geometry_msgs/Pose pose_pick
+geometry_msgs/Pose pose_place
+float64 gripper
+float64 velocity_scale
+---
+bool success
+string message
+---
+string stage
+float32 progress
+
+# gripper move (0.048) 
+# pose hiện tại move_pose pick (z pose_pick +0.1)
+# move_pose_cartesian pick (hạ z xuống 0.1)
+# move_gripper (gripper)
+# pose hiện tại move_pose_carrtesinan pick (z pose_pick +0.1)
+# pose hiện tại move_pose place (z pose_place +0.1)
+# move_pose_cartesian place (hạ z xuống 0.1)
+# gripper move (0.048) 
+# pose hiện tại move_pose place (z pose_place +0.1)

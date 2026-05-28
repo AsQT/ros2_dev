@@ -13,7 +13,7 @@
 /* Các hàm 
 parse_csv_ints
 parse_csv_doubles
-on_init
+on_ionnit
 on_configure
 on_activate
 on_cleanup
@@ -28,7 +28,9 @@ namespace robot_hardware_interface
 {
 
 static inline double deg2rad(double deg) { return deg * M_PI / 180.0; }
-static inline double rad2deg(double rad) { return rad * 180.0 / M_PI; }
+static inline double rad2deg(double rad) { return rad * 180.0 /M_PI ; }
+static inline double deg2met(double deg) { return deg /2; }
+static inline double met2deg(double rad) { return rad *2; }
 /*__________________________________________________________________________________*/
 std::vector<int> RobotSystemHardware::parse_csv_ints(const std::string & s)
 {
@@ -88,15 +90,14 @@ hardware_interface::CallbackReturn RobotSystemHardware::on_init(
     try { return std::stod(it->second); } catch (...) { return def; }
   };
 
-  port_ = get_s("port", port_);
-  baudrate_ = get_i("baudrate", baudrate_);
-  serial_timeout_s_ = get_d("serial_timeout_s", serial_timeout_s_);
-  pos_timeout_s_ = get_d("pos_timeout_s", pos_timeout_s_);
-  status_timeout_s_ = get_d("status_timeout_s", status_timeout_s_);
-  all_token_ = get_i("all_token", all_token_);
-  default_vel_deg_s_ = get_d("default_vel_deg_s", default_vel_deg_s_);
+  port_               = get_s("port", port_);
+  baudrate_           = get_i("baudrate", baudrate_);
+  serial_timeout_s_   = get_d("serial_timeout_s", serial_timeout_s_);
+  pos_timeout_s_      = get_d("pos_timeout_s", pos_timeout_s_);
+  status_timeout_s_   = get_d("status_timeout_s", status_timeout_s_);
+  all_token_          = get_i("all_token", all_token_);
+  default_vel_deg_s_  = get_d("default_vel_deg_s", default_vel_deg_s_);
 
-  // Optional protocol bytes (to match STM32 framing without recompiling)
   {
     ProtocolBytes p = client_.protocol();
     p.header1 = static_cast<uint8_t>(get_i("proto_header1", p.header1) & 0xFF);
@@ -128,11 +129,9 @@ hardware_interface::CallbackReturn RobotSystemHardware::on_init(
 
   hw_pos_.assign(n, 0.0);
   hw_vel_.assign(n, 0.0);
-  //hw_eff_.assign(n, 0.0);
 
   cmd_pos_.assign(n, 0.0);
   cmd_vel_.assign(n, 0.0);
-  //cmd_eff_.assign(n, 0.0);
 
   last_sent_pos_.assign(n, 0.0);
 
@@ -148,7 +147,6 @@ hardware_interface::CallbackReturn RobotSystemHardware::on_init(
       return hardware_interface::CallbackReturn::ERROR;
     }
   }
-
   return hardware_interface::CallbackReturn::SUCCESS;
 }
 /*__________________________________________________________________________________*/
@@ -228,16 +226,6 @@ std::vector<hardware_interface::StateInterface> RobotSystemHardware::export_stat
       {
         out.emplace_back(j.name, hardware_interface::HW_IF_VELOCITY, &hw_vel_[i]);
       } 
-      /*
-      else if (si.name == hardware_interface::HW_IF_EFFORT) 
-      {
-        out.emplace_back(j.name, hardware_interface::HW_IF_EFFORT, &hw_eff_[i]);
-      } 
-      else 
-      {
-        out.emplace_back(j.name, si.name, &hw_eff_[i]);
-      }
-      */
     }
   }
   return out;
@@ -258,19 +246,10 @@ std::vector<hardware_interface::CommandInterface> RobotSystemHardware::export_co
       {
         out.emplace_back(j.name, hardware_interface::HW_IF_VELOCITY, &cmd_vel_[i]);
       } 
-      /*
-      else if (ci.name == hardware_interface::HW_IF_EFFORT) 
-      {
-        out.emplace_back(j.name, hardware_interface::HW_IF_EFFORT, &cmd_eff_[i]);
-      } else {
-        out.emplace_back(j.name, ci.name, &cmd_pos_[i]);
-      }
-      */
     }
   }
   return out;
 }
-//#####################################################################################################################
 /*__________________________________________________________________________________*/
 hardware_interface::return_type RobotSystemHardware::read(
   const rclcpp::Time &, const rclcpp::Duration &)
@@ -280,7 +259,7 @@ hardware_interface::return_type RobotSystemHardware::read(
   const size_t n = hw_pos_.size();
 
   try {
-    const auto [pos_raw, vel_raw, flag] = client_.get_all_state(pos_timeout_s_); // cmd doc vi tri
+    const auto [pos_raw, vel_raw, flag] = client_.get_all_state(pos_timeout_s_);
 
     if (pos_raw.size() != n || vel_raw.size() != n) {
       if (auto clk = get_clock()) {
@@ -300,38 +279,33 @@ hardware_interface::return_type RobotSystemHardware::read(
         ? hardware_interface::return_type::ERROR
         : hardware_interface::return_type::OK;
     }
-
     // OK -> reset fail counter
     consec_read_fail_ = 0;
 
     for (size_t i = 0; i < n; ++i) {
-      // ====== FIX ĐƠN VỊ ======
       // pos_raw/vel_raw đang là milli-degree (deg*1000)
       const double pos_deg   = pos_raw[i];
       const double vel_deg_s = vel_raw[i];
+      if (i<6)
+      {
+        const double rad_driver   = deg2rad(pos_deg);
+        const double rad_s_driver = deg2rad(vel_deg_s);
+        const double rad_ros = rad_driver * direction_sign_[i] + rad_offset_[i];
 
-      // deg -> rad (driver space)
-      const double rad_driver   = deg2rad(pos_deg);
-      const double rad_s_driver = deg2rad(vel_deg_s);
-
-      // driver(rad) -> ROS(rad): áp sign + offset (đúng chiều với write() của bạn)
-      const double rad_ros = rad_driver * direction_sign_[i] + rad_offset_[i];
-
-  
-
-      // Sanity check để né “rác” khi frame bị lỗi
-      if (std::fabs(rad_ros) > 10.0) { // ~572°
-        if (auto clk = get_clock()) {
-          RCLCPP_WARN_THROTTLE(get_logger(), *clk, 2000,
-            "read: unreasonable joint[%zu]=%f rad, keeping last value", i, rad_ros);
+        if (std::fabs(rad_ros) > 10.0) {
+          if (auto clk = get_clock()) {
+            RCLCPP_WARN_THROTTLE(get_logger(), *clk, 2000,
+              "read: unreasonable joint[%zu]=%f rad, keeping last value", i, rad_ros);
+          }
+          continue; 
         }
-        continue; // giữ hw_pos_[i] cũ
+        hw_pos_[i] = rad_ros;
+        hw_vel_[i] = rad_s_driver * direction_sign_[i];
+      } else
+      {
+        hw_pos_[i] = deg2met(pos_deg);
+        hw_vel_[i] = deg2met(vel_deg_s);
       }
-
-      hw_pos_[i] = rad_ros;
-
-      // Velocity: ROS nên có dấu theo chiều joint (không fabs)
-      hw_vel_[i] = rad_s_driver * direction_sign_[i];
     }
 
     return hardware_interface::return_type::OK;
@@ -350,107 +324,21 @@ hardware_interface::return_type RobotSystemHardware::read(
   }
 }
  
-
-//##################################### Read function old #######################################################
-/*______________________________________________
-hardware_interface::return_type RobotSystemHardware::read(
-  const rclcpp::Time &, const rclcpp::Duration &)
-{
-  if (!connected_) return hardware_interface::return_type::ERROR;
-
-  const size_t n = hw_pos_.size();
-
-  try {
-    const auto [pos_raw, vel_raw] = client_.get_pos_all(pos_timeout_s_); // cmd doc vi tri
-
-    if (pos_raw.size() != n || vel_raw.size() != n) {
-      if (auto clk = get_clock()) {
-        RCLCPP_WARN_THROTTLE(
-          get_logger(), *clk, 2000,
-          "read get_pos_all size mismatch: pos=%zu vel=%zu expected=%zu (keeping last state)",
-          pos_raw.size(), vel_raw.size(), n);
-      } else {
-        RCLCPP_WARN(
-          get_logger(),
-          "read get_pos_all size mismatch: pos=%zu vel=%zu expected=%zu (keeping last state)",
-          pos_raw.size(), vel_raw.size(), n);
-      }
-
-      consec_read_fail_++;
-      return (consec_read_fail_ >= max_consec_read_fail_)
-        ? hardware_interface::return_type::ERROR
-        : hardware_interface::return_type::OK;
-    }
-
-    // OK -> reset fail counter
-    consec_read_fail_ = 0;
-
-    for (size_t i = 0; i < n; ++i) {
-      // ====== FIX ĐƠN VỊ ======
-      // pos_raw/vel_raw đang là milli-degree (deg*1000)
-      const double pos_deg   = pos_raw[i] / 1000.0;
-      const double vel_deg_s = vel_raw[i] / 1000.0;
-
-      // deg -> rad (driver space)
-      const double rad_driver   = deg2rad(pos_deg);
-      const double rad_s_driver = deg2rad(vel_deg_s);
-
-      // driver(rad) -> ROS(rad): áp sign + offset (đúng chiều với write() của bạn)
-      const double rad_ros = rad_driver * direction_sign_[i] + rad_offset_[i];
-
-  
-
-      // Sanity check để né “rác” khi frame bị lỗi
-      if (std::fabs(rad_ros) > 10.0) { // ~572°
-        if (auto clk = get_clock()) {
-          RCLCPP_WARN_THROTTLE(get_logger(), *clk, 2000,
-            "read: unreasonable joint[%zu]=%f rad, keeping last value", i, rad_ros);
-        }
-        continue; // giữ hw_pos_[i] cũ
-      }
-
-      hw_pos_[i] = rad_ros;
-
-      // Velocity: ROS nên có dấu theo chiều joint (không fabs)
-      hw_vel_[i] = rad_s_driver * direction_sign_[i];
-    }
-
-    return hardware_interface::return_type::OK;
-
-  } catch (const std::exception & e) {
-    if (auto clk = get_clock()) {
-      RCLCPP_WARN_THROTTLE(get_logger(), *clk, 2000, "read get_pos_all failed: %s (keeping last state)", e.what());
-    } else {
-      RCLCPP_WARN(get_logger(), "read get_pos_all failed: %s (keeping last state)", e.what());
-    }
-
-    consec_read_fail_++;
-    return (consec_read_fail_ >= max_consec_read_fail_)
-      ? hardware_interface::return_type::ERROR
-      : hardware_interface::return_type::OK;
-  }
-}
-//#####################################################################################################################
-________________________________________*/
 hardware_interface::return_type RobotSystemHardware::write(
   const rclcpp::Time &, const rclcpp::Duration &)
 {
   if (!connected_) return hardware_interface::return_type::ERROR;
 
   constexpr size_t AXES = 8;
-
-  // Chưa sync state thì không gửi run_all (NHƯNG trả OK để khỏi deactivate)
   if (!state_synced_) {
     return hardware_interface::return_type::OK;
   }
 
-  // Warmup: bỏ qua vài chu kỳ đầu cho STM32 ổn định
   if (warmup_cycles_ > 0) {
     --warmup_cycles_;
     return hardware_interface::return_type::OK;
   }
 
-  // Rate-limit write (ví dụ 50Hz) dù controller_manager chạy 250Hz
   if (auto clk = get_clock()) {
     const auto now = clk->now();
     if ((now - last_write_time_).seconds() < write_period_s_) {
@@ -459,7 +347,6 @@ hardware_interface::return_type RobotSystemHardware::write(
     last_write_time_ = now;
   }
 
-  // Check size để tránh out-of-range + báo lỗi rõ ràng
   if (cmd_pos_.size() != AXES ||
       rad_offset_.size() != AXES ||
       direction_sign_.size() != AXES) {
@@ -470,7 +357,6 @@ hardware_interface::return_type RobotSystemHardware::write(
     return hardware_interface::return_type::ERROR;
   }
 
-  // Chỉ gửi nếu command thật sự đổi (giảm tải STM32 rất mạnh)
   if (last_sent_pos_.size() == AXES) {
     bool changed = false;
     for (size_t i = 0; i < AXES; ++i) {
@@ -482,15 +368,10 @@ hardware_interface::return_type RobotSystemHardware::write(
     if (!changed) return hardware_interface::return_type::OK;
   }
 
-  // cmd_vel_ có thể không đủ -> fallback default
   const bool vel_ok = (cmd_vel_.size() == AXES);
-
   auto vel_deg_s_for = [&](size_t i) -> double {
     double v = default_vel_deg_s_;
     if (vel_ok) v = std::fabs(rad2deg(cmd_vel_[i]));  // rad/s -> deg/s
-    //if (v < 1e-6) v = default_vel_deg_s_;
-    //if (v < 0.001) v = 0.001;
-    //if (v > 89.999) v = 89.999;
     return v;
   };
 
@@ -499,8 +380,16 @@ hardware_interface::return_type RobotSystemHardware::write(
 
   for (size_t i = 0; i < AXES; ++i) {
     const double rad_driver = (cmd_pos_[i] - rad_offset_[i]) * direction_sign_[i];
-    pos_deg[i] = rad2deg(rad_driver);
-    vel_deg_s[i] = vel_deg_s_for(i);
+    if(i <6)
+    {
+      pos_deg[i] = rad2deg(rad_driver);
+      vel_deg_s[i] = vel_deg_s_for(i);
+    } else
+    {
+      pos_deg[i] = met2deg(rad_driver);
+      vel_deg_s[i] = met2deg(i);
+    }
+
   }
 
   try {

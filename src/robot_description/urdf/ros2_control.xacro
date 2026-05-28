@@ -9,7 +9,7 @@
                        use_sim                :='false' 
                        use_mock               :='false' ">
 
-    <!-- Load initial joint positions if a file is provided -->
+    <!-- Load initial joint positions if a file is provided true -->
     <xacro:if value ="${initial_positions_file != ''}">
       <xacro:property
               name  ="initial_positions"

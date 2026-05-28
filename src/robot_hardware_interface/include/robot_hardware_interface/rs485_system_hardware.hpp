@@ -35,20 +35,19 @@ public:
   hardware_interface::return_type read(const rclcpp::Time & time, const rclcpp::Duration & period) override;
   hardware_interface::return_type write(const rclcpp::Time & time, const rclcpp::Duration & period) override;
 
-  bool state_synced_{false};              // đã sync cmd = state sau activate chưa
-  int warmup_cycles_{0};                  // đếm số chu kỳ bỏ qua write
-  int warmup_cycles_cfg_{30};             // ví dụ bỏ qua 30 chu kỳ đầu (tùy bạn)
+  bool state_synced_{false};
+  int warmup_cycles_{0};
+  int warmup_cycles_cfg_{30}; 
 
-  double write_period_s_{0.02};           // 50Hz (0.02s). Dù update_rate cao vẫn chỉ gửi 50Hz
-  double cmd_eps_rad_{1e-4};              // ngưỡng coi như command không đổi
+  double write_period_s_{0.1}; 
+  double cmd_eps_rad_{1e-4}; 
 
   int consec_read_fail_{0};
-  int max_consec_read_fail_{50};  // tuỳ bạn (ví dụ 50 vòng)
+  int max_consec_read_fail_{50};
 
   rclcpp::Time last_write_time_{0,0,RCL_ROS_TIME};
 
-  std::vector<double> last_sent_pos_;     // lưu cmd_pos_ lần cuối đã gửi xuống STM32
-
+  std::vector<double> last_sent_pos_;    
 
 private:
   static std::vector<int> parse_csv_ints(const std::string & s);

@@ -103,7 +103,7 @@ def generate_launch_description():
     # 6) Spawn wood blocks after robot
     spawn_wood_node  = Node(
                     package     ="robot_description",
-                    executable  ="checker_board.py", #random_wood_blocks wood_blocks_3.py; wood_blocks_3.py
+                    executable  ="wood_blocks_3.py", #random_wood_blocks wood_blocks_3.py; wood_blocks_3.py
                     output      ="screen",
                     parameters  =[
                                 {"world":   "default"},
