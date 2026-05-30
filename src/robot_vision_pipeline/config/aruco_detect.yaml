@@ -1,25 +1,15 @@
-yolo_detect_node:
+aruco_detect_node:
   ros__parameters:
-  
-    image_topic: "/astra/rgb/image_raw"
+    #image_topic: "/astra/rgb/image_raw"
+    #camera_info_topic: "/astra/rgb/camera_info"
 
-    annotated_image_topic: "/vision/yolo/image_annotated"
+    image_topic: "/webcam/image_raw"
+    camera_info_topic: "/webcam/camera_info"
 
-    detections_topic: "/vision/yolo/detections_json"
+    camera_frame: "astra_link_optical"
 
-    model_path: "/home/minhquang/ros2/src/robot_vision_pipeline/models/best.pt"
-    #model_path: "yolov8n.pt"
+    dictionary: "DICT_4X4_50"
+    marker_size: 0.03
 
-    # CPU: "cpu"
-    # GPU: "0"
-    device: "cpu"
-
-    conf_threshold: 0.35
-    iou_threshold: 0.45
-    imgsz: 256
-
-    show_gui: false
-
-    class_filter: "wood"
-
-    verbose_log: false
+    enable_pose: false
+    draw_debug: true

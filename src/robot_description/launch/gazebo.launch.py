@@ -107,13 +107,13 @@ def generate_launch_description():
                     output      ="screen",
                     parameters  =[
                                 {"world":   "default"},
-                                {"count":   5},
+                                {"count":   1},
                                 {"seed":    0},
                                 {"x_min":   0.35},
-                                {"x_max":   0.65},
-                                {"y_min":   -0.20},
-                                {"y_max":   0.20},
-                                {"z":       1.25}, ],  )
+                                {"x_max":   0.55},
+                                {"y_min":   -0.3},
+                                {"y_max":   0.3},
+                                {"z":       1.3} ],  )
 
     spawn_wood_after_robot = RegisterEventHandler(
                                 OnProcessExit(

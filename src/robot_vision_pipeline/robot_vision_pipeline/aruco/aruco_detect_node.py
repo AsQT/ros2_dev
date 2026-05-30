@@ -11,17 +11,16 @@ from rclpy.node import Node
 
 from sensor_msgs.msg import Image, CameraInfo
 from std_msgs.msg import String
+from geometry_msgs.msg import PoseStamped
+from robot_vision_pipeline_msgs.msg import ArucoPose, ArucoPoseArray # type: ignore msg custom
+import tf2_ros
+from tf2_geometry_msgs import do_transform_pose
 from cv_bridge import CvBridge
 
 
-ARUCO_DICTS = {
-    "DICT_4X4_50": cv2.aruco.DICT_4X4_50,
-    "DICT_4X4_100": cv2.aruco.DICT_4X4_100,
-    "DICT_4X4_250": cv2.aruco.DICT_4X4_250,
-}
 
 def rvec_to_yaw_deg(rvec):
-    R, _ = cv2.Rodrigues(rvec)
+    R, _ = cv2.Rodrigues(rvec) # chuyển đổi vector xoay rvec thành ma trận xoay R
     yaw = math.atan2(R[1, 0], R[0, 0])
     return math.degrees(yaw)
 
@@ -33,33 +32,34 @@ class ArucoDetectNode(Node):
         self.declare_parameter("image_topic", "/astra/rgb/image_raw")
         self.declare_parameter("camera_info_topic", "/astra/rgb/camera_info")
         self.declare_parameter("dictionary", "DICT_4X4_50")
-        self.declare_parameter("marker_size", 0.04)
-
-        # Mặc định tắt pose để tránh crash OpenCV trước
-        self.declare_parameter("enable_pose", False)
+        self.declare_parameter("marker_size", 0.03) # kích thước cạnh marker ArUco tính bằng mét
+        self.declare_parameter("enable_pose", True)
         self.declare_parameter("draw_debug", True)
+        self.declare_parameter("base_frame", "base_link")
+        self.declare_parameter("camera_frame", "astra_link_optical")
 
         self.image_topic = self.get_parameter("image_topic").value
         self.camera_info_topic = self.get_parameter("camera_info_topic").value
         self.dictionary_name = self.get_parameter("dictionary").value
         self.marker_size = float(self.get_parameter("marker_size").value)
-        self.enable_pose = bool(self.get_parameter("enable_pose").value)
-        self.draw_debug = bool(self.get_parameter("draw_debug").value)
+        self.enable_pose = bool(self.get_parameter("enable_pose").value) # nếu False sẽ không tính pose
+        self.draw_debug = bool(self.get_parameter("draw_debug").value) # nếu True sẽ vẽ debug trên ảnh và publish ra topic /aruco/image_annotated
+        self.base_frame = self.get_parameter("base_frame").value
+        self.camera_frame_override = self.get_parameter("camera_frame").value
 
-        if self.dictionary_name not in ARUCO_DICTS:
-            self.get_logger().warn(
-                f"Unknown dictionary {self.dictionary_name}, fallback DICT_4X4_50"
-            )
-            self.dictionary_name = "DICT_4X4_50"
 
-        self.aruco_dict = cv2.aruco.getPredefinedDictionary(
-            ARUCO_DICTS[self.dictionary_name]
-        )
+        self.aruco_dict = cv2.aruco.getPredefinedDictionary(cv2.aruco.DICT_4X4_50)
+        '''
+        cv2.aruco.DICT_4X4_50
+        cv2.aruco.DICT_5X5_100
+        cv2.aruco.DICT_6X6_250
+        cv2.aruco.DICT_7X7_1000
+        '''
 
-        # Dùng API cũ cho ổn định với OpenCV 4.6 trên Ubuntu/ROS
         try:
             self.aruco_params = cv2.aruco.DetectorParameters_create()
         except AttributeError:
+            # tạo bộ tham số cho quán trình detect
             self.aruco_params = cv2.aruco.DetectorParameters()
 
         self.bridge = CvBridge()
@@ -67,6 +67,9 @@ class ArucoDetectNode(Node):
         self.camera_matrix = None
         self.dist_coeffs = None
         self.camera_frame = ""
+
+        self.tf_buffer = tf2_ros.Buffer()
+        self.tf_listener = tf2_ros.TransformListener(self.tf_buffer, self)
 
         self.sub_info = self.create_subscription(
             CameraInfo,
@@ -78,7 +81,7 @@ class ArucoDetectNode(Node):
         self.sub_img = self.create_subscription(
             Image,
             self.image_topic,
-            self.image_callback,
+            self.image_callback, # callback xử lý ảnh khi có ảnh mới từ topic
             10,
         )
 
@@ -91,6 +94,12 @@ class ArucoDetectNode(Node):
         self.pub_json = self.create_publisher(
             String,
             "/aruco/detections_json",
+            10,
+        )
+
+        self.pub_pose = self.create_publisher(
+            ArucoPoseArray,
+            "/aruco_pose",
             10,
         )
 
@@ -109,7 +118,24 @@ class ArucoDetectNode(Node):
         else:
             self.dist_coeffs = np.zeros((5,), dtype=np.float64)
 
-        self.camera_frame = msg.header.frame_id
+        if self.camera_frame_override:
+            self.camera_frame = self.normalize_camera_frame(self.camera_frame_override)
+        else:
+            self.camera_frame = self.normalize_camera_frame(msg.header.frame_id)
+
+        self.get_logger().info(f"Resolved camera TF frame: {self.camera_frame}")
+
+    def normalize_camera_frame(self, frame_id):
+        if not frame_id:
+            return frame_id
+
+        if "astra_rgb" in frame_id or "astra_depth" in frame_id:
+            return "astra_link_optical"
+
+        if frame_id.endswith("_link") and not frame_id.endswith("_optical"):
+            return f"{frame_id}_optical"
+
+        return frame_id
 
     def estimate_pose_solvepnp(self, corners):
         """
@@ -141,9 +167,64 @@ class ArucoDetectNode(Node):
         if not ok:
             return None, None
 
-        return rvec, tvec
+        return rvec, tvec # rvec hướng marker so với camera, tvec vị trí marker so với camera
+
+    @staticmethod
+    def rotation_matrix_to_quaternion(R):
+        q = np.empty((4,), dtype=np.float64)
+        trace = np.trace(R)
+        if trace > 0.0:
+            s = 0.5 / np.sqrt(trace + 1.0)
+            q[3] = 0.25 / s
+            q[0] = (R[2, 1] - R[1, 2]) * s
+            q[1] = (R[0, 2] - R[2, 0]) * s
+            q[2] = (R[1, 0] - R[0, 1]) * s
+        else:
+            if R[0, 0] > R[1, 1] and R[0, 0] > R[2, 2]:
+                s = 2.0 * np.sqrt(1.0 + R[0, 0] - R[1, 1] - R[2, 2])
+                q[3] = (R[2, 1] - R[1, 2]) / s
+                q[0] = 0.25 * s
+                q[1] = (R[0, 1] + R[1, 0]) / s
+                q[2] = (R[0, 2] + R[2, 0]) / s
+            elif R[1, 1] > R[2, 2]:
+                s = 2.0 * np.sqrt(1.0 + R[1, 1] - R[0, 0] - R[2, 2])
+                q[3] = (R[0, 2] - R[2, 0]) / s
+                q[0] = (R[0, 1] + R[1, 0]) / s
+                q[1] = 0.25 * s
+                q[2] = (R[1, 2] + R[2, 1]) / s
+            else:
+                s = 2.0 * np.sqrt(1.0 + R[2, 2] - R[0, 0] - R[1, 1])
+                q[3] = (R[1, 0] - R[0, 1]) / s
+                q[0] = (R[0, 2] + R[2, 0]) / s
+                q[1] = (R[1, 2] + R[2, 1]) / s
+                q[2] = 0.25 * s
+        return q
+
+    def pose_stamped_from_rvec_tvec(self, rvec, tvec, frame_id, stamp=None):
+        R, _ = cv2.Rodrigues(rvec)
+        qx, qy, qz, qw = self.rotation_matrix_to_quaternion(R)
+
+        pose = PoseStamped()
+        pose.header.stamp = stamp if stamp is not None else self.get_clock().now().to_msg()
+        pose.header.frame_id = frame_id
+        pose.pose.position.x = float(tvec[0][0])
+        pose.pose.position.y = float(tvec[1][0])
+        pose.pose.position.z = float(tvec[2][0])
+        pose.pose.orientation.x = float(qx)
+        pose.pose.orientation.y = float(qy)
+        pose.pose.orientation.z = float(qz)
+        pose.pose.orientation.w = float(qw)
+        return pose
+
+    def get_camera_frame(self, msg):
+        if self.camera_frame_override:
+            return self.normalize_camera_frame(self.camera_frame_override)
+        if self.camera_frame:
+            return self.normalize_camera_frame(self.camera_frame)
+        return self.normalize_camera_frame(msg.header.frame_id)
 
     def image_callback(self, msg):
+        # step 1: chuyển ROS Image message thành OpenCV image
         try:
             frame = self.bridge.imgmsg_to_cv2(msg, desired_encoding="bgr8")
         except Exception as e:
@@ -152,22 +233,24 @@ class ArucoDetectNode(Node):
 
         if frame is None:
             return
-
+        # step 2: chuyển ảnh sang grayscale 
         gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
         annotated = frame.copy()
 
+        # step 3: phát hiện marker ArUco trong ảnh
         try:
             corners, ids, rejected = cv2.aruco.detectMarkers(
-                gray,
-                self.aruco_dict,
-                parameters=self.aruco_params,
-            )
+                                            gray,
+                                            self.aruco_dict,
+                                            parameters=self.aruco_params,      )
         except Exception as e:
             self.get_logger().error(f"aruco detect error: {e}")
             return
 
         detections = []
-
+        pose_array = ArucoPoseArray()
+        pose_array.header = msg.header
+        # step 4: nếu phát hiện marker, xử lý từng marker để tính toán pose 
         if ids is not None and len(ids) > 0:
             ids_flat = ids.flatten()
 
@@ -189,7 +272,15 @@ class ArucoDetectNode(Node):
                     "corners_px": pts.astype(float).tolist(),
                 }
 
-                if self.enable_pose:
+                pose_msg = ArucoPose()
+                pose_msg.header = msg.header
+                pose_msg.id = int(marker_id)
+                pose_msg.frame_cam = msg.header.frame_id or self.camera_frame or ""
+                pose_msg.frame_base = self.base_frame
+                pose_msg.has_pose_base = False
+                pose_msg.yaw_deg = 0.0
+
+                if self.enable_pose: # chỉ tính pose nếu enable_pose = True, tránh lỗi khi thiếu camera info
                     if self.camera_matrix is not None and self.dist_coeffs is not None:
                         try:
                             rvec, tvec = self.estimate_pose_solvepnp(corners[i])
@@ -208,6 +299,83 @@ class ArucoDetectNode(Node):
 
                                 det["yaw_deg"] = yaw_deg
 
+                                camera_frame = self.get_camera_frame(msg)
+                                pose_msg.frame_cam = camera_frame
+                                pose_cam = self.pose_stamped_from_rvec_tvec(
+                                    rvec,
+                                    tvec,
+                                    camera_frame,
+                                    stamp=msg.header.stamp if msg.header.stamp.sec != 0 or msg.header.stamp.nanosec != 0 else self.get_clock().now().to_msg(),
+                                )
+                                pose_msg.yaw_deg = yaw_deg
+
+                                transform = None
+                                exact_time = rclpy.time.Time.from_msg(msg.header.stamp) if msg.header.stamp.sec != 0 or msg.header.stamp.nanosec != 0 else rclpy.time.Time()
+                                try:
+                                    transform = self.tf_buffer.lookup_transform(
+                                        self.base_frame,
+                                        camera_frame,
+                                        exact_time,
+                                        timeout=rclpy.duration.Duration(seconds=0.5),
+                                    )
+                                except Exception as e:
+                                    if msg.header.frame_id and msg.header.frame_id != camera_frame:
+                                        try:
+                                            transform = self.tf_buffer.lookup_transform(
+                                                self.base_frame,
+                                                msg.header.frame_id,
+                                                exact_time,
+                                                timeout=rclpy.duration.Duration(seconds=0.5),
+                                            )
+                                            pose_msg.frame_cam = msg.header.frame_id
+                                            pose_cam.header.frame_id = msg.header.frame_id
+                                        except Exception:
+                                            self.get_logger().warn(
+                                                f"TF transform to {self.base_frame} failed for exact stamp from both camera_frame={camera_frame} and header.frame_id={msg.header.frame_id}. Trying latest transform."
+                                            )
+                                    else:
+                                        self.get_logger().warn(
+                                            f"TF transform to {self.base_frame} failed for exact stamp from source frame {camera_frame}. Trying latest transform."
+                                        )
+
+                                    try:
+                                        transform = self.tf_buffer.lookup_transform(
+                                            self.base_frame,
+                                            camera_frame,
+                                            rclpy.time.Time(),
+                                            timeout=rclpy.duration.Duration(seconds=0.5),
+                                        )
+                                        self.get_logger().warn(
+                                            f"Using latest TF transform for {camera_frame} -> {self.base_frame} as exact timestamp lookup failed."
+                                        )
+                                    except Exception as e2:
+                                        if msg.header.frame_id and msg.header.frame_id != camera_frame:
+                                            try:
+                                                transform = self.tf_buffer.lookup_transform(
+                                                    self.base_frame,
+                                                    msg.header.frame_id,
+                                                    rclpy.time.Time(),
+                                                    timeout=rclpy.duration.Duration(seconds=0.5),
+                                                )
+                                                pose_msg.frame_cam = msg.header.frame_id
+                                                pose_cam.header.frame_id = msg.header.frame_id
+                                                self.get_logger().warn(
+                                                    f"Using latest TF transform for {msg.header.frame_id} -> {self.base_frame} as exact timestamp lookup failed."
+                                                )
+                                            except Exception as e3:
+                                                self.get_logger().warn(
+                                                    f"TF transform to {self.base_frame} failed for both latest and exact frames: {e3}"
+                                                )
+                                        else:
+                                            self.get_logger().warn(
+                                                f"TF transform to {self.base_frame} failed for latest and exact source frame {camera_frame}: {e2}"
+                                            )
+
+                                if transform is not None:
+                                    pose_base = do_transform_pose(pose_cam.pose, transform)
+                                    pose_msg.has_pose_base = True
+                                    pose_msg.pose_base = pose_base
+
                                 cv2.drawFrameAxes(
                                     annotated,
                                     self.camera_matrix,
@@ -216,12 +384,28 @@ class ArucoDetectNode(Node):
                                     tvec,
                                     self.marker_size * 0.5,
                                 )
+                                '''
+
+                                label = f"pix=({int(cx)},{int(cy)})"
+                                text_pos = (int(cx) + 10, int(cy) - 10)
+                                cv2.putText(
+                                    annotated,
+                                    label,
+                                    text_pos,
+                                    cv2.FONT_HERSHEY_SIMPLEX,
+                                    0.5,
+                                    (255, 255, 0),
+                                    2,
+                                    cv2.LINE_AA,
+                                )
+                                '''
                         except Exception as e:
                             self.get_logger().warn(f"pose error marker {marker_id}: {e}")
                     else:
                         det["pose_status"] = "missing_camera_info"
 
                 detections.append(det)
+                pose_array.poses.append(pose_msg)
 
         out = {
             "stamp": {
@@ -236,9 +420,45 @@ class ArucoDetectNode(Node):
         json_msg = String()
         json_msg.data = json.dumps(out, ensure_ascii=False)
         self.pub_json.publish(json_msg)
+        self.pub_pose.publish(pose_array)
 
         if self.draw_debug:
             try:
+                # Draw image origin axes at the top-left corner for reference.
+                origin_size = 50
+                cv2.arrowedLine(annotated, (0, 0), (origin_size, 0), (0, 0, 255), 2, tipLength=0.1)
+                cv2.arrowedLine(annotated, (0, 0), (0, origin_size), (255, 0, 0), 2, tipLength=0.1)
+                cv2.putText(
+                    annotated,
+                    "(0,0)",
+                    (5, 20),
+                    cv2.FONT_HERSHEY_SIMPLEX,
+                    0.5,
+                    (255, 255, 255),
+                    1,
+                    cv2.LINE_AA,
+                )
+                cv2.putText(
+                    annotated,
+                    "x",
+                    (origin_size + 5, 15),
+                    cv2.FONT_HERSHEY_SIMPLEX,
+                    0.5,
+                    (0, 255, 0),
+                    1,
+                    cv2.LINE_AA,
+                )
+                cv2.putText(
+                    annotated,
+                    "y",
+                    (5, origin_size + 20),
+                    cv2.FONT_HERSHEY_SIMPLEX,
+                    0.5,
+                    (255, 0, 0),
+                    1,
+                    cv2.LINE_AA,
+                )
+
                 debug_msg = self.bridge.cv2_to_imgmsg(annotated, encoding="bgr8")
                 debug_msg.header = msg.header
                 self.pub_debug.publish(debug_msg)

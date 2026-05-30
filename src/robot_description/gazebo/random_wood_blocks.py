@@ -18,9 +18,9 @@ class RandomSpawner(Node):
         self.declare_parameter('seed', 0)
 
         self.declare_parameter('x_min', 0.35)
-        self.declare_parameter('x_max', 0.65)
-        self.declare_parameter('y_min',-0.20)
-        self.declare_parameter('y_max', 0.20)
+        self.declare_parameter('x_max', 0.5)
+        self.declare_parameter('y_min',-0.30)
+        self.declare_parameter('y_max', 0.30)
         self.declare_parameter('z',     1.25)
         self.declare_parameter('yaw_min', 0.0)
         self.declare_parameter('yaw_max', 2.0 * math.pi)
@@ -57,10 +57,10 @@ class RandomSpawner(Node):
         yaw_step_deg = float(self.get_parameter('yaw_step_deg').value)
 
         face_poses   = [  
-                        ( math.pi/4,  math.pi/4), 
-                        ( math.pi/4, -math.pi/4), 
-                        (-math.pi/4,  math.pi/4), 
-                        (-math.pi/4, -math.pi/4),      ]
+                        ( math.pi/2,  math.pi/2), 
+                        ( math.pi/2, -math.pi/2), 
+                        (-math.pi/2,  math.pi/2), 
+                        (-math.pi/2, -math.pi/2),      ]
 
         self.get_logger().info(f"--- Bat dau tao {count} khoi go ---")
         self.get_logger().info(f"SDF: {self.sdf_path}")

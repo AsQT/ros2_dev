@@ -14,7 +14,12 @@ setup(
         (os.path.join("share", package_name, "launch"), glob("launch/*.launch.py")),
         (os.path.join("share", package_name, "config"), glob("config/*.yaml")),
     ],
-    install_requires=["setuptools"],
+    install_requires=[
+        "setuptools",
+        "PyQt6",
+        "opencv-python",
+        "numpy",
+    ],
     zip_safe=True,
     maintainer="minhquang",
     maintainer_email="minhquang@example.com",
@@ -25,6 +30,7 @@ setup(
         "console_scripts": [
             "yolo_detect_node = robot_vision_pipeline.yolo.yolo_detect_node:main",
             "aruco_detect_node = robot_vision_pipeline.aruco.aruco_detect_node:main",
+            "vision_gui = robot_vision_pipeline.vision_gui.vision_gui_main:main",
         ],
     },
 )

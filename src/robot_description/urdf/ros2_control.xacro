@@ -7,7 +7,7 @@
                       "name                   :='robot_system'
                        initial_positions_file :=''
                        use_sim                :='false' 
-                       use_mock               :='false' ">
+                       use_mock               :='true' ">
 
     <!-- Load initial joint positions if a file is provided true -->
     <xacro:if value ="${initial_positions_file != ''}">

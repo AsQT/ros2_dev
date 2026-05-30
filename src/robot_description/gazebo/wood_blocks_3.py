@@ -46,17 +46,17 @@ class FixedOnTableSpawner(Node):
         # 3 vị trí cố định 
         # (name, x, y, yaw_deg)
         targets = [
-            ("wood_1", 0.30, 0.10, 0.0),
-            ("wood_2", 0.45, -0.10, 0.0),
-            ("wood_3", 0.60, -0.10, 0.0),
+            ("wood_1", 0.5,  0.10, -9.0),
+            ("wood_2", 0.5,  0.0, 90.0),
+            ("wood_3", 0.5, -0.10, 0.0),
         ]
         self.get_logger().info("--- Spawn 3 khoi go tren MAT BAN  ---")
         self.get_logger().info(f"SDF: {self.sdf_path}")
         self.get_logger().info(f"table_z={table_z:.3f}, block_height={block_h:.3f} => z_on_table={z_on_table:.3f}")
 
         for name, x, y, yaw_deg in targets:
-            roll  = 0.0
-            pitch = 0.0
+            roll  = math.radians(90.0)
+            pitch = math.radians(180.0)
             yaw   = math.radians(yaw_deg)
 
             self.spawn_via_command(name, x, y, z_on_table, roll, pitch, yaw)

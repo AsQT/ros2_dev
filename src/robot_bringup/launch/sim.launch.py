@@ -9,6 +9,7 @@ from ament_index_python.packages        import get_package_share_directory
 def generate_launch_description():
     robot_description_pkg = get_package_share_directory("robot_description")
     robot_moveit_pkg = get_package_share_directory("robot_moveit")
+    robot_task_pkg = get_package_share_directory("robot_task_manager")
 
     # 1) Gazebo
     gazebo = IncludeLaunchDescription(
@@ -26,6 +27,12 @@ def generate_launch_description():
                         "launch",
                         "moveit.launch.py",   )    ),
                 launch_arguments={ "use_sim_time": "True",  }.items(),   )
+    task_serrver = IncludeLaunchDescription(
+                PythonLaunchDescriptionSource(
+                    os.path.join(
+                        robot_task_pkg,
+                        "launch",
+                        "task_servers_sim.launch.py",   )    ),  )
     
 
     return LaunchDescription(
@@ -33,4 +40,4 @@ def generate_launch_description():
             gazebo,
             TimerAction(
                 period=4.0,
-                actions=[moveit, ],    ),     ]    )
+                actions=[moveit, task_serrver,],    ),     ]    )
