@@ -1,0 +1,7 @@
+# Development-only Python tools. Keep ROS build tooling in apt/rosdep.
+-r base.txt
+
+pytest>=8.0
+ruff>=0.6
+black>=24.0
+ipython>=8.0

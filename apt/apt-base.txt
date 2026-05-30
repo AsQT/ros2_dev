@@ -1,0 +1,13 @@
+# Base Ubuntu packages for Ubuntu 24.04 / ROS 2 Jazzy workstations.
+# These are package names only; scripts in this repo intentionally do not run apt.
+build-essential
+cmake
+curl
+git
+pkg-config
+python3-dev
+python3-pip
+python3-venv
+wget
+libeigen3-dev
+libopencv-dev

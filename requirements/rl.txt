@@ -1,0 +1,6 @@
+# Reinforcement-learning dependencies for SAC/turtlesim experiments.
+-r base.txt
+
+gymnasium>=1.0
+stable-baselines3[extra]>=2.4
+tensorboard>=2.17

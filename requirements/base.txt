@@ -1,0 +1,6 @@
+# Shared Python dependencies for ROS 2 Jazzy helper nodes and tools.
+# ROS Python packages themselves should come from apt/rosdep, not pip.
+numpy>=1.26,<3
+scipy>=1.11
+matplotlib>=3.8
+PyYAML>=6.0

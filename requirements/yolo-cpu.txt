@@ -1,0 +1,6 @@
+# CPU-only YOLO/inference stack for the robot runtime machine.
+# Install inside a venv; do not install into system Python.
+-r base.txt
+
+ultralytics>=8.3
+onnxruntime>=1.18

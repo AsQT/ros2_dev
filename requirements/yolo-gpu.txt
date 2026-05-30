@@ -1,0 +1,7 @@
+# GPU YOLO/training stack for the training machine.
+# PyTorch CUDA wheels are installed by scripts/install_gpu_train.sh so the
+# CUDA wheel index can be selected explicitly.
+-r base.txt
+
+ultralytics>=8.3
+onnxruntime-gpu>=1.18

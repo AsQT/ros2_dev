@@ -1,0 +1,2 @@
+# Robot CPU runtime: ROS 2 packages from apt/rosdep plus CPU inference deps.
+-r yolo-cpu.txt
