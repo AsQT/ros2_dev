@@ -5,7 +5,7 @@ ros2 run turtlesim turtlesim_node
 ```
 ## Terminal_2 Train 
 ```bash
-source ~/venvs/rl_ros/bin/activate
+source ~/venvs/ros_rl/bin/activate
 
 python3 train_sac.py
 ```
