@@ -168,7 +168,7 @@ class RosImageSubscriber(QThread):
 
     def __init__(
         self,
-        image_topic="/astra/rgb/image_raw",
+        image_topic="/webcam/image_raw", # /webcam/image_raw, /astra/rgb/image_raw
         aruco_image_topic="/aruco/image_annotated",
         aruco_pose_topic="/aruco_pose",
     ):
@@ -287,7 +287,7 @@ class VisionGUI(QMainWindow):
 
         # Controls for input tab
         input_control_layout = QHBoxLayout()
-        self.input_topic_label = QLabel("Topic: /astra/rgb/image_raw")
+        self.input_topic_label = QLabel("Topic: /astra_sim/rgb/image_raw")
         input_control_layout.addWidget(self.input_topic_label)
         input_control_layout.addStretch()
         load_image_btn = QPushButton("Load Image File")
@@ -338,7 +338,7 @@ class VisionGUI(QMainWindow):
     def start_ros_subscriber(self):
         """Start ROS2 image subscriber in a thread."""
         self.subscriber = RosImageSubscriber(
-            image_topic="/astra/rgb/image_raw",
+            image_topic="/astra_sim/rgb/image_raw",
             aruco_image_topic="/aruco/image_annotated",
             aruco_pose_topic="/aruco_pose",
         )

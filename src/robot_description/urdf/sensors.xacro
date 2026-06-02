@@ -25,27 +25,28 @@
         </geometry>
       </collision>
     </link>
-    <link           name  ="${base_link}_optical"/>
+    <link           name  ="${frame_name}_optical"/>
 
     <joint          name  ="${base_link}_joint"         type  ="fixed">
       <parent       link  ="${parent_link}"/>
       <child        link  ="${base_link}"/>
-      <origin       xyz   ="0.6 0 1.0" rpy="${pi} 0 ${pi/2}"/>
+      <origin       xyz   ="0.7 0 0.9" rpy="${pi} ${pi/12} 0"/>
     </joint>
+    <!-- rpy= ${pi} ${pi/12} 0-->
 
     <joint          name  ="${base_link}_optical_joint" type  ="fixed">
       <parent       link  ="${base_link}"/>
-      <child        link  ="${base_link}_optical"/>
+      <child        link  ="${frame_name}_optical"/>
       <origin       xyz   ="0 0 0" rpy="0 0 0"/>
     </joint>
 
-    <gazebo reference="${base_link}">
+    <gazebo reference="${frame_name}_optical">
       <sensor name="astra_rgb" type="camera">
-        <pose>0 0 0 0 ${-pi/2} ${pi} </pose>
+        <pose>0 0 0  0  ${-pi/2} ${pi/2}  </pose>
         <always_on>true</always_on>
         <update_rate>20</update_rate>
         <visualize>true</visualize>
-        <topic>astra/rgb/image_raw</topic>
+        <topic>astra_sim/rgb/image_raw</topic>
         <camera>
           <image>
             <width>640</width>
@@ -60,13 +61,13 @@
       </sensor>
     </gazebo>
 
-    <gazebo reference="${base_link}">
+    <gazebo reference="${frame_name}_optical">
       <sensor name="astra_depth" type="depth">
-        <pose>0 0 0 0 ${-pi/2} 0</pose>
+        <pose>0 0 0  0  ${-pi/2} ${pi/2}  </pose>
         <always_on>true</always_on>
         <update_rate>20</update_rate>
         <visualize>true</visualize>
-        <topic>astra/depth/image_raw</topic>
+        <topic>astra_sim/depth/image_raw</topic>
         <camera>
           <image>
             <width>640</width>

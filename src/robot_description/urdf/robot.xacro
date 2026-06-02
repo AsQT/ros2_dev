@@ -26,9 +26,9 @@
       <material   name  ="white"></material>
     </visual>
     <collision>
-      <origin xyz ="0 0 0" rpy ="0 0 0" />
+      <origin xyz ="-0.05 0 0.03" rpy ="0 0 0" />
       <geometry>
-        <mesh filename  ="package://robot_description/meshes/base_link.stl" />
+        <box size="0.2 0.15 0.06"/>
       </geometry>
     </collision>
   </link>
@@ -53,9 +53,9 @@
       <material   name  ="white"></material>
     </visual>
     <collision>
-      <origin xyz ="0 0 0" rpy  ="0 0 0" />
+      <origin xyz ="0 0 0.15" rpy  ="0 0 0" />
       <geometry>
-        <mesh filename  ="package://robot_description/meshes/link_1.stl" />
+        <cylinder radius="0.17" length="0.3"/>
       </geometry>
     </collision>
   </link>
@@ -80,9 +80,9 @@
       <material     name  ="white"></material>
     </visual>
     <collision>
-      <origin xyz="0 0 0" rpy="0 0 0" />
+      <origin xyz="0.15 0 -0.05" rpy="0 0 0" />
       <geometry>
-        <mesh filename="package://robot_description/meshes/link_2.stl" />
+         <box size="0.3 0.12 0.1"/>
       </geometry>
     </collision>
   </link>
@@ -107,9 +107,9 @@
       <material name="white"></material>
     </visual>
     <collision>
-      <origin  xyz="0 0 0" rpy="0 0 0" />
+      <origin  xyz="0 -0.08 -0.05" rpy="0 0 0" />
       <geometry>
-        <mesh  filename="package://robot_description/meshes/link_3.stl" />
+        <box size="0.16 0.16 0.1"/>
       </geometry>
     </collision>
   </link>
@@ -134,9 +134,9 @@
       <material name="white"></material>
     </visual>
     <collision>
-      <origin  xyz="0 0 0"  rpy="0 0 0" />
+      <origin  xyz="0 0 0.1" rpy="0 0 0" />
       <geometry>
-        <mesh filename="package://robot_description/meshes/link_4.stl" />
+        <box size="0.1 0.1 0.2"/>
       </geometry>
     </collision>
   </link>
@@ -161,9 +161,9 @@
       <material   name  ="white"></material>
     </visual>
     <collision>
-      <origin  xyz="0 0 0"  rpy="0 0 0" />
+      <origin  xyz="0 0 -0.04" rpy="0 0 0" />
       <geometry>
-        <mesh filename  ="package://robot_description/meshes/link_5.stl" />
+        <box size="0.2 0.08 0.08"/>
       </geometry>
     </collision>
   </link>
@@ -188,9 +188,9 @@
       <material   name  ="white"></material>
     </visual>
     <collision>
-      <origin  xyz  ="0 0 0"  rpy ="0 0 0" />
+      <origin  xyz="0 0 0.05" rpy="0 0 0" />
       <geometry>
-        <mesh filename  ="package://robot_description/meshes/link_6.stl" />
+        <box size="0.11 0.04 0.06"/>
       </geometry>
     </collision>
   </link>
@@ -216,9 +216,9 @@
       <material   name  ="white"></material>
     </visual>
     <collision>
-      <origin xyz="0 0 0" rpy="0 0 0" />
+      <origin xyz="0.006 0 0.015" rpy="0 0 0" />
       <geometry>
-        <mesh filename  ="package://robot_description/meshes/gripper_l.stl" />
+        <box size="0.01 0.02 0.03"/>
       </geometry>
     </collision>
   </link>
@@ -243,9 +243,9 @@
       <material   name  ="white"></material>
     </visual>
     <collision>
-      <origin xyz ="0 0 0" rpy  ="0 0 0" />
+      <origin xyz="0.006 0 0.015" rpy="0 0 0" />
       <geometry>
-        <mesh  filename ="package://robot_description/meshes/gripper_r.stl" />
+        <box size="0.01 0.02 0.03"/>
       </geometry>
     </collision>
   </link>

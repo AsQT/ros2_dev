@@ -86,6 +86,6 @@ def generate_launch_description():
 
         node_static_tf,
         node_move_group,
-        node_rviz,
+        #node_rviz,
         controller,
     ])

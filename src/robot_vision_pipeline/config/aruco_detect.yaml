@@ -1,15 +1,15 @@
 aruco_detect_node:
   ros__parameters:
-    #image_topic: "/astra/rgb/image_raw"
-    #camera_info_topic: "/astra/rgb/camera_info"
+    image_topic: "/astra_sim/rgb/image_raw"
+    camera_info_topic: "/astra_sim/rgb/camera_info"
 
-    image_topic: "/webcam/image_raw"
-    camera_info_topic: "/webcam/camera_info"
+    #image_topic: "/webcam/image_raw"
+    #camera_info_topic: "/webcam/camera_info"
 
-    camera_frame: "astra_link_optical"
+    camera_frame: "astra_optical"
 
     dictionary: "DICT_4X4_50"
-    marker_size: 0.03
+    marker_size: 0.028
 
-    enable_pose: false
+    enable_pose: true
     draw_debug: true

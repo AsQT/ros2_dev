@@ -83,7 +83,8 @@ def generate_launch_description():
     core_actions = [
                     gazebo,
                     node_robot_state_publisher,
-                    spawn_robot, ]
+                    spawn_robot, 
+                    ]
 
     # 4) BRIDGE: ROS <-> Gazebo topics
     bridge  = Node(
@@ -92,10 +93,10 @@ def generate_launch_description():
                 output      ="screen",
                 arguments   =[
                             "/clock@rosgraph_msgs/msg/Clock[gz.msgs.Clock",
-                            "/astra/rgb/image_raw@sensor_msgs/msg/Image[gz.msgs.Image",
-                            "/astra/rgb/camera_info@sensor_msgs/msg/CameraInfo@gz.msgs.CameraInfo",
-                            "/astra/depth/image_raw@sensor_msgs/msg/Image[gz.msgs.Image",
-                            "/astra/depth/camera_info@sensor_msgs/msg/CameraInfo@gz.msgs.CameraInfo",], )
+                            "/astra_sim/rgb/image_raw@sensor_msgs/msg/Image[gz.msgs.Image",
+                            "/astra_sim/rgb/camera_info@sensor_msgs/msg/CameraInfo@gz.msgs.CameraInfo",
+                            "/astra_sim/depth/image_raw@sensor_msgs/msg/Image[gz.msgs.Image",
+                            "/astra_sim/depth/camera_info@sensor_msgs/msg/CameraInfo@gz.msgs.CameraInfo",], )
 
     
     bridge_actions = [ bridge, ]
@@ -103,11 +104,11 @@ def generate_launch_description():
     # 6) Spawn wood blocks after robot
     spawn_wood_node  = Node(
                     package     ="robot_description",
-                    executable  ="wood_blocks_3.py", #random_wood_blocks wood_blocks_3.py; wood_blocks_3.py
+                    executable  ="random_wood_blocks.py", #random_wood_blocks wood_blocks_3.py; wood_blocks_3.py
                     output      ="screen",
                     parameters  =[
                                 {"world":   "default"},
-                                {"count":   1},
+                                {"count":   5},
                                 {"seed":    0},
                                 {"x_min":   0.35},
                                 {"x_max":   0.55},

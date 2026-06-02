@@ -14,9 +14,9 @@
     
     <xacro:base_camera
             parent_link     ="base_link"
-            base_link       ="astra_link"
+            base_link       ="astra_base"
             camera_name     ="astra_depth"
-            frame_name      ="astra_link"/>
+            frame_name      ="astra"/>
 
     <xacro:robot_ros2_control 
             name                    ="robot" 
