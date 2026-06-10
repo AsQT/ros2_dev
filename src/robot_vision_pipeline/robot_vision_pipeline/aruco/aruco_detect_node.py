@@ -12,7 +12,7 @@ from rclpy.node import Node
 from sensor_msgs.msg import Image, CameraInfo
 from std_msgs.msg import String
 from geometry_msgs.msg import PoseStamped
-from robot_vision_pipeline_msgs.msg import ArucoPose, ArucoPoseArray  # type: ignore msg custom
+from robot_vision_pipeline.msg import ArucoPose, ArucoPoseArray  # type: ignore msg custom
 import tf2_ros
 from tf2_geometry_msgs import do_transform_pose
 from cv_bridge import CvBridge

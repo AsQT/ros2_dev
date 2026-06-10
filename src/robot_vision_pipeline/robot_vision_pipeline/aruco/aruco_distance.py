@@ -18,8 +18,8 @@ class ArucoDistanceToId0Node(Node):
     def __init__(self):
         super().__init__("aruco_distance_to_id0_node")
 
-        self.declare_parameter("image_topic", "/webcam/image_raw")
-        self.declare_parameter("camera_info_topic", "/webcam/camera_info")
+        self.declare_parameter("image_topic", "/camera/camera/color/image_raw")
+        self.declare_parameter("camera_info_topic", "/camera/camera/color/camera_info")
         self.declare_parameter("dictionary", "DICT_4X4_50")
         self.declare_parameter("marker_size", 0.028)
         self.declare_parameter("reference_id", 0)

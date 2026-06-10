@@ -1,105 +1,109 @@
-# rs485_hardware_cpp
+# robot_hardware_interface
 
-ROS2 C++ node for RS485 protocol:
+ROS 2 C++ package providing RS485 hardware communication and a ros2_control `SystemInterface` plugin. Handles AA BB ... AA FF framing, byte stuffing, and Modbus CRC16 for motor control.
 
-- HEADER: 0xAA 0xBB
-- TAIL:   0xAA 0xFF
-- STUFF: duplicate 0xAA inside body (byte stuffing)
-- CRC: CRC16/MODBUS over (cmd + payload), little-endian appended
+## Package Structure
 
-Commands (from provided Python reference):
-- 0xA0: SERVO ON/OFF axis   payload [id][0/1]
-- 0xA2: GET POS axis        payload [id]   reply payload contains pos_i32 at bytes [2:6]
-- 0xA5: RUN axis            payload [id][pos_i32][vel_u32]  (pos,vel scaled *1000)
-- 0xA7: JOG                 payload [id][dir][vel_u32]      (vel=0 => stop)
-- 0xF1: SERVO ON/OFF ALL    payload [token][0/1]
-- 0xF2: STATUS ALL          payload [] reply: 6*u32 flags
-- 0xF3: RUN ALL             payload 6*(pos_i32 + vel_u32)
-
-## Build
-```bash
-cd ~/ros2_ws
-colcon build --symlink-install
-source install/setup.bash
+```
+robot_hardware_interface/
+├── src/                       # C++ source files
+├── include/                   # C++ headers
+├── config/
+│   └── params.yaml           # Default parameters
+├── launch/
+│   └── hardware_interface.launch.py
+├── msg/                       # Custom messages (if any)
+├── srv/                       # Custom services
+├── plugin.xml                 # ros2_control plugin declaration
+├── CMakeLists.txt
+└── package.xml
 ```
 
-## Run
-```bash
-ros2 run rs485_hardware_cpp rs485_hw_node --ros-args -p port:=/dev/ttyUSB0 -p baudrate:=115200
-```
+## Protocol
 
-## Topics
-- Publishes: /joint_states, /rs485_hw/status_flags, /rs485_hw/connected
-- Subscribes: /rs485_hw/cmd_servo_axis, /rs485_hw/cmd_run_axis, /rs485_hw/cmd_jog, /rs485_hw/cmd_run_all, /rs485_hw/joint_trajectory
+| Field | Value |
+|-------|-------|
+| HEADER | `0xAA 0xBB` |
+| TAIL | `0xAA 0xFF` |
+| STUFF | Duplicate `0xAA` inside body (byte stuffing) |
+| CRC | CRC16/Modbus over (cmd + payload), little-endian |
 
-## Services
-- /rs485_hw/connect (Trigger)
-- /rs485_hw/disconnect (Trigger)
-- /rs485_hw/servo_all (SetBool)
-- /rs485_hw/poll_now (Trigger)
+### Commands
 
-Typed services (recommended for GUI):
-- /rs485_hw/servo_on_axis (rs485_hardware_cpp/srv/ServoOnAxis)
-- /rs485_hw/servo_on_all  (rs485_hardware_cpp/srv/ServoOnAll)
-- /rs485_hw/jog           (rs485_hardware_cpp/srv/Jog)
-- /rs485_hw/run_axis      (rs485_hardware_cpp/srv/RunAxis)
-- /rs485_hw/home          (rs485_hardware_cpp/srv/Home)  # implemented as RUN to configured home_positions_rad
-- /rs485_hw/stop_axis     (rs485_hardware_cpp/srv/StopAxis)
-- /rs485_hw/stop_all      (rs485_hardware_cpp/srv/StopAll)
+| CMD | Name | Payload | Reply |
+|-----|------|---------|-------|
+| `0xA0` | SERVO ON/OFF axis | `[id][0/1]` | — |
+| `0xA2` | GET POS axis | `[id]` | pos_i32 at bytes [2:6] |
+| `0xA5` | RUN axis | `[id][pos_i32][vel_u32]` (scaled *1000) | — |
+| `0xA7` | JOG | `[id][dir][vel_u32]` (vel=0 → stop) | — |
+| `0xF1` | SERVO ON/OFF ALL | `[token][0/1]` | — |
+| `0xF2` | STATUS ALL | `[]` | 6 * u32 flags |
+| `0xF3` | RUN ALL | `6 * (pos_i32 + vel_u32)` | — |
 
+## ros2_control Plugin
 
-## ros2_control hardware plugin (SystemInterface)
+**Plugin name:** `robot_hardware_interface/RobotSystemHardware`
 
-This package also provides a ros2_control hardware plugin:
-
-- **Plugin name:** `rs485_hardware_cpp/Rs485SystemHardware`
-
-### URDF snippet (real robot)
+### URDF Snippet
 
 ```xml
-<ros2_control name="RS485Hardware" type="system">
+<ros2_control name="robot_system" type="system">
   <hardware>
-    <plugin>rs485_hardware_cpp/Rs485SystemHardware</plugin>
-
-    <!-- Same naming as config/params.yaml (node), but here is for ros2_control -->
+    <plugin>robot_hardware_interface/RobotSystemHardware</plugin>
     <param name="port">/dev/ttyUSB0</param>
     <param name="baudrate">115200</param>
     <param name="serial_timeout_s">0.2</param>
     <param name="pos_timeout_s">0.35</param>
     <param name="status_timeout_s">0.5</param>
     <param name="all_token">153</param>
-
-    <!-- Optional -->
     <param name="axis_ids">1,2,3,4,5,6</param>
     <param name="direction_sign">1,1,1,1,1,1</param>
     <param name="rad_offset">0,0,0,0,0,0</param>
     <param name="default_vel_deg_s">10.0</param>
   </hardware>
-
-  <!-- declare joint interfaces here ... -->
+  <!-- joint interfaces declared here -->
 </ros2_control>
 ```
 
-## GUI bring-up (2 joints)
+## Topics
 
-After building this package, you can run the GUI to quickly test **axis 0 & 1**:
+| Topic | Direction | Description |
+|-------|-----------|-------------|
+| `/joint_states` | Publish | Current joint positions/velocities |
+| `/rs485_hw/status_flags` | Publish | Status flags from all axes |
+| `/rs485_hw/connected` | Publish | Connection state |
+| `/rs485_hw/cmd_servo_axis` | Subscribe | Servo on/off per axis |
+| `/rs485_hw/cmd_run_axis` | Subscribe | Run command per axis |
+| `/rs485_hw/cmd_jog` | Subscribe | Jog command |
+| `/rs485_hw/cmd_run_all` | Subscribe | Run all axes |
+| `/rs485_hw/joint_trajectory` | Subscribe | Trajectory command |
+
+## Services
+
+| Service | Type | Description |
+|---------|------|-------------|
+| `/rs485_hw/connect` | `Trigger` | Connect to serial port |
+| `/rs485_hw/disconnect` | `Trigger` | Disconnect |
+| `/rs485_hw/servo_all` | `SetBool` | Servo on/off all |
+| `/rs485_hw/poll_now` | `Trigger` | Trigger immediate poll |
+| `/rs485_hw/servo_on_axis` | `ServoOnAxis` | Per-axis servo control |
+| `/rs485_hw/run_axis` | `RunAxis` | Per-axis run |
+| `/rs485_hw/jog` | `Jog` | Jog control |
+| `/rs485_hw/home` | `Home` | Go to home position |
+| `/rs485_hw/stop_axis` | `StopAxis` | Stop per axis |
+| `/rs485_hw/stop_all` | `StopAll` | Stop all axes |
+
+## Build & Run
 
 ```bash
-# terminal 1
-ros2 launch rs485_hardware_cpp rs485_hw_with_gui.launch.py
+cd ~/ros2
+colcon build --packages-select robot_hardware_interface
+source install/setup.bash
 
-# or launch the node only:
-ros2 launch rs485_hardware_cpp rs485_hw.launch.py
+# Run via launch
+ros2 launch robot_hardware_interface hardware_interface.launch.py
 
-# terminal 2 (if not launched with GUI)
-ros2 run rs485_hardware_cpp rs485_hw_gui.py
-```
-
-GUI uses:
-- Services: `/rs485_hw/connect`, `/rs485_hw/disconnect`, `/rs485_hw/poll_now`, `/rs485_hw/servo_all`
-- Topics: `/joint_states` (positions), `/rs485_hw/cmd_run_axis` (HOME sends RUN to axis 0/1)
-
-If your joint names differ, set GUI params:
-```bash
-ros2 run rs485_hardware_cpp rs485_hw_gui.py --ros-args -p watch_joints:="['joint1','joint2']" -p axis_ids:="[0,1]"
+# Or directly
+ros2 run robot_hardware_interface rs485_hw_node \
+    --ros-args -p port:=/dev/ttyUSB0 -p baudrate:=115200
 ```

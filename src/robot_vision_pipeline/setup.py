@@ -31,6 +31,7 @@ setup(
             "yolo_detect_node = robot_vision_pipeline.yolo.yolo_detect_node:main",
             "aruco_detect_node = robot_vision_pipeline.aruco.aruco_detect_node:main",
             "vision_gui = robot_vision_pipeline.vision_gui.vision_gui_main:main",
+            "vision_gui_astra = robot_vision_pipeline.vision_gui.vision_gui_astra:main",
         ],
     },
 )

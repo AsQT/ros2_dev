@@ -1,0 +1,25 @@
+# MoveCartesianPoseSequence Service Definition
+#
+# Executes an arbitrary sequence of Cartesian poses via MoveIt's Cartesian path planner.
+# Unlike /move_cartesian_sequence which requires named waypoints from YAML,
+# this service accepts geometry_msgs/PoseStamped[] directly.
+#
+# Request:
+#   - poses: List of Cartesian waypoints to visit in sequence (PoseStamped[]).
+#             Poses should normally be in base_link frame.
+#             If frame_id is empty, defaults to "base_link".
+#             If orientation is all zeros, replaced with the calibrated default orientation.
+#   - execute: If true, plan and execute the Cartesian path.
+#              If false, plan only.
+#
+# Response:
+#   - success: True if planning (and execution if requested) succeeded.
+#   - message: Human-readable result/diagnostic message.
+#   - fraction: MoveIt Cartesian path fraction (0.0 to 1.0).
+
+geometry_msgs/PoseStamped[] poses
+bool execute
+---
+bool success
+string message
+float64 fraction

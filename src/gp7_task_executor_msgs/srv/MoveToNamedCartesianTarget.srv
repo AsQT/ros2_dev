@@ -1,0 +1,6 @@
+string target_name
+bool execute
+---
+bool success
+string message
+float64 fraction

@@ -25,7 +25,7 @@ import rclpy
 from rclpy.node import Node
 from rclpy.qos import qos_profile_sensor_data
 from sensor_msgs.msg import Image as RosImage
-from robot_vision_pipeline_msgs.msg import ArucoPoseArray # type: ignore
+from robot_vision_pipeline.msg import ArucoPoseArray # type: ignore
 from cv_bridge import CvBridge
 
 

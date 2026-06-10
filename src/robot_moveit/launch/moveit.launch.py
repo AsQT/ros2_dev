@@ -25,7 +25,7 @@ def generate_launch_description():
                         file_path=os.path.join( robot_description_pkg, "urdf", "robot.urdf.xacro", ),
                         mappings={ 
                                 "use_sim": use_sim_time,
-                                "use_mock": use_mock,         },)
+                                "use_mock_hardware": use_mock,         },)
                     .robot_description_semantic(file_path="config/robot.srdf")
                     .trajectory_execution(file_path="config/moveit_controllers.yaml")
                     .to_moveit_configs() )
@@ -86,6 +86,6 @@ def generate_launch_description():
 
         node_static_tf,
         node_move_group,
-        #node_rviz,
+        node_rviz,
         controller,
     ])

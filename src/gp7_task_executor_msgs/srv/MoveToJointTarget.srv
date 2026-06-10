@@ -1,0 +1,19 @@
+# MoveToJointTarget Service Definition
+#
+# Commands MoveIt to move to a joint-space goal.
+#
+# Request:
+#   - joint_names: Names of the joints to move (must match the MoveIt planning group).
+#   - positions: Target positions for the corresponding joint_names.
+#   - execute: If true, plan and execute. If false, plan only.
+#
+# Response:
+#   - success: True if planning (and execution if requested) succeeded.
+#   - message: Human-readable result/diagnostic message.
+
+string[] joint_names
+float64[] positions
+bool execute
+---
+bool success
+string message

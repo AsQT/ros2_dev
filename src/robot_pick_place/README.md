@@ -1,23 +1,61 @@
 # robot_pick_place
 
-GUI PyQt6 tối giản để hiển thị ArUco và gọi action `robot_task_manager/action/PickPlace`.
+PyQt6 GUI for ArUco-based pick and place. Displays annotated camera feed, detects ArUco markers, and calls the `robot_task_manager/PickPlace` action.
 
-## Chạy
+## Package Structure
+
+```
+robot_pick_place/
+├── robot_pick_place/
+│   └── (Python GUI modules)
+├── launch/
+│   └── pick_place_gui.launch.py
+└── package.xml
+```
+
+## Build
+
+```bash
+cd ~/ros2
+colcon build --packages-select robot_pick_place
+source install/setup.bash
+```
+
+## Run
 
 ```bash
 ros2 launch robot_pick_place pick_place_gui.launch.py
 ```
 
-## Topic/action mặc định
+## Default Topics / Actions
 
-- Image: `/aruco/image_annotated`
-- Pose: `/aruco_pose`
-- Action: `/pickplace`
+| Resource | Name |
+|----------|------|
+| Image topic | `/aruco/image_annotated` |
+| Pose topic | `/aruco_pose` |
+| Action | `/pickplace` |
 
-## Tham số quan trọng
+## Key Parameters
 
-Mặc định GUI dùng orientation cố định cho pick pose, không dùng nguyên quaternion của marker ArUco.
-Điều này thường ổn hơn vì quaternion của marker là hướng của mặt marker, không nhất thiết là orientation hợp lệ của TCP/gripper.
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `use_fixed_pick_orientation` | `true` | Use fixed orientation for pick (recommended) |
+| `pick_qx`, `pick_qy`, `pick_qz`, `pick_qw` | `0.7071, 0.7071, 0.0, 0.0` | Fixed pick quaternion |
+| `pick_z_offset` | `0.0` | Z offset above pick point |
+| `gripper` | `0.010` | Gripper opening width |
+| `velocity_scale` | `0.30` | Motion velocity scale |
+
+### Use Fixed vs. ArUco Orientation
+
+```bash
+# Fixed orientation (recommended — avoids singularity)
+ros2 launch robot_pick_place pick_place_gui.launch.py use_fixed_pick_orientation:=true
+
+# Use quaternion from /aruco_pose (may cause IK issues)
+ros2 launch robot_pick_place pick_place_gui.launch.py use_fixed_pick_orientation:=false
+```
+
+### Custom Pick/Place Positions
 
 ```bash
 ros2 launch robot_pick_place pick_place_gui.launch.py \
@@ -28,16 +66,9 @@ ros2 launch robot_pick_place pick_place_gui.launch.py \
   gripper:=0.010 velocity_scale:=0.30
 ```
 
-Nếu muốn thử dùng quaternion từ `/aruco_pose`:
+## Dependencies
 
-```bash
-ros2 launch robot_pick_place pick_place_gui.launch.py use_fixed_pick_orientation:=false
-```
-
-Nếu MoveIt fail ở bước approach do z quá thấp, có thể thử tăng tạm z pick gửi vào action:
-
-```bash
-ros2 launch robot_pick_place pick_place_gui.launch.py pick_z_offset:=0.03
-```
-
-Lưu ý: `PickPlace.action` thường tự tạo approach bằng `pose_pick.z + 0.1`, nên tăng `pick_z_offset` cũng làm điểm gắp cuối cao hơn. Chỉ dùng để debug vùng workspace/collision.
+- `cv_bridge` — OpenCV ↔ ROS image conversion
+- `robot_vision_pipeline_msgs` — ArUco pose types
+- `robot_task_manager` — PickPlace action
+- `python3-opencv`, `python3-numpy`, `python3-pyqt6`

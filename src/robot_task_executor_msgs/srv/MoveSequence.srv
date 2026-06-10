@@ -1,0 +1,18 @@
+# MoveSequence Service Definition
+#
+# Executes a user-defined sequence of named joint waypoints.
+# Each waypoint name must exist in the loaded waypoint configuration.
+#
+# Request:
+#   - waypoint_names: Ordered list of waypoint names to visit in sequence.
+#   - execute: If true, plan and execute each waypoint. If false, plan only.
+#
+# Response:
+#   - success: True only if all waypoints succeed.
+#   - message: Human-readable result/diagnostic message.
+
+string[] waypoint_names
+bool execute
+---
+bool success
+string message

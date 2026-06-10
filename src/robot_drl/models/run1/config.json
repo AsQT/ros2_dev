@@ -1,0 +1,43 @@
+{
+    "env_mode": "Default",
+    "algorithm": "DDPG",
+    "run_id": "20260508_161221",
+    "seed": 42,
+    "hyperparameters": {
+        "total_timesteps": 500000,
+        "gamma": 0.95,
+        "learning_rate": 0.001,
+        "action_noise_sigma": 0.1
+    },
+    "env_parameters": {
+        "enable_gui": false,
+        "action_step": 0.01,
+        "distance_thresh": 0.01,
+        "max_episode_steps": 500
+    },
+    "reward_settings": {
+        "type": "multi_component_with_normalization",
+        "components": {
+            "distance": "-euclidean_distance",
+            "action_smoothness": "-0.001 * ||action||^2",
+            "collision_soft": "-(1/(1+dist_obs)) * 0.5",
+            "success_bonus": "+10.0"
+        },
+        "collision_obj_penalty_threshold": 0.5,
+        "action_smoothness_weight": 0.001,
+        "success_bonus": 10.0,
+        "vecnormalize": "norm_obs=False, norm_reward=False, clip_reward=10.0"
+    },
+    "ik_settings": {
+        "use_orientation": true,
+        "ik_position_tolerance": 0.01,
+        "note": "position-only IK (use_orientation=True) \u2014 matches RobotReachPyBulletEnv.__ik_props"
+    },
+    "replay_buffer": {
+        "saved": true,
+        "path": "replay_buffer.pkl",
+        "note": "DDPG off-policy replay buffer saved for future continue-training runs."
+    },
+    "source_config": "config/env_config.yaml",
+    "best_model": "D:\\DRL\\DRL_Robot_Manipulator\\Data\\Training\\Environment_Default\\DDPG\\ROBOT\\run_20260508_161221\\model\\best_model.zip"
+}

@@ -3,6 +3,7 @@ build/
 install/
 calibration/
 log/
+"gp_.*"
 
 # ===== Colcon / CMake temp =====
 **/.cmake/

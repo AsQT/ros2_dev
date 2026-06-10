@@ -406,171 +406,162 @@ private:
     return true;
   }
 
-  void execute(
-    const std::shared_ptr<PickPlaceGoalHandle> goal_handle)
-  {
-    auto result = std::make_shared<PickPlace::Result>();
+void execute(
+  const std::shared_ptr<PickPlaceGoalHandle> goal_handle)
+{
+  auto result = std::make_shared<PickPlace::Result>();
 
-    if (!goal_handle) {
-      RCLCPP_ERROR(get_logger(), "goal_handle is null");
-      return;
-    }
-
-    auto goal = goal_handle->get_goal();
-
-    if (!goal) {
-      result->success = false;
-      result->message = "Goal is null";
-      goal_handle->abort(result);
-      return;
-    }
-
-    std::string error_msg;
-
-    publish_feedback(goal_handle, "Waiting for sub action servers", 2.0f);
-
-    if (!wait_for_sub_action_servers(error_msg)) {
-      abort_goal(goal_handle, result, error_msg);
-      return;
-    }
-
-    if (check_cancel(goal_handle, result)) {
-      return;
-    }
-
-    geometry_msgs::msg::Pose pick_approach = goal->pose_pick;
-    pick_approach.position.z += approach_height_;
-
-    geometry_msgs::msg::Pose place_approach = goal->pose_place;
-    place_approach.position.z += approach_height_;
-
-    RCLCPP_INFO(
-      get_logger(),
-      "PickPlace start | pick=(%.3f %.3f %.3f) | place=(%.3f %.3f %.3f) | gripper=%.4f | vel=%.2f",
-      goal->pose_pick.position.x,
-      goal->pose_pick.position.y,
-      goal->pose_pick.position.z,
-      goal->pose_place.position.x,
-      goal->pose_place.position.y,
-      goal->pose_place.position.z,
-      goal->gripper,
-      goal->velocity_scale);
-
-    // 1. Open gripper
-    publish_feedback(goal_handle, "Open gripper", 5.0f);
-
-    if (!call_move_gripper(open_gripper_position_, error_msg)) {
-      abort_goal(goal_handle, result, "Open gripper failed: " + error_msg);
-      return;
-    }
-
-    if (check_cancel(goal_handle, result)) {
-      return;
-    }
-
-    // 2. MoveToPose to pick approach
-    publish_feedback(goal_handle, "Move to pick approach", 15.0f);
-
-    if (!call_move_to_pose(pick_approach, goal->velocity_scale, error_msg)) {
-      abort_goal(goal_handle, result, "Move to pick approach failed: " + error_msg);
-      return;
-    }
-
-    if (check_cancel(goal_handle, result)) {
-      return;
-    }
-
-    // 3. Cartesian down to pick
-    publish_feedback(goal_handle, "Cartesian down to pick", 30.0f);
-
-    if (!call_move_to_pose_cartesian(goal->pose_pick, goal->velocity_scale, error_msg)) {
-      abort_goal(goal_handle, result, "Cartesian down to pick failed: " + error_msg);
-      return;
-    }
-
-    if (check_cancel(goal_handle, result)) {
-      return;
-    }
-
-    // 4. Close gripper
-    publish_feedback(goal_handle, "Close gripper", 45.0f);
-
-    if (!call_move_gripper(goal->gripper, error_msg)) {
-      abort_goal(goal_handle, result, "Close gripper failed: " + error_msg);
-      return;
-    }
-
-    if (check_cancel(goal_handle, result)) {
-      return;
-    }
-
-    // 5. Cartesian lift from pick
-    publish_feedback(goal_handle, "Cartesian lift from pick", 55.0f);
-
-    if (!call_move_to_pose_cartesian(pick_approach, goal->velocity_scale, error_msg)) {
-      abort_goal(goal_handle, result, "Cartesian lift from pick failed: " + error_msg);
-      return;
-    }
-
-    if (check_cancel(goal_handle, result)) {
-      return;
-    }
-
-    // 6. MoveToPose to place approach
-    publish_feedback(goal_handle, "Move to place approach", 68.0f);
-
-    if (!call_move_to_pose(place_approach, goal->velocity_scale, error_msg)) {
-      abort_goal(goal_handle, result, "Move to place approach failed: " + error_msg);
-      return;
-    }
-
-    if (check_cancel(goal_handle, result)) {
-      return;
-    }
-
-    // 7. Cartesian down to place
-    publish_feedback(goal_handle, "Cartesian down to place", 80.0f);
-
-    if (!call_move_to_pose_cartesian(goal->pose_place, goal->velocity_scale, error_msg)) {
-      abort_goal(goal_handle, result, "Cartesian down to place failed: " + error_msg);
-      return;
-    }
-
-    if (check_cancel(goal_handle, result)) {
-      return;
-    }
-
-    // 8. Open gripper to release
-    publish_feedback(goal_handle, "Open gripper to release", 90.0f);
-
-    if (!call_move_gripper(open_gripper_position_, error_msg)) {
-      abort_goal(goal_handle, result, "Release object failed: " + error_msg);
-      return;
-    }
-
-    if (check_cancel(goal_handle, result)) {
-      return;
-    }
-
-    // 9. Cartesian lift from place
-    publish_feedback(goal_handle, "Cartesian lift from place", 97.0f);
-
-    if (!call_move_to_pose_cartesian(place_approach, goal->velocity_scale, error_msg)) {
-      abort_goal(goal_handle, result, "Cartesian lift from place failed: " + error_msg);
-      return;
-    }
-
-    publish_feedback(goal_handle, "PickPlace completed", 100.0f);
-
-    result->success = true;
-    result->message = "PickPlace completed successfully";
-
-    clear_active_goals();
-
-    goal_handle->succeed(result);
-
-    RCLCPP_INFO(get_logger(), "PickPlace completed successfully");
+  if (!goal_handle) {
+    RCLCPP_ERROR(get_logger(), "goal_handle is null");
+    return;
   }
+
+  auto goal = goal_handle->get_goal();
+
+  if (!goal) {
+    result->success = false;
+    result->message = "Goal is null";
+    goal_handle->abort(result);
+    return;
+  }
+
+  std::string error_msg;
+
+  publish_feedback(goal_handle, "Waiting for sub action servers", 2.0f);
+
+  if (!wait_for_sub_action_servers(error_msg)) {
+    abort_goal(goal_handle, result, error_msg);
+    return;
+  }
+
+  if (check_cancel(goal_handle, result)) {
+    return;
+  }
+
+  geometry_msgs::msg::Pose pick_approach = goal->pose_pick;
+  pick_approach.position.z += approach_height_;
+
+  geometry_msgs::msg::Pose place_approach = goal->pose_place;
+  place_approach.position.z += approach_height_;
+
+  RCLCPP_INFO(
+    get_logger(),
+    "Fast PickPlace start | pick=(%.3f %.3f %.3f) | place=(%.3f %.3f %.3f) | gripper=%.4f | vel=%.2f",
+    goal->pose_pick.position.x,
+    goal->pose_pick.position.y,
+    goal->pose_pick.position.z,
+    goal->pose_place.position.x,
+    goal->pose_place.position.y,
+    goal->pose_place.position.z,
+    goal->gripper,
+    goal->velocity_scale);
+
+  // 1. Open gripper
+  publish_feedback(goal_handle, "Open gripper", 5.0f);
+
+  if (!call_move_gripper(open_gripper_position_, error_msg)) {
+    abort_goal(goal_handle, result, "Open gripper failed: " + error_msg);
+    return;
+  }
+
+  if (check_cancel(goal_handle, result)) {
+    return;
+  }
+
+  // 2. Move to pick approach
+  publish_feedback(goal_handle, "Move to pick approach", 20.0f);
+
+  if (!call_move_to_pose(pick_approach, goal->velocity_scale, error_msg)) {
+    abort_goal(goal_handle, result, "Move to pick approach failed: " + error_msg);
+    return;
+  }
+
+  if (check_cancel(goal_handle, result)) {
+    return;
+  }
+
+  // 3. Cartesian down to pick
+  publish_feedback(goal_handle, "Cartesian down to pick", 35.0f);
+
+  if (!call_move_to_pose_cartesian(goal->pose_pick, goal->velocity_scale, error_msg)) {
+    abort_goal(goal_handle, result, "Cartesian down to pick failed: " + error_msg);
+    return;
+  }
+
+  if (check_cancel(goal_handle, result)) {
+    return;
+  }
+
+  // 4. Close gripper
+  publish_feedback(goal_handle, "Close gripper", 50.0f);
+
+  if (!call_move_gripper(goal->gripper, error_msg)) {
+    abort_goal(goal_handle, result, "Close gripper failed: " + error_msg);
+    return;
+  }
+
+  // Đợi gripper đóng xong / vật ổn định rồi mới nâng
+  publish_feedback(goal_handle, "Wait gripper close settle", 52.0f);
+
+  std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+
+  if (check_cancel(goal_handle, result)) {
+    return;
+  }
+
+  // 5. Move directly to place approach
+  //
+  // Bước này thay cho:
+  // - Cartesian lift from pick
+  // - MoveToPose to place approach
+  //
+  // MoveIt sẽ tự plan từ pose_pick lên place_approach.
+  publish_feedback(goal_handle, "Move directly to place approach", 70.0f);
+
+  if (!call_move_to_pose(place_approach, goal->velocity_scale, error_msg)) {
+    abort_goal(goal_handle, result, "Move directly to place approach failed: " + error_msg);
+    return;
+  }
+
+  if (check_cancel(goal_handle, result)) {
+    return;
+  }
+
+  // 6. Cartesian down to place
+  publish_feedback(goal_handle, "Cartesian down to place", 85.0f);
+
+  if (!call_move_to_pose_cartesian(goal->pose_place, goal->velocity_scale, error_msg)) {
+    abort_goal(goal_handle, result, "Cartesian down to place failed: " + error_msg);
+    return;
+  }
+
+  if (check_cancel(goal_handle, result)) {
+    return;
+  }
+
+  // 7. Open gripper to release
+  publish_feedback(goal_handle, "Open gripper to release", 95.0f);
+
+  if (!call_move_gripper(open_gripper_position_, error_msg)) {
+    abort_goal(goal_handle, result, "Release object failed: " + error_msg);
+    return;
+  }
+
+  if (check_cancel(goal_handle, result)) {
+    return;
+  }
+
+  publish_feedback(goal_handle, "Fast PickPlace completed", 100.0f);
+
+  result->success = true;
+  result->message = "Fast PickPlace completed successfully";
+
+  clear_active_goals();
+
+  goal_handle->succeed(result);
+
+  RCLCPP_INFO(get_logger(), "Fast PickPlace completed successfully");
+}
 };
 
 int main(int argc, char ** argv)

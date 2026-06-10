@@ -1,0 +1,108 @@
+{
+    "env_config_file": "config/environment_simple_distance_random_start_target_v1.yaml",
+    "env_mode": "Default",
+    "algorithm": "TD3",
+    "total_timesteps": 10000000,
+    "seed": 42,
+    "run_id": "20260520_022430",
+    "device": "cpu",
+    "hyperparameters": {
+        "gamma": 0.98,
+        "learning_rate": 0.0003,
+        "batch_size": 256,
+        "net_arch": [
+            256,
+            256
+        ],
+        "action_noise": {
+            "type": "NormalActionNoise",
+            "mean": 0.0,
+            "sigma": 0.1
+        },
+        "total_timesteps": 1000000,
+        "log_interval": 50
+    },
+    "reward_settings": {
+        "progress_scale": 0.0,
+        "distance_scale": 10.0,
+        "step_penalty": 0.0,
+        "path_length_scale": 0.0,
+        "success_bonus": 100.0,
+        "collision_penalty": 100.0,
+        "workspace_penalty": 100.0,
+        "target_threshold": 0.01,
+        "action_step": 0.01,
+        "max_steps": 500
+    },
+    "workspace": {
+        "min": [
+            0.425,
+            -0.2,
+            0.02
+        ],
+        "max": [
+            0.675,
+            0.2,
+            0.6
+        ]
+    },
+    "table": {
+        "center": [
+            0.03,
+            -0.55,
+            -0.15
+        ],
+        "size": [
+            0.33,
+            0.33,
+            0.36
+        ]
+    },
+    "box": {
+        "center": [
+            0.0,
+            0.0,
+            0.0
+        ],
+        "size": [
+            0.1,
+            0.1,
+            0.1
+        ]
+    },
+    "start": {
+        "mode": "random",
+        "position": [
+            0.35,
+            -0.33,
+            0.1
+        ]
+    },
+    "target_region": {
+        "enabled": true,
+        "random_target": true,
+        "min": [
+            0.425,
+            -0.2,
+            0.02
+        ],
+        "max": [
+            0.675,
+            0.2,
+            0.6
+        ],
+        "fixed_target": [
+            0.575,
+            0.05,
+            0.12
+        ]
+    },
+    "algo_config_file": "config/experiments/td3_path_new.yaml",
+    "n_envs": 12,
+    "vec_env_type": "auto",
+    "progress_bar": true,
+    "load_model": null,
+    "load_vecnormalize": null,
+    "curriculum_config_file": null,
+    "load_replay_buffer": null
+}

@@ -1,0 +1,6 @@
+string[] waypoint_names
+bool execute
+---
+bool success
+string message
+float64 fraction

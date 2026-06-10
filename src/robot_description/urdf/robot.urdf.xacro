@@ -18,9 +18,10 @@
             camera_name     ="astra_depth"
             frame_name      ="astra"/>
 
-    <xacro:robot_ros2_control 
-            name                    ="robot" 
-            initial_positions_file  ="$(arg initial_positions_file)" 
-            use_sim                 ="$(arg use_sim)" />
+    <xacro:robot_ros2_control
+            name                    ="robot"
+            initial_positions_file  ="$(arg initial_positions_file)"
+            use_sim                 ="$(arg use_sim)"
+            use_mock                ="$(arg use_mock_hardware)" />
 
 </robot>

@@ -1,0 +1,33 @@
+# Joint waypoints for robot_task_executor
+# All values are in DEGREES (converted to radians internally at load time).
+# Joint order for each waypoint: joint_1, joint_2, joint_3, joint_4, joint_5, joint_6
+#
+# To add or modify waypoints:
+#   1. Edit the values below in degrees.
+#   2. Rebuild the package: colcon build --packages-select robot_task_executor
+#   3. Restart the node.
+#
+waypoints:
+  start:
+    description: "DRL task starting position, tool orientation RPY=[pi,0,0]"
+    # joints: [-43.32, 6.88, -26.96, 0.0, -56.16, -43.32]
+    joints: [-43.321, 4.482, -23.849, 0.0, -61.669, -43.321]
+  origin:
+    description: "Robot at zero position (all joints at 0 deg)"
+    joints: [0.0, 0.0, 0.0, 0.0, -90.0, 0.0]
+
+  P1:
+    description: "Pick position 1"
+    joints: [0.0, 6.05, -26.3, 0.0, -57.65, 0.0]
+
+  P2:
+    description: "Pick position 2"
+    joints: [-24.01, -2.95, -35.58, 0.0, -57.37, 24.01]
+
+  P3:
+    description: "Pick position 3"
+    joints: [-90, -2, -23,-1, -68, -17]
+
+  P4:
+    description: "Pick position 4"
+    joints: [-90, 4, -32,-1, -54, -17]

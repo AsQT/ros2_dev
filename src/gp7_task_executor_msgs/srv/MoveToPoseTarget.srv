@@ -1,0 +1,19 @@
+# MoveToPoseTarget Service Definition
+#
+# Commands MoveIt to move to a pose goal.
+#
+# Request:
+#   - pose: Target pose (position and orientation) for the end-effector.
+#   - frame_id: Reference frame for the pose.
+#   - execute: If true, plan and execute. If false, plan only.
+#
+# Response:
+#   - success: True if planning (and execution if requested) succeeded.
+#   - message: Human-readable result/diagnostic message.
+
+geometry_msgs/Pose pose
+string frame_id
+bool execute
+---
+bool success
+string message

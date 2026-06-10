@@ -1,0 +1,11 @@
+# Default parameters for robot_task_executor (C++ task executor node)
+
+/**:
+  ros__parameters:
+    move_group_name: "arm"
+    base_frame: "base_link"
+    ee_link: "tcp_link"
+    planning_time: 2.0
+    num_planning_attempts: 5
+    max_velocity_scaling_factor: 0.5
+    max_acceleration_scaling_factor: 0.5

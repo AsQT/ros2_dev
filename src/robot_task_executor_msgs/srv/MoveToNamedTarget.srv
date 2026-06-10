@@ -1,0 +1,17 @@
+# MoveToNamedTarget Service Definition
+#
+# Commands MoveIt to move to a named target (e.g., "home", "ready") defined in the SRDF.
+#
+# Request:
+#   - target_name: Name of the SRDF group state to move to.
+#   - execute: If true, plan and execute. If false, plan only.
+#
+# Response:
+#   - success: True if planning (and execution if requested) succeeded.
+#   - message: Human-readable result/diagnostic message.
+
+string target_name
+bool execute
+---
+bool success
+string message

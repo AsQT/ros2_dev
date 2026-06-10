@@ -1,0 +1,18 @@
+pose_waypoints:
+  pose_A:
+    description: "Pose waypoint A"
+    frame_id: "base_link"
+    position: [0.5241, 0.0, 0.315]
+    rpy: [3.1416, 0.0, 0.0]
+
+  pose_B:
+    description: "Pose waypoint B"
+    frame_id: "base_link"
+    position: [0.00254, -0.4966, 0.1639]
+    rpy: [-2.18, 1.18, -0.02]
+
+  pose_C:
+    description: "Pose waypoint C"
+    frame_id: "base_link"
+    position: [0.00224, -0.4946, 0.0527]
+    rpy: [-2.17, 1.19, -0.01]

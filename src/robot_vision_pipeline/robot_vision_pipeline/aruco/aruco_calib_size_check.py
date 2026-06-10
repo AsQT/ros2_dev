@@ -50,8 +50,8 @@ class ArucoCalibSizeCheckNode(Node):
     def __init__(self):
         super().__init__("aruco_calib_size_check_node") # tên node
 
-        self.declare_parameter("image_topic", "/webcam/image_raw")
-        self.declare_parameter("camera_info_topic", "/webcam/camera_info")
+        self.declare_parameter("image_topic", "/camera/camera/color/image_raw")
+        self.declare_parameter("camera_info_topic", "/camera/camera/color/camera_info")
         self.declare_parameter("dictionary", "DICT_4X4_50")
         self.declare_parameter("marker_size_mm", 28.0)
         self.declare_parameter("known_distance_mm", 0.0)
