@@ -73,7 +73,7 @@ except ImportError:
 
 _EXECUTION_STATUS_RATE_HZ = 2.0
 
-_EXECUTION_QUATERNION = (1.0, 0.0, 0.0, 0.0)  # RPY=[pi, 0, 0]
+_EXECUTION_QUATERNION = (0.0, 1.0, 0.0, 0.0)  # RPY=[0, pi, 0]
 
 
 # -------------------------------------------------------------------------
@@ -179,8 +179,8 @@ def build_trajectory_poses(
 ) -> PoseArray:
     """Build a PoseArray from a trajectory.
 
-    All poses use the calibrated tool orientation (RPY=[pi, 0, 0],
-    quaternion xyzw=[1, 0, 0, 0]).
+    All poses use the calibrated TCP-down tool orientation (RPY=[0, pi, 0],
+    quaternion xyzw=[0, 1, 0, 0]).
 
     Returns:
         PoseArray with all waypoints.
@@ -722,7 +722,7 @@ class DrlPlannerNodeBase(Node):
             else:
                 self.get_logger().warn(
                     f"[{label}] current tcp_link orientation unavailable; "
-                    "using fallback RPY=[pi,0,0]"
+                    "using fallback RPY=[0,pi,0]"
                 )
         for pt in trajectory_base:
             stamped = PoseStamped()

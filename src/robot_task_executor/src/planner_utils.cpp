@@ -28,9 +28,9 @@ void PlannerUtils::init(
   max_acceleration_scaling_ = max_acceleration_scaling;
   task_frame_ = task_frame;
 
-  // Fixed orientation for Cartesian moves: roll=pi (tool pointing downward), pitch=0, yaw=0
+  // Fixed TCP-down orientation for Cartesian moves in this robot model.
   tf2::Quaternion q;
-  q.setRPY(M_PI, 0.0, 0.0);
+  q.setRPY(0.0, M_PI, 0.0);
   q.normalize();
   cartesian_quat_.x = q.x();
   cartesian_quat_.y = q.y();
@@ -38,7 +38,7 @@ void PlannerUtils::init(
   cartesian_quat_.w = q.w();
 
   RCLCPP_INFO(logger(),
-              "[Planner] Cartesian fixed orientation: roll=pi, pitch=0, yaw=0  "
+              "[Planner] Cartesian fixed orientation: roll=0, pitch=pi, yaw=0  "
               "quat=(%.6f, %.6f, %.6f, %.6f)",
               cartesian_quat_.x, cartesian_quat_.y,
               cartesian_quat_.z, cartesian_quat_.w);

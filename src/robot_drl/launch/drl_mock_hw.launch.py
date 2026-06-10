@@ -174,10 +174,10 @@ def generate_launch_description():
     )
 
     # ── Step 2: ros2_control_node (mock hardware) ───────────────────────────────
-    ros2_control_params = _make_params(
-        {**moveit_config.robot_description, **controllers_yaml_to_dict(controllers_yaml)},
-        use_sim_time_bool,
-    )
+    ros2_control_params = [
+        *_make_params(moveit_config.robot_description, use_sim_time_bool),
+        controllers_yaml,
+    ]
     ros2_control_node = Node(
         package="controller_manager",
         executable="ros2_control_node",
@@ -268,6 +268,7 @@ def generate_launch_description():
         parameters=_make_params({
             **moveit_config.robot_description,
             **moveit_config.robot_description_semantic,
+            **moveit_config.robot_description_kinematics,
             "use_sim_time":                use_sim_time_bool,
             "move_group_name":             "arm",
             "base_frame":                  "base_link",
@@ -318,6 +319,7 @@ def generate_launch_description():
             "auto_plan_on_start":    auto_plan,
             "manual_prompt_on_start": manual_prompt,
             "auto_execute_after_plan": auto_exec,
+            "use_current_tcp_orientation_for_execution": False,
         }],
     )
 
