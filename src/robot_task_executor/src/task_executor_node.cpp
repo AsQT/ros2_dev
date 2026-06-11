@@ -145,17 +145,15 @@ private:
         "joint_1", "joint_2", "joint_3", "joint_4", "joint_5", "joint_6"};
 
     geometry_msgs::msg::Quaternion cartesian_quat;
-    double qx, qy, qz, qw;
-    robot_task_executor::PlannerUtils::rpy_to_quaternion(0.0, M_PI, 0.0, qx, qy, qz, qw);
-    cartesian_quat.x = qx;
-    cartesian_quat.y = qy;
-    cartesian_quat.z = qz;
-    cartesian_quat.w = qw;
+    cartesian_quat.x = 0.7071068;
+    cartesian_quat.y = 0.7071068;
+    cartesian_quat.z = 0.0;
+    cartesian_quat.w = 0.0;
 
     RCLCPP_INFO(get_logger(),
-                "[Node] Cartesian orientation FIXED: roll=0, pitch=pi, yaw=0  "
-                "quat=(%.6f, %.6f, %.6f, %.6f)",
-                qx, qy, qz, qw);
+                "[Node] Cartesian orientation FIXED: quat=(%.6f, %.6f, %.6f, %.6f)",
+                cartesian_quat.x, cartesian_quat.y,
+                cartesian_quat.z, cartesian_quat.w);
 
     transform_ = std::make_unique<robot_task_executor::TransformUtils>(
         tf_buffer_, this);
@@ -667,7 +665,7 @@ private:
 
     RCLCPP_INFO(get_logger(),
                 "[DIRECT] orientation source: planner_->cartesian_quat() "
-                "(fixed rpy=(0,pi,0))  quat=(%.6f, %.6f, %.6f, %.6f)",
+                "(fixed rpy=(pi,0,0))  quat=(%.6f, %.6f, %.6f, %.6f)",
                 target_pose.orientation.x, target_pose.orientation.y,
                 target_pose.orientation.z, target_pose.orientation.w);
 
@@ -938,11 +936,11 @@ private:
 
     // 2. Validate and normalise each pose
     const std::string default_frame = base_frame_;
-    // Fallback orientation: Cartesian tool orientation RPY=[0,pi,0].
-    // quaternion xyzw = [0.0, 1.0, 0.0, 0.0]
+    // Fallback orientation: Cartesian tool orientation used by DRL mock hardware.
+    // quaternion xyzw = [0.7071068, 0.7071068, 0.0, 0.0]
     geometry_msgs::msg::Quaternion default_quat;
-    default_quat.x = 0.0;
-    default_quat.y = 1.0;
+    default_quat.x = 0.7071068;
+    default_quat.y = 0.7071068;
     default_quat.z = 0.0;
     default_quat.w = 0.0;
 
@@ -1020,7 +1018,7 @@ private:
       {
         RCLCPP_WARN(get_logger(),
                     "[%s] pose[%zu]: quaternion has zero norm, replacing with Cartesian "
-                    "fallback quat=(%.6f, %.6f, %.6f, %.6f)  (RPY=[0, pi, 0])",
+                    "fallback quat=(%.6f, %.6f, %.6f, %.6f)",
                     "/move_cartesian_pose_sequence", i,
                     default_quat.x, default_quat.y,
                     default_quat.z, default_quat.w);

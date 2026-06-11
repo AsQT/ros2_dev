@@ -28,17 +28,14 @@ void PlannerUtils::init(
   max_acceleration_scaling_ = max_acceleration_scaling;
   task_frame_ = task_frame;
 
-  // Fixed TCP-down orientation for Cartesian moves in this robot model.
-  tf2::Quaternion q;
-  q.setRPY(0.0, M_PI, 0.0);
-  q.normalize();
-  cartesian_quat_.x = q.x();
-  cartesian_quat_.y = q.y();
-  cartesian_quat_.z = q.z();
-  cartesian_quat_.w = q.w();
+  // Fixed orientation for Cartesian moves used by the DRL mock hardware path.
+  cartesian_quat_.x = 0.7071068;
+  cartesian_quat_.y = 0.7071068;
+  cartesian_quat_.z = 0.0;
+  cartesian_quat_.w = 0.0;
 
   RCLCPP_INFO(logger(),
-              "[Planner] Cartesian fixed orientation: roll=0, pitch=pi, yaw=0  "
+              "[Planner] Cartesian fixed orientation: "
               "quat=(%.6f, %.6f, %.6f, %.6f)",
               cartesian_quat_.x, cartesian_quat_.y,
               cartesian_quat_.z, cartesian_quat_.w);
@@ -327,27 +324,74 @@ PlanResult PlannerUtils::execute_pose_waypoints_ptp(
     move_group_->setStartStateToCurrentState();
     move_group_->clearPoseTargets();
 
-    if (!move_group_->setPoseTarget(waypoints[i], ee_link))
-    {
-      RCLCPP_ERROR(
+    bool using_position_only = false;
+    moveit::planning_interface::MoveGroupInterface::Plan plan;
+
+    const auto plan_position_only = [&]() -> moveit::core::MoveItErrorCode {
+      move_group_->setStartStateToCurrentState();
+      move_group_->clearPoseTargets();
+      const auto& pos = waypoints[i].position;
+      RCLCPP_WARN(
           logger(),
-          "[PTP] %s: setPoseTarget failed at waypoint %zu/%zu.",
+          "[PTP] %s: trying position-only fallback at waypoint %zu/%zu "
+          "xyz=(%.4f, %.4f, %.4f).",
+          service_name.c_str(),
+          i,
+          waypoints.size(),
+          pos.x,
+          pos.y,
+          pos.z);
+      if (!move_group_->setPositionTarget(pos.x, pos.y, pos.z, ee_link))
+      {
+        RCLCPP_ERROR(
+            logger(),
+            "[PTP] %s: setPositionTarget failed at waypoint %zu/%zu.",
+            service_name.c_str(),
+            i,
+            waypoints.size());
+        return moveit::core::MoveItErrorCode(moveit_msgs::msg::MoveItErrorCodes::FAILURE);
+      }
+      using_position_only = true;
+      return move_group_->plan(plan);
+    };
+
+    moveit::core::MoveItErrorCode plan_result(
+        moveit_msgs::msg::MoveItErrorCodes::FAILURE);
+    if (move_group_->setPoseTarget(waypoints[i], ee_link))
+    {
+      plan_result = move_group_->plan(plan);
+      if (plan_result != moveit::core::MoveItErrorCode::SUCCESS)
+      {
+        RCLCPP_WARN(
+            logger(),
+            "[PTP] %s: pose plan failed at waypoint %zu/%zu "
+            "(error code: %d); falling back to position-only.",
+            service_name.c_str(),
+            i,
+            waypoints.size(),
+            plan_result.val);
+        plan_result = plan_position_only();
+      }
+    }
+    else
+    {
+      RCLCPP_WARN(
+          logger(),
+          "[PTP] %s: setPoseTarget failed at waypoint %zu/%zu; "
+          "falling back to position-only.",
           service_name.c_str(),
           i,
           waypoints.size());
-      move_group_->clearPoseTargets();
-      result.fraction = static_cast<double>(completed) / static_cast<double>(waypoints.size());
-      return result;
+      plan_result = plan_position_only();
     }
 
-    moveit::planning_interface::MoveGroupInterface::Plan plan;
-    const auto plan_result = move_group_->plan(plan);
     if (plan_result != moveit::core::MoveItErrorCode::SUCCESS)
     {
       result.error_code = plan_result.val;
       RCLCPP_ERROR(
           logger(),
-          "[PTP] %s: plan failed at waypoint %zu/%zu (error code: %d).",
+          "[PTP] %s: plan failed at waypoint %zu/%zu after pose and "
+          "position-only attempts (error code: %d).",
           service_name.c_str(),
           i,
           waypoints.size(),
@@ -379,10 +423,11 @@ PlanResult PlannerUtils::execute_pose_waypoints_ptp(
     ++completed;
     RCLCPP_INFO(
         logger(),
-        "[PTP] %s: completed waypoint %zu/%zu.",
+        "[PTP] %s: completed waypoint %zu/%zu%s.",
         service_name.c_str(),
         completed,
-        waypoints.size());
+        waypoints.size(),
+        using_position_only ? " (position-only)" : "");
   }
 
   move_group_->clearPoseTargets();

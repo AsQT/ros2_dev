@@ -73,7 +73,7 @@ except ImportError:
 
 _EXECUTION_STATUS_RATE_HZ = 2.0
 
-_EXECUTION_QUATERNION = (0.0, 1.0, 0.0, 0.0)  # RPY=[0, pi, 0]
+_EXECUTION_QUATERNION = (0.7071068, 0.7071068, 0.0, 0.0)
 
 
 # -------------------------------------------------------------------------
@@ -179,8 +179,8 @@ def build_trajectory_poses(
 ) -> PoseArray:
     """Build a PoseArray from a trajectory.
 
-    All poses use the calibrated TCP-down tool orientation (RPY=[0, pi, 0],
-    quaternion xyzw=[0, 1, 0, 0]).
+    All poses use the calibrated tool orientation requested for mock hardware,
+    quaternion xyzw=[0.7071068, 0.7071068, 0, 0].
 
     Returns:
         PoseArray with all waypoints.
@@ -260,10 +260,11 @@ class DrlPlannerNodeBase(Node):
 
         Call this after super().__init__ but before creating publishers.
         """
-        self.declare_parameter(
-            "calibrated_start_tcp_base",
-            config.DEFAULT_START_TCP_BASE.tolist(),
-        )
+        if not self.has_parameter("calibrated_start_tcp_base"):
+            self.declare_parameter(
+                "calibrated_start_tcp_base",
+                config.DEFAULT_START_TCP_BASE.tolist(),
+            )
         self.declare_parameter("use_fk_fallback", False)
         self.declare_parameter("fk_fallback_warning", True)
         self.declare_parameter(
@@ -273,12 +274,22 @@ class DrlPlannerNodeBase(Node):
         self.declare_parameter("task_executor_service_timeout_sec", 5.0)
         self.declare_parameter("task_executor_result_timeout_sec", 120.0)
         self.declare_parameter("publish_next_pose_during_execute", True)
-        self.declare_parameter("use_current_tcp_orientation_for_execution", True)
+        self.declare_parameter("use_current_tcp_orientation_for_execution", False)
         self.declare_parameter("start_pose_tolerance", 0.001)
         self.declare_parameter("tf_timeout_sec", 2.0)
         self.declare_parameter(
             "cartesian_pose_sequence_service_name", "/move_cartesian_pose_sequence"
         )
+        self.declare_parameter("preposition_before_plan", True)
+        self.declare_parameter(
+            "preposition_tcp_base",
+            config.DEFAULT_START_TCP_BASE.tolist(),
+        )
+        self.declare_parameter("preposition_clamp_to_workspace", True)
+        self.declare_parameter("preposition_verify_timeout_sec", 3.0)
+        self.declare_parameter("update_start_tcp_from_tf_before_plan", True)
+        self.declare_parameter("fallback_to_final_pose_on_execute_failure", True)
+        self.declare_parameter("execute_final_pose_only", False)
 
     def _get_calibrated_start_tcp_base(self) -> np.ndarray:
         tcp_param = self.get_parameter("calibrated_start_tcp_base").value
@@ -383,10 +394,40 @@ class DrlPlannerNodeBase(Node):
         self._use_current_tcp_orientation_for_execution = bool(
             self.get_parameter("use_current_tcp_orientation_for_execution").value
         )
+        self._start_pose_tolerance = float(
+            self.get_parameter("start_pose_tolerance").value
+        )
 
         self._pose_seq_service_name = str(
             self.get_parameter("cartesian_pose_sequence_service_name").value
         )
+        self._preposition_before_plan = bool(
+            self.get_parameter("preposition_before_plan").value
+        )
+        self._preposition_tcp_base = np.array(
+            self.get_parameter("preposition_tcp_base").value,
+            dtype=np.float32,
+        )
+        self._preposition_clamp_to_workspace = bool(
+            self.get_parameter("preposition_clamp_to_workspace").value
+        )
+        self._preposition_verify_timeout_sec = float(
+            self.get_parameter("preposition_verify_timeout_sec").value
+        )
+        self._update_start_tcp_from_tf_before_plan = bool(
+            self.get_parameter("update_start_tcp_from_tf_before_plan").value
+        )
+        self._fallback_to_final_pose_on_execute_failure = bool(
+            self.get_parameter("fallback_to_final_pose_on_execute_failure").value
+        )
+        self._execute_final_pose_only = bool(
+            self.get_parameter("execute_final_pose_only").value
+        )
+        if self._preposition_tcp_base.shape != (3,):
+            raise ValueError(
+                "preposition_tcp_base must have 3 elements, "
+                f"got shape {self._preposition_tcp_base.shape}"
+            )
 
         if MoveCartesianPoseSequence is not None:
             self._pose_seq_client = self.create_client(
@@ -620,6 +661,96 @@ class DrlPlannerNodeBase(Node):
         pos = transform.transform.translation
         return np.array([pos.x, pos.y, pos.z], dtype=np.float32), True
 
+    def _workspace_min_max_base(self) -> tuple[np.ndarray, np.ndarray]:
+        """Return planner workspace bounds in base_link frame."""
+        if self._planner is not None:
+            return (
+                np.asarray(self._planner.workspace_min_base, dtype=np.float32),
+                np.asarray(self._planner.workspace_max_base, dtype=np.float32),
+            )
+        return config.DEFAULT_WORKSPACE_MIN.copy(), config.DEFAULT_WORKSPACE_MAX.copy()
+
+    def _is_inside_workspace(self, pos_base: np.ndarray) -> bool:
+        ws_min, ws_max = self._workspace_min_max_base()
+        return bool(np.all(pos_base >= ws_min) and np.all(pos_base <= ws_max))
+
+    def _preposition_target_base(self) -> np.ndarray:
+        target = self._preposition_tcp_base.astype(np.float32).copy()
+        ws_min, ws_max = self._workspace_min_max_base()
+        if self._preposition_clamp_to_workspace:
+            clipped = np.clip(target, ws_min, ws_max)
+            if not np.allclose(clipped, target, rtol=0.0, atol=1e-7):
+                self.get_logger().warn(
+                    "preposition_tcp_base outside workspace; clamped "
+                    f"from {target.tolist()} to {clipped.tolist()} | "
+                    f"min={ws_min.tolist()} max={ws_max.tolist()}"
+                )
+            target = clipped
+        elif not self._is_inside_workspace(target):
+            raise ValueError(
+                f"preposition_tcp_base={target.tolist()} is outside workspace "
+                f"min={ws_min.tolist()} max={ws_max.tolist()}"
+            )
+        return target
+
+    def _prepare_tcp_for_plan_blocking(self, label: str = "preplan") -> bool:
+        """Move tcp_link into the DRL workspace, then update planner start from TF.
+
+        This must run from a worker thread while the ROS executor is spinning,
+        because it waits on the task executor service response.
+        """
+        if not self._preposition_before_plan:
+            if self._update_start_tcp_from_tf_before_plan:
+                current, got = self._current_tcp_base()
+                if got and self._is_inside_workspace(current) and self._planner is not None:
+                    self._planner.update_start_tcp(current)
+                    self.get_logger().info(
+                        f"[{label}] start_tcp updated from current tcp_link "
+                        f"without preposition: ({current[0]:.4f}, "
+                        f"{current[1]:.4f}, {current[2]:.4f})"
+                    )
+            return True
+
+        target = self._preposition_target_base()
+        self.get_logger().info(
+            f"[{label}] moving tcp_link into DRL workspace before planning | "
+            f"target=({target[0]:.4f}, {target[1]:.4f}, {target[2]:.4f}) | "
+            "orientation=quat[0.7071068,0.7071068,0,0]"
+        )
+
+        success, message = self._execute_pose_sequence_blocking(
+            [target],
+            f"{label}_workspace_preposition",
+            orientation_xyzw=_EXECUTION_QUATERNION,
+            drop_current_first=False,
+        )
+        if not success:
+            self.get_logger().error(f"[{label}] preposition failed: {message}")
+            return False
+
+        start = target
+        deadline = time.monotonic() + self._preposition_verify_timeout_sec
+        while rclpy.ok() and time.monotonic() < deadline:
+            current, got = self._current_tcp_base()
+            if got and self._is_inside_workspace(current):
+                start = current
+                break
+            time.sleep(0.05)
+        else:
+            self.get_logger().warn(
+                f"[{label}] could not verify tcp_link TF inside workspace after "
+                f"{self._preposition_verify_timeout_sec:.1f}s; using commanded "
+                "preposition target as RL start"
+            )
+
+        if self._planner is not None:
+            self._planner.update_start_tcp(start)
+        self.get_logger().info(
+            f"[{label}] RL start_tcp_base set to "
+            f"({start[0]:.4f}, {start[1]:.4f}, {start[2]:.4f})"
+        )
+        return True
+
     def _current_tcp_orientation_xyzw(self) -> tuple[tuple[float, float, float, float], bool]:
         """Look up current TCP orientation from TF as (x, y, z, w)."""
         try:
@@ -687,6 +818,8 @@ class DrlPlannerNodeBase(Node):
         self,
         trajectory_base: list[np.ndarray],
         label: str,
+        orientation_xyzw: Optional[tuple[float, float, float, float]] = None,
+        drop_current_first: bool = True,
     ) -> tuple[bool, str]:
         """Send trajectory to /move_cartesian_pose_sequence (blocking).
 
@@ -705,14 +838,34 @@ class DrlPlannerNodeBase(Node):
                 )
             self.get_logger().info(f"[{label}] Connected to {self._pose_seq_service_name}")
 
-        n = len(trajectory_base)
+        poses_base = [np.asarray(p, dtype=np.float32).copy() for p in trajectory_base]
+        if drop_current_first and len(poses_base) > 1:
+            current, got_current = self._current_tcp_base()
+            if got_current:
+                first_dist = float(np.linalg.norm(poses_base[0] - current))
+                if first_dist <= self._start_pose_tolerance:
+                    self.get_logger().info(
+                        f"[{label}] dropping first waypoint because it matches "
+                        f"current tcp_link within {first_dist:.6f} m"
+                    )
+                    poses_base = poses_base[1:]
+
+        n = len(poses_base)
+        if n == 0:
+            return True, f"No motion needed for [{label}]."
+
         self.get_logger().info(f"[{label}] calling {self._pose_seq_service_name} with {n} poses")
 
         req = MoveCartesianPoseSequence.Request()
         req.execute = True
 
-        qx, qy, qz, qw = _EXECUTION_QUATERNION
-        if self._use_current_tcp_orientation_for_execution:
+        if orientation_xyzw is not None:
+            qx, qy, qz, qw = orientation_xyzw
+            self.get_logger().info(
+                f"[{label}] using requested orientation "
+                f"quat=({qx:.6f}, {qy:.6f}, {qz:.6f}, {qw:.6f})"
+            )
+        elif self._use_current_tcp_orientation_for_execution:
             (qx, qy, qz, qw), got_quat = self._current_tcp_orientation_xyzw()
             if got_quat:
                 self.get_logger().info(
@@ -722,9 +875,16 @@ class DrlPlannerNodeBase(Node):
             else:
                 self.get_logger().warn(
                     f"[{label}] current tcp_link orientation unavailable; "
-                    "using fallback RPY=[0,pi,0]"
+                    "using fallback quat=[0.7071068,0.7071068,0,0]"
                 )
-        for pt in trajectory_base:
+        else:
+            qx, qy, qz, qw = _EXECUTION_QUATERNION
+            self.get_logger().info(
+                f"[{label}] using fixed tool-down orientation "
+                f"quat=({qx:.6f}, {qy:.6f}, {qz:.6f}, {qw:.6f})"
+            )
+
+        for pt in poses_base:
             stamped = PoseStamped()
             stamped.header.stamp = self.get_clock().now().to_msg()
             stamped.header.frame_id = "base_link"
@@ -738,20 +898,20 @@ class DrlPlannerNodeBase(Node):
             req.poses.append(stamped)
 
         if n <= 10:
-            for i, pt in enumerate(trajectory_base):
+            for i, pt in enumerate(poses_base):
                 self.get_logger().info(f"  [{i}/{n}] ({pt[0]:.3f}, {pt[1]:.3f}, {pt[2]:.3f})")
         else:
             log_interval = max(1, n // 10)
             for i in range(0, n, log_interval):
-                pt = trajectory_base[i]
+                pt = poses_base[i]
                 self.get_logger().info(f"  [{i}/{n}] ({pt[0]:.3f}, {pt[1]:.3f}, {pt[2]:.3f})")
             self.get_logger().info(
-                f"  [{n-1}/{n}] ({trajectory_base[-1][0]:.3f}, "
-                f"{trajectory_base[-1][1]:.3f}, {trajectory_base[-1][2]:.3f})"
+                f"  [{n-1}/{n}] ({poses_base[-1][0]:.3f}, "
+                f"{poses_base[-1][1]:.3f}, {poses_base[-1][2]:.3f})"
             )
 
-        if self._publish_next_pose_during_execute and trajectory_base:
-            final = trajectory_base[-1]
+        if self._publish_next_pose_during_execute and poses_base:
+            final = poses_base[-1]
             stamped = PoseStamped()
             stamped.header.stamp = self.get_clock().now().to_msg()
             stamped.header.frame_id = "base_link"
@@ -807,6 +967,31 @@ class DrlPlannerNodeBase(Node):
 
         try:
             success, message = self._execute_pose_sequence_blocking(trajectory_base, label)
+            if (
+                not success
+                and self._fallback_to_final_pose_on_execute_failure
+                and trajectory_base
+            ):
+                self.get_logger().warn(
+                    f"[{label}] full trajectory execution failed; trying final "
+                    "pose fallback so the robot still moves to the RL target"
+                )
+                fallback_success, fallback_message = self._execute_pose_sequence_blocking(
+                    [trajectory_base[-1]],
+                    f"{label}_final_pose_fallback",
+                    drop_current_first=False,
+                )
+                if fallback_success:
+                    success = True
+                    message = (
+                        "Full RL path failed; final pose fallback succeeded. "
+                        f"Original error: {message} | Fallback: {fallback_message}"
+                    )
+                else:
+                    message = (
+                        f"{message} | Final pose fallback also failed: "
+                        f"{fallback_message}"
+                    )
         except Exception as e:
             message = f"{label} execution exception: {e}"
             self.get_logger().error(f"[{label}] {message}")
@@ -855,7 +1040,14 @@ class DrlPlannerNodeBase(Node):
             self._execution_direction = label
             self._execution_status = f"RUNNING_{label.upper()}"
             self._execution_last_message = "execution started"
-            trajectory_copy = [p.copy() for p in trajectory_base]
+            if self._execute_final_pose_only:
+                trajectory_copy = [trajectory_base[-1].copy()]
+                self.get_logger().warn(
+                    f"[execute_{label}] execute_final_pose_only=true; "
+                    "publishing full RL trajectory but executing only final pose"
+                )
+            else:
+                trajectory_copy = [p.copy() for p in trajectory_base]
 
         self.get_logger().info(
             f"[execute_{label}] starting background execution | "

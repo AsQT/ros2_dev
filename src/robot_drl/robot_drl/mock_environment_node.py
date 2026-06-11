@@ -4,8 +4,12 @@ Replaces the vision pipeline during development so the DRL inference node can be
 tested in a closed loop without hardware or a RealSense camera.
 
 Published topics:
-  /detected_object/pose    geometry_msgs/PoseStamped  — synthetic target pose
-  /vision/box_detection    robot_vision_pipeline/BoxDetection  — synthetic bbox
+  /vision/target_position  geometry_msgs/PointStamped — target in base_link
+  /vision/target_detected  std_msgs/Bool              — target valid flag
+  /vision/box              robot_vision_pipeline/Box  — obstacle/box in base_link
+  /vision/box_detected     std_msgs/Bool              — box valid flag
+  /detected_object/pose    geometry_msgs/PoseStamped  — legacy target pose
+  /vision/box_detection    robot_vision_pipeline/BoxDetection — legacy bbox
 
 Supports two object classes matching the YOLO model:
   box     — the primary manipulation target
@@ -40,10 +44,11 @@ from rclpy.executors import ExternalShutdownException
 from rclpy.node import Node
 from rclpy.qos import QoSProfile, ReliabilityPolicy, DurabilityPolicy
 
-from geometry_msgs.msg import PoseStamped
+from geometry_msgs.msg import PointStamped, PoseStamped
+from std_msgs.msg import Bool
 from std_msgs.msg import Header
 
-from robot_vision_pipeline.msg import BoxDetection
+from robot_vision_pipeline.msg import Box, BoxDetection
 
 
 class MockEnvironmentNode(Node):
@@ -52,11 +57,23 @@ class MockEnvironmentNode(Node):
         super().__init__("mock_environment_node")
 
         qos = QoSProfile(
-            reliability=ReliabilityPolicy.BEST_EFFORT,
+            reliability=ReliabilityPolicy.RELIABLE,
             durability=DurabilityPolicy.VOLATILE,
             depth=1,
         )
 
+        self._target_position_pub = self.create_publisher(
+            PointStamped, "/vision/target_position", qos_profile=qos
+        )
+        self._target_detected_pub = self.create_publisher(
+            Bool, "/vision/target_detected", qos_profile=qos
+        )
+        self._box_base_pub = self.create_publisher(
+            Box, "/vision/box", qos_profile=qos
+        )
+        self._box_detected_pub = self.create_publisher(
+            Bool, "/vision/box_detected", qos_profile=qos
+        )
         self._target_pub = self.create_publisher(
             PoseStamped, "/detected_object/pose", qos_profile=qos
         )
@@ -107,6 +124,28 @@ class MockEnvironmentNode(Node):
         target.pose.position.z = self._target_z
         target.pose.orientation.w = 1.0
         self._target_pub.publish(target)
+
+        target_position = PointStamped()
+        target_position.header = Header(stamp=now, frame_id=self._frame_id)
+        target_position.point.x = self._target_x
+        target_position.point.y = self._target_y
+        target_position.point.z = self._target_z
+        self._target_position_pub.publish(target_position)
+        self._target_detected_pub.publish(Bool(data=True))
+
+        box_base = Box()
+        box_base.header = Header(stamp=now, frame_id=self._frame_id)
+        box_base.class_name = self._target_class_name
+        box_base.confidence = self._confidence
+        box_base.pose.position.x = self._target_x
+        box_base.pose.position.y = self._target_y
+        box_base.pose.position.z = self._target_z
+        box_base.pose.orientation.w = 1.0
+        box_base.size.x = 0.04
+        box_base.size.y = 0.04
+        box_base.size.z = 0.04
+        self._box_base_pub.publish(box_base)
+        self._box_detected_pub.publish(Bool(data=True))
 
         box = BoxDetection()
         box.header = Header(stamp=now, frame_id=self._frame_id)

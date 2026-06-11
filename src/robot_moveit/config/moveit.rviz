@@ -283,6 +283,85 @@ Visualization Manager:
         Reliability Policy: Reliable
         Value: /move_group_visualization
       Value: true
+    - Class: rviz_default_plugins/MarkerArray
+      Enabled: true
+      Name: DRL Forward Trajectory
+      Namespaces:
+        {}
+      Topic:
+        Depth: 5
+        Durability Policy: Transient Local
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /drl/forward_trajectory_marker
+      Value: true
+    - Class: rviz_default_plugins/MarkerArray
+      Enabled: true
+      Name: DRL Backward Trajectory
+      Namespaces:
+        {}
+      Topic:
+        Depth: 5
+        Durability Policy: Transient Local
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /drl/backward_trajectory_marker
+      Value: true
+    - Alpha: 1
+      Buffer Length: 1
+      Class: rviz_default_plugins/PoseArray
+      Color: 0; 255; 255
+      Enabled: true
+      Head Length: 0.03
+      Head Radius: 0.01
+      Name: DRL Forward Poses
+      Shaft Length: 0.03
+      Shaft Radius: 0.005
+      Shape: Arrow (Flat)
+      Topic:
+        Depth: 5
+        Durability Policy: Transient Local
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /drl/forward_trajectory_poses
+      Value: true
+    - Alpha: 1
+      Buffer Length: 1
+      Class: rviz_default_plugins/PoseArray
+      Color: 255; 128; 255
+      Enabled: true
+      Head Length: 0.03
+      Head Radius: 0.01
+      Name: DRL Backward Poses
+      Shaft Length: 0.03
+      Shaft Radius: 0.005
+      Shape: Arrow (Flat)
+      Topic:
+        Depth: 5
+        Durability Policy: Transient Local
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /drl/backward_trajectory_poses
+      Value: true
+    - Alpha: 1
+      Axes Length: 0.08
+      Axes Radius: 0.01
+      Class: rviz_default_plugins/Pose
+      Color: 255; 255; 0
+      Enabled: true
+      Head Length: 0.03
+      Head Radius: 0.01
+      Name: DRL Next Pose
+      Shaft Length: 0.05
+      Shaft Radius: 0.005
+      Shape: Arrow
+      Topic:
+        Depth: 5
+        Durability Policy: Volatile
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /drl/next_pose
+      Value: true
   Enabled: true
   Global Options:
     Background Color: 48; 48; 48

@@ -52,13 +52,13 @@ FRAME_Z_OFFSET = 0.0
 # Planning defaults
 DEFAULT_DISTANCE_THRESH = 0.02   # metres — success threshold
 DEFAULT_MAX_EPISODE_STEPS = 500  # maximum planning loop iterations
-DEFAULT_WORKSPACE_RANGE = 0.5    # metres — for obstacle normalization
+DEFAULT_WORKSPACE_RANGE = 0.3    # metres — for obstacle normalization
 DEFAULT_EXECUTE_RATE_HZ = 10.0   # Hz — waypoint streaming rate during execution
-DEFAULT_WORKSPACE_MIN = np.array([0.4250, -0.200, 0.020], dtype=np.float32)
-DEFAULT_WORKSPACE_MAX = np.array([0.6750, 0.200, 0.600], dtype=np.float32)
-DEFAULT_START_TCP_BASE = np.array([0.5241, 0.000, 0.315], dtype=np.float32)
-DEFAULT_TARGET_BASE = np.array([0.575, 0.050, 0.120], dtype=np.float32)
-DEFAULT_OBSTACLE_CENTER_BASE = np.array([0.550, 0.000, 0.120], dtype=np.float32)
+DEFAULT_WORKSPACE_MIN = np.array([0.2500, -0.150, 0.020], dtype=np.float32)
+DEFAULT_WORKSPACE_MAX = np.array([0.5000, 0.150, 0.300], dtype=np.float32)
+DEFAULT_START_TCP_BASE = np.array([0.375, 0.000, 0.250], dtype=np.float32)
+DEFAULT_TARGET_BASE = np.array([0.450, 0.050, 0.120], dtype=np.float32)
+DEFAULT_OBSTACLE_CENTER_BASE = np.array([0.400, 0.000, 0.120], dtype=np.float32)
 DEFAULT_OBSTACLE_SIZE = np.array([0.100, 0.100, 0.100], dtype=np.float32)
 
 # -------------------------------------------------------------------------

@@ -40,7 +40,7 @@ def generate_launch_description():
                                     " ",
                                     "use_sim:=false",
                                     " ",
-                                    "use_mock:=",  use_mock,] ),    value_type=str,    )
+                                    "use_mock_hardware:=",  use_mock,] ),    value_type=str,    )
     
 
     robot_state_publisher_node = Node(

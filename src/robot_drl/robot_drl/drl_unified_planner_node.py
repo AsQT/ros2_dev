@@ -208,6 +208,24 @@ class DrlUnifiedPlannerNode(DrlPlannerNodeBase):
         )
         self.declare_parameter("vision_require_target_detected", True)
         self.declare_parameter("vision_use_obstacle_if_detected", True)
+        self.declare_parameter(
+            "calibrated_start_tcp_base",
+            np.asarray(calibrated_start_tcp_base, dtype=np.float32).tolist(),
+        )
+        self.declare_parameter(
+            "workspace_min_base",
+            np.asarray(
+                env_cfg.get("workspace_min", config.DEFAULT_WORKSPACE_MIN),
+                dtype=np.float32,
+            ).tolist(),
+        )
+        self.declare_parameter(
+            "workspace_max_base",
+            np.asarray(
+                env_cfg.get("workspace_max", config.DEFAULT_WORKSPACE_MAX),
+                dtype=np.float32,
+            ).tolist(),
+        )
 
         # 3. Read unified parameters into instance attributes
         self._input_mode = str(self.get_parameter("input_mode").value)
@@ -255,6 +273,34 @@ class DrlUnifiedPlannerNode(DrlPlannerNodeBase):
         self._vision_use_obstacle_if_detected = bool(
             self.get_parameter("vision_use_obstacle_if_detected").value
         )
+        workspace_min_base = np.array(
+            self.get_parameter("workspace_min_base").value,
+            dtype=np.float32,
+        )
+        workspace_max_base = np.array(
+            self.get_parameter("workspace_max_base").value,
+            dtype=np.float32,
+        )
+        calibrated_start_tcp_base = np.array(
+            self.get_parameter("calibrated_start_tcp_base").value,
+            dtype=np.float32,
+        )
+        if workspace_min_base.shape != (3,):
+            raise ValueError(
+                f"workspace_min_base must have 3 elements, got {workspace_min_base.shape}"
+            )
+        if workspace_max_base.shape != (3,):
+            raise ValueError(
+                f"workspace_max_base must have 3 elements, got {workspace_max_base.shape}"
+            )
+        if calibrated_start_tcp_base.shape != (3,):
+            raise ValueError(
+                "calibrated_start_tcp_base must have 3 elements, "
+                f"got {calibrated_start_tcp_base.shape}"
+            )
+        env_cfg = dict(env_cfg)
+        env_cfg["workspace_min"] = workspace_min_base.tolist()
+        env_cfg["workspace_max"] = workspace_max_base.tolist()
 
         # 4. Plumb in the planner core (same pattern as other nodes)
         self._planner = DrlTrajectoryPlannerCore(
@@ -275,6 +321,10 @@ class DrlUnifiedPlannerNode(DrlPlannerNodeBase):
             self._init_vision_subscriptions()
 
         # 7. Register /drl/plan and /drl/replan services
+        self._planning_lock = threading.RLock()
+        self._planning_active = False
+        self._planning_thread: Optional[threading.Thread] = None
+        self._auto_plan_timer = None
         self._init_unified_services()
 
         # 8. Startup banner
@@ -320,9 +370,12 @@ class DrlUnifiedPlannerNode(DrlPlannerNodeBase):
         # 9. Clear trajectory state
         self._publish_empty_all_paths()
 
-        # 10. Auto-plan on start (manual mode only)
-        if self._auto_plan_on_start and self._input_mode == "manual":
-            self._plan_manual_once()
+        # 10. Auto-plan after the executor starts spinning.  Planning may call
+        # task_executor services, so it must run in a worker thread.
+        if self._auto_plan_on_start:
+            self._auto_plan_timer = self.create_timer(
+                1.0, self._on_auto_plan_timer
+            )
 
     # -------------------------------------------------------------------------
     # Vision subscriptions (vision mode only)
@@ -413,13 +466,68 @@ class DrlUnifiedPlannerNode(DrlPlannerNodeBase):
     ) -> Trigger.Response:
         """Handle /drl/plan and /drl/replan.
 
-        In manual mode: re-prompt terminal and plan.
-        In vision mode: use latest vision data and plan.
+        Starts a background worker.  The worker may pre-position the robot via
+        task_executor before running RL inference, so the service callback must
+        return immediately and let the executor keep spinning.
         """
-        if self._input_mode == "manual":
-            return self._handle_manual_plan()
+        return self._start_planning_thread("service")
+
+    def _on_auto_plan_timer(self) -> None:
+        """One-shot timer used to start auto planning after node startup."""
+        if self._auto_plan_timer is not None:
+            self.destroy_timer(self._auto_plan_timer)
+            self._auto_plan_timer = None
+        resp = self._start_planning_thread("auto_start")
+        if resp.success:
+            self.get_logger().info(f"[auto_plan] {resp.message}")
         else:
-            return self._handle_vision_plan()
+            self.get_logger().warn(f"[auto_plan] {resp.message}")
+
+    def _start_planning_thread(self, reason: str) -> Trigger.Response:
+        """Start one background planning worker if none is active."""
+        response = Trigger.Response()
+        with self._planning_lock:
+            if self._planning_active:
+                response.success = False
+                response.message = "Planning already running."
+                return response
+            self._planning_active = True
+
+        thread = threading.Thread(
+            target=self._planning_worker,
+            args=(reason,),
+            daemon=True,
+        )
+        self._planning_thread = thread
+        thread.start()
+
+        response.success = True
+        response.message = (
+            f"Planning started in background ({reason}, mode={self._input_mode})."
+        )
+        return response
+
+    def _planning_worker(self, reason: str) -> None:
+        """Run one plan cycle from a background thread."""
+        try:
+            self.get_logger().info(
+                f"[plan_worker] started | reason={reason} | mode={self._input_mode}"
+            )
+            if self._input_mode == "manual":
+                resp = self._handle_manual_plan()
+            else:
+                resp = self._handle_vision_plan()
+
+            if resp.success:
+                self.get_logger().info(f"[plan_worker] success: {resp.message}")
+            else:
+                self.get_logger().warn(f"[plan_worker] failed: {resp.message}")
+        except Exception as exc:
+            self.get_logger().error(f"[plan_worker] exception: {exc}")
+        finally:
+            with self._planning_lock:
+                self._planning_active = False
+            self.get_logger().info("[plan_worker] finished")
 
     def _handle_manual_plan(self) -> Trigger.Response:
         """Prompt terminal and plan (manual mode)."""
@@ -546,6 +654,9 @@ class DrlUnifiedPlannerNode(DrlPlannerNodeBase):
                 f"{scene.obstacle_full_size[1]:.4f}, "
                 f"{scene.obstacle_full_size[2]:.4f})"
             )
+
+        if not self._prepare_tcp_for_plan_blocking(scene.source):
+            return False
 
         try:
             result = self._planner.compute_trajectory(

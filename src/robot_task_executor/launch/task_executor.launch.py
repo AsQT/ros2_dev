@@ -34,7 +34,7 @@ def generate_launch_description() -> LaunchDescription:
             file_path=os.path.join(robot_description_pkg, "urdf", "robot.urdf.xacro"),
             mappings={
                 "use_sim": LaunchConfiguration("use_sim_time"),
-                "use_mock": "true",
+                "use_mock_hardware": "true",
             },
         )
         .robot_description_semantic(file_path="config/robot.srdf")
