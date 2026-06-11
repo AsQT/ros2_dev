@@ -2,6 +2,8 @@
 
 Hướng dẫn chạy package `robot_drl` với **mock hardware** (không cần robot thật, không cần Gazebo).
 
+ros2 launch robot_drl drl_mock_hw.launch.py
+
 ---
 
 ## Mục lục
