@@ -83,4 +83,6 @@ def build_observation_15d(
     ], dtype=np.float32)
 
     assert obs.shape == (config.OBS_DIM,), f"Expected shape ({config.OBS_DIM},), got {obs.shape}"
+    assert obs.dtype == np.float32, f"Expected dtype float32, got {obs.dtype}"
+    assert np.all(np.isfinite(obs)), f"Observation contains non-finite values: {obs}"
     return obs

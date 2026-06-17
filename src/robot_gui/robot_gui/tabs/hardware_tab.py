@@ -1,10 +1,10 @@
 import time
 import math
-from typing import List
+from typing import List, Optional
 
 from qtpy import QtCore, QtGui, QtWidgets
 
-from robot_gui.backends.rs485_backend import Rs485Backend, rad_to_deg, fmt
+from robot_gui.backends.rs485_backend import AxisStatus, Rs485Backend, rad_to_deg, fmt
 from robot_gui.utils.workers import CallWorker
 
 
@@ -65,10 +65,17 @@ class AxisPanel(QtWidgets.QGroupBox):
             "font-size: 10pt; color: #6B7C8A;"
         )
 
+        self.lb_flags = QtWidgets.QLabel("flags: --")
+        self.lb_flags.setStyleSheet(
+            "font-size: 10pt; color: #263238;"
+        )
+        self.lb_flags.setWordWrap(True)
+
         g.addWidget(self.lb_pos_deg, 0, 0, 1, 2)
         g.addWidget(self.lb_pos_rad, 0, 2, 1, 1)
         g.addWidget(self.lb_vel, 0, 3, 1, 1)
         g.addWidget(self.lb_age, 0, 4, 1, 1)
+        g.addWidget(self.lb_flags, 1, 0, 1, 5)
 
         # ============================================================
         # TARGET POSITION
@@ -97,10 +104,10 @@ class AxisPanel(QtWidgets.QGroupBox):
         self.ed_vel.setValue(math.degrees(0.5))
         self.ed_vel.setSuffix(" deg/s")
 
-        g.addWidget(QtWidgets.QLabel("Target pos"), 1, 0)
-        g.addWidget(self.ed_pos, 1, 1)
-        g.addWidget(QtWidgets.QLabel("Vel"), 1, 2)
-        g.addWidget(self.ed_vel, 1, 3)
+        g.addWidget(QtWidgets.QLabel("Target pos"), 2, 0)
+        g.addWidget(self.ed_pos, 2, 1)
+        g.addWidget(QtWidgets.QLabel("Vel"), 2, 2)
+        g.addWidget(self.ed_vel, 2, 3)
 
         self.btn_servo_on = QtWidgets.QPushButton("Servo ON")
         self.btn_servo_off = QtWidgets.QPushButton("Servo OFF")
@@ -113,11 +120,11 @@ class AxisPanel(QtWidgets.QGroupBox):
             "font-weight: 700; color: white; background: #C62828;"
         )
 
-        g.addWidget(self.btn_servo_on, 2, 0)
-        g.addWidget(self.btn_servo_off, 2, 1)
-        g.addWidget(self.btn_home, 2, 2)
-        g.addWidget(self.btn_run, 1, 4)
-        g.addWidget(self.btn_stop, 2, 4)
+        g.addWidget(self.btn_servo_on, 3, 0)
+        g.addWidget(self.btn_servo_off, 3, 1)
+        g.addWidget(self.btn_home, 3, 2)
+        g.addWidget(self.btn_run, 2, 4)
+        g.addWidget(self.btn_stop, 3, 4)
 
         # ============================================================
         # JOG VELOCITY
@@ -139,10 +146,43 @@ class AxisPanel(QtWidgets.QGroupBox):
         self.btn_jog_neg.setAutoRepeat(False)
         self.btn_jog_pos.setAutoRepeat(False)
 
-        g.addWidget(QtWidgets.QLabel("Jog vel"), 3, 0)
-        g.addWidget(self.ed_jog_vel, 3, 1)
-        g.addWidget(self.btn_jog_neg, 3, 2)
-        g.addWidget(self.btn_jog_pos, 3, 3)
+        g.addWidget(QtWidgets.QLabel("Jog vel"), 4, 0)
+        g.addWidget(self.ed_jog_vel, 4, 1)
+        g.addWidget(self.btn_jog_neg, 4, 2)
+        g.addWidget(self.btn_jog_pos, 4, 3)
+
+    def set_axis_status(self, status: Optional[AxisStatus]) -> None:
+        if status is None:
+            self.lb_flags.setText("flags: --")
+            self.lb_flags.setStyleSheet("font-size: 10pt; color: #607D8B;")
+            return
+
+        normal = []
+        warning = []
+        normal.append("Servo ON" if status.servo_on else "Servo OFF")
+        if status.org_ok:
+            normal.append("Home OK")
+        if status.motionning:
+            normal.append("Moving")
+        if status.stop:
+            normal.append("Stop")
+        if status.error_all:
+            warning.append("ERR")
+        if status.limit_pos:
+            warning.append("LIM+")
+        if status.limit_neg:
+            warning.append("LIM-")
+        if status.emg:
+            warning.append("EMG")
+        if status.communi_err:
+            warning.append("COMM")
+
+        parts = warning + normal
+        self.lb_flags.setText(
+            f"flags: {', '.join(parts) if parts else 'OK'} | raw=0x{status.status_f:08X}"
+        )
+        color = "#B71C1C" if warning else "#1B5E20"
+        self.lb_flags.setStyleSheet(f"font-size: 10pt; color: {color};")
 
 
 class HardwareTab(QtWidgets.QWidget):
@@ -177,11 +217,14 @@ class HardwareTab(QtWidgets.QWidget):
             "font-size: 11pt; color:#0B1F35;"
         )
 
-        self.btn_connect = QtWidgets.QPushButton("Connect")
-        self.btn_disconnect = QtWidgets.QPushButton("Disconnect")
+        self.btn_ping = QtWidgets.QPushButton("Ping")
+        self.btn_poll_now = QtWidgets.QPushButton("Poll Now")
         self.btn_servo_all_on = QtWidgets.QPushButton("Servo ALL ON")
         self.btn_servo_all_off = QtWidgets.QPushButton("Servo ALL OFF")
         self.btn_stop_all = QtWidgets.QPushButton("STOP ALL")
+
+        self.lb_ping = QtWidgets.QLabel("ping: --")
+        self.lb_ping.setStyleSheet("font-size: 10pt; color:#455A64;")
 
         self.btn_stop_all.setStyleSheet(
             "font-weight: 900; "
@@ -193,8 +236,9 @@ class HardwareTab(QtWidgets.QWidget):
         top.addWidget(self.lb_conn)
         top.addSpacing(10)
         top.addWidget(self.lb_status, 1)
-        top.addWidget(self.btn_connect)
-        top.addWidget(self.btn_disconnect)
+        top.addWidget(self.btn_ping)
+        top.addWidget(self.lb_ping)
+        top.addWidget(self.btn_poll_now)
         top.addWidget(self.btn_servo_all_on)
         top.addWidget(self.btn_servo_all_off)
         top.addWidget(self.btn_stop_all)
@@ -294,17 +338,12 @@ class HardwareTab(QtWidgets.QWidget):
         # TOP BUTTON SIGNALS
         # ============================================================
 
-        self.btn_connect.clicked.connect(
-            lambda: self._call(
-                self.backend.call_trigger,
-                self.backend.cli_connect
-            )
-        )
+        self.btn_ping.clicked.connect(self._ping_robot)
 
-        self.btn_disconnect.clicked.connect(
+        self.btn_poll_now.clicked.connect(
             lambda: self._call(
                 self.backend.call_trigger,
-                self.backend.cli_disconnect
+                self.backend.cli_poll_now
             )
         )
 
@@ -343,6 +382,22 @@ class HardwareTab(QtWidgets.QWidget):
         worker = CallWorker(fn, *args, **kwargs)
         worker.signals.done.connect(self._log)
         self.pool.start(worker)
+
+    def _ping_robot(self) -> None:
+        self.btn_ping.setEnabled(False)
+        self.lb_ping.setText("ping: checking...")
+        self.lb_ping.setStyleSheet("font-size: 10pt; color:#1565C0;")
+
+        worker = CallWorker(self.backend.ping_robot)
+        worker.signals.done.connect(self._finish_ping)
+        self.pool.start(worker)
+
+    def _finish_ping(self, ok: bool, code: int, msg: str) -> None:
+        self.btn_ping.setEnabled(True)
+        self.lb_ping.setText(f"ping: {'OK' if ok else 'ERR'}")
+        color = "#1B5E20" if ok else "#B71C1C"
+        self.lb_ping.setStyleSheet(f"font-size: 10pt; color:{color};")
+        self._log(ok, code, msg)
 
     # ============================================================
     # RUN AXIS
@@ -396,7 +451,7 @@ class HardwareTab(QtWidgets.QWidget):
     # ============================================================
 
     def _refresh(self) -> None:
-        connected, text, joints = self.backend.snapshot()
+        connected, text, joints, axis_status = self.backend.snapshot()
 
         if connected:
             self.lb_conn.setText("CONNECTED")
@@ -419,7 +474,13 @@ class HardwareTab(QtWidgets.QWidget):
                 "border-radius:10px;"
             )
 
-        self.lb_status.setText(f"status: {text}")
+        if text:
+            status_text = text
+        elif connected:
+            status_text = f"TCP online | flags from {len(axis_status)} axes"
+        else:
+            status_text = "TCP offline"
+        self.lb_status.setText(f"status: {status_text}")
 
         now = time.time()
 
@@ -431,6 +492,7 @@ class HardwareTab(QtWidgets.QWidget):
                 p.lb_pos_deg.setText("-- deg")
                 p.lb_vel.setText("vel: -- deg/s")
                 p.lb_age.setText("age: -- ms")
+                p.set_axis_status(axis_status.get(p.axis_id))
                 continue
 
             pos_deg = rad_to_deg(js.pos_rad)
@@ -440,3 +502,4 @@ class HardwareTab(QtWidgets.QWidget):
             p.lb_pos_deg.setText(f"{fmt(pos_deg, 2)} deg")
             p.lb_vel.setText(f"vel: {fmt(vel_deg_s, 3)} deg/s")
             p.lb_age.setText(f"age: {(now - js.wall_time) * 1000.0:.0f} ms")
+            p.set_axis_status(axis_status.get(p.axis_id))

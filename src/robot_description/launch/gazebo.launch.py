@@ -4,12 +4,14 @@ from ament_index_python.packages        import get_package_share_directory
 
 from launch                             import LaunchDescription
 from launch.actions                     import (
+                                                DeclareLaunchArgument,
                                                 IncludeLaunchDescription,
                                                 SetEnvironmentVariable,
                                                 RegisterEventHandler,
                                                 TimerAction,)
+from launch.conditions                  import IfCondition
 from launch.launch_description_sources  import PythonLaunchDescriptionSource
-from launch.substitutions               import Command, FindExecutable
+from launch.substitutions               import Command, FindExecutable, LaunchConfiguration
 from launch.event_handlers              import OnProcessExit
 
 from launch_ros.actions                 import Node
@@ -18,6 +20,11 @@ from launch_ros.actions                 import Node
 def generate_launch_description():
     # 0) PATHS / CONSTANTS
     use_sim_time = True
+    spawn_demo_woods_arg = DeclareLaunchArgument(
+        "spawn_demo_woods",
+        default_value="true",
+        description="Spawn the legacy random demo wood blocks on Gazebo startup",
+    )
 
     robot_description   = get_package_share_directory("robot_description")
     pkg_share_parent    = os.path.dirname(robot_description)
@@ -119,14 +126,19 @@ def generate_launch_description():
     spawn_wood_after_robot = RegisterEventHandler(
                                 OnProcessExit(
                                     target_action=spawn_robot,
-                                    on_exit=[TimerAction(period=1.0, actions=[spawn_wood_node])], ) )
+                                    on_exit=[TimerAction(
+                                        period=1.0,
+                                        actions=[spawn_wood_node],
+                                        condition=IfCondition(LaunchConfiguration("spawn_demo_woods")),
+                                    )], ) )
 
     spawn_wood = [
         spawn_wood_after_robot, ]
 
     #  Compose launch in functional blocks (clean & readable)
     return LaunchDescription(
-        env_actions
+        [spawn_demo_woods_arg]
+        + env_actions
         + core_actions
         + bridge_actions
         + spawn_wood

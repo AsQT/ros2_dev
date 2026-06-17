@@ -1,10 +1,10 @@
 <?xml version="1.0"?>
-<library path="rs485_system_hardware">
+<library path="tcp_system_hardware">
   <class
       name="robot_hardware_interface/RobotSystemHardware"
       type="robot_hardware_interface::RobotSystemHardware"
       base_class_type="hardware_interface::SystemInterface">
     <description>
-    ros2_control SystemInterface over RS-485 using Rs485Client protocol.</description>
+    ros2_control SystemInterface over TCP using RobotTcpClient protocol.</description>
   </class>
 </library>

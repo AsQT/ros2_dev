@@ -23,10 +23,12 @@ find_package(rclcpp_lifecycle REQUIRED)
 # ROS interfaces (Services)
 # =========================
 rosidl_generate_interfaces(${PROJECT_NAME}
+  "srv/ArlarmRST.srv"
   "srv/ServoOnAxis.srv"
   "srv/ServoOnAll.srv"
   "srv/Jog.srv"
   "srv/Home.srv"
+  "srv/RunAll.srv"
   "srv/RunAxis.srv"
   "srv/StopAxis.srv"
   "srv/StopAll.srv"
@@ -38,36 +40,37 @@ rosidl_generate_interfaces(${PROJECT_NAME}
 
 include_directories(include)
 
-add_library(rs485_protocol
-  src/rs485_protocol.cpp
+add_library(tcp_client
+  src/tcp_client.cpp
 )
-ament_target_dependencies(rs485_protocol
+ament_target_dependencies(tcp_client
   rclcpp
 )
-set_target_properties(rs485_protocol PROPERTIES POSITION_INDEPENDENT_CODE ON)
+set_target_properties(tcp_client PROPERTIES POSITION_INDEPENDENT_CODE ON)
 
-add_executable(rs485_hw_node
-  src/rs485_hw_node.cpp
+add_executable(robot_hw_node
+  src/robot_hw_node.cpp
 )
 
-target_link_libraries(rs485_hw_node rs485_protocol)
-ament_target_dependencies(rs485_hw_node
+target_link_libraries(robot_hw_node tcp_client)
+ament_target_dependencies(robot_hw_node
   rclcpp std_msgs sensor_msgs trajectory_msgs std_srvs
 )
 
 # Link against generated service type support
 rosidl_get_typesupport_target(cpp_typesupport_target ${PROJECT_NAME} "rosidl_typesupport_cpp")
-target_link_libraries(rs485_hw_node ${cpp_typesupport_target})
+target_link_libraries(robot_hw_node ${cpp_typesupport_target})
 
-add_library(rs485_system_hardware SHARED
-  src/rs485_system_hardware.cpp
+add_library(tcp_system_hardware SHARED
+  src/tcp_system_hardware.cpp
 )
-target_link_libraries(rs485_system_hardware rs485_protocol)
-ament_target_dependencies(rs485_system_hardware
-  rclcpp rclcpp_lifecycle hardware_interface pluginlib
+target_link_libraries(tcp_system_hardware tcp_client)
+ament_target_dependencies(tcp_system_hardware
+  rclcpp rclcpp_lifecycle hardware_interface pluginlib std_msgs std_srvs trajectory_msgs
 )
+target_link_libraries(tcp_system_hardware ${cpp_typesupport_target})
 
-target_include_directories(rs485_system_hardware PUBLIC
+target_include_directories(tcp_system_hardware PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
   $<INSTALL_INTERFACE:include>
 )
@@ -75,14 +78,13 @@ target_include_directories(rs485_system_hardware PUBLIC
 pluginlib_export_plugin_description_file(hardware_interface plugin.xml)
 
 install(TARGETS 
-  rs485_protocol 
-  rs485_hw_node 
-  rs485_system_hardware
+  tcp_client
+  robot_hw_node
+  tcp_system_hardware
   ARCHIVE DESTINATION lib
   LIBRARY DESTINATION lib
   RUNTIME DESTINATION lib/${PROJECT_NAME}
 )
-
 
 install(PROGRAMS
   scripts/hardware_gui.py
@@ -104,7 +106,7 @@ install(FILES plugin.xml
 
 
 ament_export_include_directories(include)
-ament_export_libraries(rs485_protocol rs485_system_hardware)
+ament_export_libraries(tcp_client tcp_system_hardware)
 ament_export_dependencies(rosidl_default_runtime)
 
 

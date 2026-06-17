@@ -2,13 +2,13 @@
 <package format="3">
   <name>robot_hardware_interface</name>
   <version>0.0.1</version>
-  <description>ROS2 C++ RS485 hardware node using AA BB ... AA FF framing + byte stuffing + Modbus CRC16 (from provided protocol).</description>
+  <description>ROS 2 C++ TCP hardware interface for robot motor control using a compact MAGIC/CMD/SEQ/LENGTH/PAYLOAD frame.</description>
 
   <maintainer email="you@example.com">you</maintainer>
   <license>MIT</license>
 
   <buildtool_depend>ament_cmake</buildtool_depend>
-  <buildtool_depend>rosidl_default_generators</buildtool_depend>
+  <build_depend>rosidl_default_generators</build_depend>
 
   <depend>rclcpp</depend>
   <depend>std_msgs</depend>
@@ -32,7 +32,7 @@
 
   <member_of_group>rosidl_interface_packages</member_of_group>
 
-<export>
+  <export>
     <build_type>ament_cmake</build_type>
     <hardware_interface plugin="${prefix}/plugin.xml"/>
   </export>

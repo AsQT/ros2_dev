@@ -56,6 +56,11 @@ from tf2_ros import Buffer, TransformListener
 from visualization_msgs.msg import Marker, MarkerArray
 
 from robot_drl import config
+from robot_drl.planning_scene_adapter import (
+    SceneObstacle,
+    manual_obstacle,
+    validate_cartesian_path_against_obstacles,
+)
 
 # Lazy import — resolves at runtime so the node starts even if the service
 # definition is not available.
@@ -290,6 +295,10 @@ class DrlPlannerNodeBase(Node):
         self.declare_parameter("update_start_tcp_from_tf_before_plan", True)
         self.declare_parameter("fallback_to_final_pose_on_execute_failure", True)
         self.declare_parameter("execute_final_pose_only", False)
+        self.declare_parameter("validate_obstacle_before_execute", True)
+        self.declare_parameter("execute_collision_check_step_m", 0.01)
+        self.declare_parameter("execute_collision_clearance_margin_m", 0.0)
+        self.declare_parameter("publish_target_block_marker", False)
 
     def _get_calibrated_start_tcp_base(self) -> np.ndarray:
         tcp_param = self.get_parameter("calibrated_start_tcp_base").value
@@ -422,6 +431,15 @@ class DrlPlannerNodeBase(Node):
         )
         self._execute_final_pose_only = bool(
             self.get_parameter("execute_final_pose_only").value
+        )
+        self._validate_obstacle_before_execute = bool(
+            self.get_parameter("validate_obstacle_before_execute").value
+        )
+        self._execute_collision_check_step_m = float(
+            self.get_parameter("execute_collision_check_step_m").value
+        )
+        self._execute_collision_clearance_margin_m = float(
+            self.get_parameter("execute_collision_clearance_margin_m").value
         )
         if self._preposition_tcp_base.shape != (3,):
             raise ValueError(
@@ -573,14 +591,15 @@ class DrlPlannerNodeBase(Node):
         )
         if obs_marker:
             forward_markers.append(obs_marker)
-        target_block_marker = self._build_target_block_marker(result.target_base, now)
-        forward_markers.append(target_block_marker)
-        self.get_logger().info(
-            f"Published manual target block marker at "
-            f"x={result.target_base[0]:.4f}, y={result.target_base[1]:.4f}, z=0.045 | "
-            f"Planner target remains x={result.target_base[0]:.4f}, "
-            f"y={result.target_base[1]:.4f}, z={result.target_base[2]:.4f}"
-        )
+        if bool(self.get_parameter("publish_target_block_marker").value):
+            target_block_marker = self._build_target_block_marker(result.target_base, now)
+            forward_markers.append(target_block_marker)
+            self.get_logger().info(
+                f"Published manual target block marker at "
+                f"x={result.target_base[0]:.4f}, y={result.target_base[1]:.4f}, z=0.045 | "
+                f"Planner target remains x={result.target_base[0]:.4f}, "
+                f"y={result.target_base[1]:.4f}, z={result.target_base[2]:.4f}"
+            )
         self._forward_marker_pub.publish(MarkerArray(markers=forward_markers))
         self._forward_poses_pub.publish(
             build_trajectory_poses(fwd, now=now)
@@ -675,7 +694,16 @@ class DrlPlannerNodeBase(Node):
         return bool(np.all(pos_base >= ws_min) and np.all(pos_base <= ws_max))
 
     def _preposition_target_base(self) -> np.ndarray:
-        target = self._preposition_tcp_base.astype(np.float32).copy()
+        target = np.array(
+            self.get_parameter("preposition_tcp_base").value,
+            dtype=np.float32,
+        )
+        if target.shape != (3,):
+            raise ValueError(
+                "preposition_tcp_base must have 3 elements, "
+                f"got shape {target.shape}"
+            )
+        self._preposition_tcp_base = target.astype(np.float32).copy()
         ws_min, ws_max = self._workspace_min_max_base()
         if self._preposition_clamp_to_workspace:
             clipped = np.clip(target, ws_min, ws_max)
@@ -791,6 +819,7 @@ class DrlPlannerNodeBase(Node):
 
     def _check_execute_ready(
         self,
+        trajectory_base: Optional[list[np.ndarray]] = None,
     ) -> tuple[bool, str, list[np.ndarray], int]:
         """Shared pre-execution check.
 
@@ -805,14 +834,45 @@ class DrlPlannerNodeBase(Node):
 
         if not self._trajectory_computed:
             return False, "No planned trajectory available. Plan a trajectory first.", [], 0
-        waypoints = self._trajectory_forward_base
+        waypoints = trajectory_base if trajectory_base is not None else self._trajectory_forward_base
         n = len(waypoints)
         if n < 2:
             return False, f"Trajectory has only {n} waypoint(s); need at least 2.", waypoints, n
         for i, pt in enumerate(waypoints):
             if not np.all(np.isfinite(pt)):
                 return False, f"Waypoint {i}/{n} contains non-finite values: {pt}", waypoints, n
+        if self._validate_obstacle_before_execute and self._last_has_obstacle:
+            obstacles = self._last_execution_obstacles()
+            validation = validate_cartesian_path_against_obstacles(
+                waypoints,
+                obstacles,
+                max_step_m=self._execute_collision_check_step_m,
+                margin_m=self._execute_collision_clearance_margin_m,
+            )
+            if not validation.valid:
+                return False, validation.message, waypoints, n
+            self.get_logger().info(
+                "[execute] stored trajectory obstacle validation OK | "
+                f"samples={validation.checked_samples} | "
+                f"min_clearance={validation.min_clearance:.5f} m"
+            )
         return True, "", waypoints, n
+
+    def _last_execution_obstacles(self) -> list[SceneObstacle]:
+        """Return stored obstacle data for final pre-execution validation."""
+        if (
+            not self._last_has_obstacle
+            or self._last_obstacle_center_base is None
+            or self._last_obstacle_full_size is None
+        ):
+            return []
+        return [
+            manual_obstacle(
+                self._last_obstacle_center_base,
+                self._last_obstacle_full_size,
+                object_id="last_policy_obstacle",
+            )
+        ]
 
     def _execute_pose_sequence_blocking(
         self,
@@ -1017,7 +1077,7 @@ class DrlPlannerNodeBase(Node):
         Returns:
             (response, started) — started=True only if a new thread was launched.
         """
-        ready, err, waypoints, n = self._check_execute_ready()
+        ready, err, waypoints, n = self._check_execute_ready(trajectory_base)
         if not ready:
             self.get_logger().warn(f"[execute_{label}] {err}")
             response = Trigger.Response()
@@ -1230,4 +1290,18 @@ class DrlPlannerNodeBase(Node):
                 f"{prefix}Trajectory did NOT converge after max_episode_steps steps. "
                 f"convergence_dist={result.convergence_dist:.4f} m. "
                 f"Target may be unreachable or outside workspace."
+            )
+        if hasattr(result, "first_raw_observation"):
+            self.get_logger().info(
+                f"{prefix}observation_shape={result.first_raw_observation.shape} | "
+                f"dtype={result.first_raw_observation.dtype} | "
+                f"obstacle_slice={np.array2string(result.first_obstacle_slice, precision=4)}"
+            )
+        if getattr(result, "rollout_diagnostics", None):
+            for line in result.rollout_diagnostics:
+                self.get_logger().info(f"{prefix}rollout {line}")
+        if getattr(result, "safety_filter_adjustments", 0):
+            self.get_logger().info(
+                f"{prefix}safety_filter_adjustments="
+                f"{result.safety_filter_adjustments}"
             )

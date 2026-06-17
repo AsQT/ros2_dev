@@ -35,8 +35,8 @@ OBS_DIM = 15
 ACTION_DIM = 3
 
 # Default paths
-DEFAULT_MODEL_NAME = "run/model/best_model.zip"
-DEFAULT_VEC_NORMALIZE_NAME = "run/model/vec_normalize_stats.pkl"
+DEFAULT_MODEL_NAME = "run1/model/best_model.zip"
+DEFAULT_VEC_NORMALIZE_NAME = "run1/model/vec_normalize_stats.pkl"
 DEFAULT_RATE_HZ = 10.0
 
 # Trained action step in metres (from env_config.yaml action_step)
@@ -52,8 +52,9 @@ FRAME_Z_OFFSET = 0.0
 # Planning defaults
 DEFAULT_DISTANCE_THRESH = 0.02   # metres — success threshold
 DEFAULT_MAX_EPISODE_STEPS = 500  # maximum planning loop iterations
-DEFAULT_WORKSPACE_RANGE = 0.3    # metres — for obstacle normalization
+DEFAULT_WORKSPACE_RANGE = 0.5    # metres — for obstacle normalization
 DEFAULT_EXECUTE_RATE_HZ = 10.0   # Hz — waypoint streaming rate during execution
+DEFAULT_OBSTACLE_SAFETY_MARGIN = 0.04  # metres — TCP clearance used by rollout filter
 DEFAULT_WORKSPACE_MIN = np.array([0.2500, -0.150, 0.020], dtype=np.float32)
 DEFAULT_WORKSPACE_MAX = np.array([0.5000, 0.150, 0.300], dtype=np.float32)
 DEFAULT_START_TCP_BASE = np.array([0.375, 0.000, 0.250], dtype=np.float32)

@@ -175,6 +175,6 @@ def generate_launch_description():
         # Step 5: RViz (after 15 s)
         TimerAction(period=15.0, actions=[
             LogInfo(msg="[drl_test] Step 5: RViz..."),
-            rviz_node,
+            #rviz_node,
         ]),
     ])

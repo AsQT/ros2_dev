@@ -4,6 +4,7 @@ from launch                             import LaunchDescription
 from launch.actions                     import DeclareLaunchArgument, IncludeLaunchDescription, LogInfo, RegisterEventHandler, TimerAction
 from launch.event_handlers              import OnProcessExit
 from launch.launch_description_sources  import PythonLaunchDescriptionSource
+from launch.substitutions               import LaunchConfiguration
 from launch_ros.actions                import Node
 from ament_index_python.packages        import get_package_share_directory
 
@@ -15,11 +16,19 @@ def generate_launch_description():
     robot_control_pkg    = get_package_share_directory("robot_control")
 
     controllers_yaml = os.path.join(robot_control_pkg, "config", "robot_controllers.yaml")
+    spawn_demo_woods_arg = DeclareLaunchArgument(
+        "spawn_demo_woods",
+        default_value="true",
+        description="Spawn the legacy random demo wood blocks from robot_description",
+    )
 
     # 1) Gazebo bringup
     gazebo = IncludeLaunchDescription(
                 PythonLaunchDescriptionSource(
-                    os.path.join(robot_description_pkg, "launch", "gazebo.launch.py")))
+                    os.path.join(robot_description_pkg, "launch", "gazebo.launch.py")),
+                launch_arguments={
+                    "spawn_demo_woods": LaunchConfiguration("spawn_demo_woods"),
+                }.items())
 
     # 2) MoveIt (no local controller manager — Gazebo provides one via gz_ros2_control plugin)
     moveit = IncludeLaunchDescription(
@@ -27,6 +36,7 @@ def generate_launch_description():
                     os.path.join(robot_moveit_pkg, "launch", "moveit.launch.py")),
                 launch_arguments={
                     "use_sim_time": "true",
+                    "use_mock": "false",
                     "start_controller_manager": "false",
                 }.items())
 
@@ -44,7 +54,6 @@ def generate_launch_description():
             "--controller-manager", "/controller_manager",
             "--param-file", controllers_yaml,
             "--controller-manager-timeout", "15",
-            "--stopped",
         ],
         output="screen",
     )
@@ -56,7 +65,6 @@ def generate_launch_description():
             "--controller-manager", "/controller_manager",
             "--param-file", controllers_yaml,
             "--controller-manager-timeout", "15",
-            "--stopped",
         ],
         output="screen",
     )
@@ -68,7 +76,6 @@ def generate_launch_description():
             "--controller-manager", "/controller_manager",
             "--param-file", controllers_yaml,
             "--controller-manager-timeout", "15",
-            "--stopped",
         ],
         output="screen",
     )
@@ -83,6 +90,7 @@ def generate_launch_description():
 
     # MoveIt after 4 s, task executor after 5 s
     return LaunchDescription([
+        spawn_demo_woods_arg,
         LogInfo(msg="[sim.launch] Starting: Gazebo + robot spawn + bridges"),
         gazebo,
 

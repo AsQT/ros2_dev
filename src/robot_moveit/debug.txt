@@ -1,0 +1,275 @@
+minhquang@lenovo:~/ros2_dev$ ros2 launch robot_moveit moveit_mock.launch.py 
+[INFO] [launch]: All log files can be found below /home/minhquang/.ros/log/2026-06-16-08-01-19-354095-lenovo-17054
+[INFO] [launch]: Default logging verbosity is set to INFO
+WARNING:root:"File /home/minhquang/ros2_dev/install/robot_moveit/share/robot_moveit/config/robot.urdf.xacro doesn't exist"
+WARNING:root:The robot description will be loaded from /robot_description topic 
+WARNING:root:"File /home/minhquang/ros2_dev/install/robot_moveit/share/robot_moveit/config/robot.urdf.xacro doesn't exist"
+WARNING:root:The robot description will be loaded from /robot_description topic 
+[INFO] [static_transform_publisher-1]: process started with pid [17058]
+[INFO] [move_group-2]: process started with pid [17059]
+[INFO] [rviz2-3]: process started with pid [17060]
+[INFO] [robot_state_publisher-4]: process started with pid [17061]
+[INFO] [ros2_control_node-5]: process started with pid [17062]
+[INFO] [spawner-6]: process started with pid [17063]
+[INFO] [move_to_pose_server-7]: process started with pid [17064]
+[INFO] [move_pose_cartesian_server-8]: process started with pid [17065]
+[INFO] [checker_board_server-9]: process started with pid [17066]
+[INFO] [move_gripper_server-10]: process started with pid [17067]
+[INFO] [pickplace_server-11]: process started with pid [17068]
+[static_transform_publisher-1] [INFO] [1781571680.228505677] [static_tf_world_to_base]: Spinning until stopped - publishing transform
+[static_transform_publisher-1] translation: ('0.000000', '0.000000', '0.000000')
+[static_transform_publisher-1] rotation: ('0.000000', '0.000000', '0.000000', '1.000000')
+[static_transform_publisher-1] from 'world' to 'base_link'
+[robot_state_publisher-4] [INFO] [1781571680.241695733] [robot_state_publisher]: Robot initialized
+[ros2_control_node-5] [INFO] [1781571680.246114929] [controller_manager]: Using Steady (Monotonic) clock for triggering controller manager cycles.
+[ros2_control_node-5] [WARN] [1781571680.250632824] [controller_manager]: The parameter 'allow_controller_activation_with_inactive_hardware' is set to true. It is recommended to use the settings to false in order to avoid controllers to use inactive hardware components and to avoid any unexpected behavior. This feature might be removed in future releases and will be defaulted to false.
+[ros2_control_node-5] [INFO] [1781571680.254730679] [controller_manager]: Subscribing to '/robot_description' topic for robot description.
+[pickplace_server-11] [INFO] [1781571680.260916427] [pickplace_action_server]: PickPlace action server ready: /pickplace
+[ros2_control_node-5] [INFO] [1781571680.261634504] [controller_manager]: update rate is 15 Hz
+[ros2_control_node-5] [INFO] [1781571680.261681555] [controller_manager]: Overruns handling is : enabled
+[ros2_control_node-5] [INFO] [1781571680.261698865] [controller_manager]: Spawning controller_manager RT thread with scheduler priority: 50
+[ros2_control_node-5] [WARN] [1781571680.261817502] [controller_manager]: Could not enable FIFO RT scheduling policy: with error number <1>(Operation not permitted). See [https://control.ros.org/master/doc/ros2_control/controller_manager/doc/userdoc.html] for details on how to enable realtime scheduling.
+[ros2_control_node-5] [INFO] [1781571680.262382023] [controller_manager]: Received robot description from topic.
+[ros2_control_node-5] [INFO] [1781571680.262425222] [controller_manager]: Enforcing command limits is disabled. Command limits from URDF will be ignored.
+[ros2_control_node-5] [INFO] [1781571680.268510774] [controller_manager]: Loading hardware 'robot' 
+[ros2_control_node-5] [INFO] [1781571680.270243422] [controller_manager]: Loaded hardware 'robot' from plugin 'mock_components/GenericSystem'
+[ros2_control_node-5] [INFO] [1781571680.270436788] [controller_manager]: Initialize hardware 'robot' 
+[ros2_control_node-5] [INFO] [1781571680.283619250] [controller_manager]: Successful initialization of hardware 'robot'
+[ros2_control_node-5] [INFO] [1781571680.285010591] [controller_manager]: Activating component 'robot'.
+[ros2_control_node-5] [INFO] [1781571680.285604751] [resource_manager]: 'configure' hardware 'robot' 
+[ros2_control_node-5] [INFO] [1781571680.285633921] [resource_manager]: Successful 'configure' of hardware 'robot'
+[ros2_control_node-5] [INFO] [1781571680.285651855] [resource_manager]: 'activate' hardware 'robot' 
+[ros2_control_node-5] [INFO] [1781571680.285670966] [resource_manager]: Successful 'activate' of hardware 'robot'
+[ros2_control_node-5] [INFO] [1781571680.285721308] [controller_manager]: Registering statistics for : robot
+[ros2_control_node-5] [INFO] [1781571680.285864076] [controller_manager]: Resource Manager has been successfully initialized. Starting Controller Manager services...
+[move_group-2] [INFO] [1781571680.347220291] [move_group.moveit.moveit.ros.rdf_loader]: Loaded robot model in 0.0111005 seconds
+[move_group-2] [INFO] [1781571680.347373582] [move_group.moveit.moveit.core.robot_model]: Loading robot model 'robot'...
+[move_gripper_server-10] [INFO] [1781571680.385596831] [move_gripper_server]: MoveGripper action server ready: /move_gripper
+[move_gripper_server-10] [WARN] [1781571680.388267794] [rcl.logging_rosout]: Publisher already registered for node name: 'move_gripper_server'. If this is due to multiple nodes with the same name then all logs for the logger named 'move_gripper_server' will go out over the existing publisher. As soon as any node with that name is destructed it will unregister the publisher, preventing any further logs for that name from being published on the rosout topic.
+[move_to_pose_server-7] [INFO] [1781571680.395559747] [move_to_pose_server]: MoveToPose action server ready
+[move_to_pose_server-7] [WARN] [1781571680.397464179] [rcl.logging_rosout]: Publisher already registered for node name: 'move_to_pose_server'. If this is due to multiple nodes with the same name then all logs for the logger named 'move_to_pose_server' will go out over the existing publisher. As soon as any node with that name is destructed it will unregister the publisher, preventing any further logs for that name from being published on the rosout topic.
+[move_to_pose_server-7] [INFO] [1781571680.415788764] [move_to_pose_server.moveit.ros.rdf_loader]: Loaded robot model in 0.00801313 seconds
+[move_to_pose_server-7] [INFO] [1781571680.416587318] [move_to_pose_server.moveit.core.robot_model]: Loading robot model 'robot'...
+[move_gripper_server-10] [INFO] [1781571680.419962880] [move_gripper_server.moveit.ros.rdf_loader]: Loaded robot model in 0.0164305 seconds
+[move_gripper_server-10] [INFO] [1781571680.420292024] [move_gripper_server.moveit.core.robot_model]: Loading robot model 'robot'...
+[checker_board_server-9] [INFO] [1781571680.445682619] [checker_board_server]: CheckerBoard action server ready
+[checker_board_server-9] [WARN] [1781571680.448223049] [rcl.logging_rosout]: Publisher already registered for node name: 'checker_board_server'. If this is due to multiple nodes with the same name then all logs for the logger named 'checker_board_server' will go out over the existing publisher. As soon as any node with that name is destructed it will unregister the publisher, preventing any further logs for that name from being published on the rosout topic.
+[checker_board_server-9] [INFO] [1781571680.472283810] [checker_board_server.moveit.ros.rdf_loader]: Loaded robot model in 0.0112894 seconds
+[checker_board_server-9] [INFO] [1781571680.472445303] [checker_board_server.moveit.core.robot_model]: Loading robot model 'robot'...
+[move_to_pose_server-7] [INFO] [1781571680.534345098] [move_to_pose_server.moveit.kinematics.kdl_kinematics_plugin]: Joint weights for group 'arm': 1 1 1 1 1 1
+[move_group-2] [INFO] [1781571680.544152024] [move_group.moveit.moveit.kinematics.kdl_kinematics_plugin]: Joint weights for group 'arm': 1 1 1 1 1 1
+[move_gripper_server-10] [INFO] [1781571680.581787801] [move_gripper_server.moveit.kinematics.kdl_kinematics_plugin]: Joint weights for group 'arm': 1 1 1 1 1 1
+[checker_board_server-9] [INFO] [1781571680.589719473] [checker_board_server.moveit.kinematics.kdl_kinematics_plugin]: Joint weights for group 'arm': 1 1 1 1 1 1
+[move_pose_cartesian_server-8] [INFO] [1781571680.613613830] [move_pose_cartesian_server]: MoveToPoseCartesian action server ready
+[move_pose_cartesian_server-8] [WARN] [1781571680.616011824] [rcl.logging_rosout]: Publisher already registered for node name: 'move_pose_cartesian_server'. If this is due to multiple nodes with the same name then all logs for the logger named 'move_pose_cartesian_server' will go out over the existing publisher. As soon as any node with that name is destructed it will unregister the publisher, preventing any further logs for that name from being published on the rosout topic.
+[move_pose_cartesian_server-8] [INFO] [1781571680.636918644] [move_pose_cartesian_server.moveit.ros.rdf_loader]: Loaded robot model in 0.00638008 seconds
+[move_pose_cartesian_server-8] [INFO] [1781571680.636984079] [move_pose_cartesian_server.moveit.core.robot_model]: Loading robot model 'robot'...
+[rviz2-3] [INFO] [1781571680.694701422] [rviz2]: Stereo is NOT SUPPORTED
+[rviz2-3] [INFO] [1781571680.694771153] [rviz2]: OpenGl version: 4.6 (GLSL 4.6)
+[rviz2-3] [INFO] [1781571680.729334029] [rviz2]: Stereo is NOT SUPPORTED
+[move_pose_cartesian_server-8] [INFO] [1781571680.749539671] [move_pose_cartesian_server.moveit.kinematics.kdl_kinematics_plugin]: Joint weights for group 'arm': 1 1 1 1 1 1
+[ros2_control_node-5] [INFO] [1781571680.792249530] [controller_manager]: Loading controller : 'joint_state_broadcaster' of type 'joint_state_broadcaster/JointStateBroadcaster'
+[ros2_control_node-5] [INFO] [1781571680.792292578] [controller_manager]: Loading controller 'joint_state_broadcaster'
+[ros2_control_node-5] [INFO] [1781571680.796339494] [controller_manager]: Controller 'joint_state_broadcaster' node arguments: --ros-args --params-file /tmp/launch_params_30wsj7r3 --params-file /home/minhquang/ros2_dev/install/robot_control/share/robot_control/config/robot_controllers.yaml 
+[move_group-2] [INFO] [1781571680.832167999] [move_group.moveit.moveit.ros.planning_scene_monitor]: Publishing maintained planning scene on 'monitored_planning_scene'
+[move_group-2] [INFO] [1781571680.832418897] [move_group.moveit.moveit.ros.moveit_cpp]: Listening to 'joint_states' for joint states
+[move_group-2] [INFO] [1781571680.833167097] [move_group.moveit.moveit.ros.current_state_monitor]: Listening to joint states on topic 'joint_states'
+[move_group-2] [INFO] [1781571680.834064917] [move_group.moveit.moveit.ros.planning_scene_monitor]: Listening to '/attached_collision_object' for attached collision objects
+[move_group-2] [INFO] [1781571680.834108479] [move_group.moveit.moveit.ros.planning_scene_monitor]: Stopping existing planning scene publisher.
+[move_group-2] [INFO] [1781571680.834467652] [move_group.moveit.moveit.ros.planning_scene_monitor]: Stopped publishing maintained planning scene.
+[move_group-2] [INFO] [1781571680.836050001] [move_group.moveit.moveit.ros.planning_scene_monitor]: Publishing maintained planning scene on 'monitored_planning_scene'
+[move_group-2] [INFO] [1781571680.836335026] [move_group.moveit.moveit.ros.planning_scene_monitor]: Starting planning scene monitor
+[move_group-2] [INFO] [1781571680.837949577] [move_group.moveit.moveit.ros.planning_scene_monitor]: Listening to '/planning_scene'
+[move_group-2] [INFO] [1781571680.837989145] [move_group.moveit.moveit.ros.planning_scene_monitor]: Starting world geometry update monitor for collision objects, attached objects, octomap updates.
+[move_group-2] [INFO] [1781571680.838681254] [move_group.moveit.moveit.ros.planning_scene_monitor]: Listening to 'collision_object'
+[move_group-2] [INFO] [1781571680.839419097] [move_group.moveit.moveit.ros.planning_scene_monitor]: Listening to 'planning_scene_world' for planning scene world geometry
+[move_group-2] [WARN] [1781571680.840145110] [move_group.moveit.moveit.ros.occupancy_map_monitor]: Resolution not specified for Octomap. Assuming resolution = 0.1 instead
+[spawner-6] [INFO] [1781571680.887489623] [spawner_joint_state_broadcaster]: Loaded joint_state_broadcaster
+[ros2_control_node-5] [INFO] [1781571680.888972691] [controller_manager]: Configuring controller: 'joint_state_broadcaster'
+[ros2_control_node-5] [INFO] [1781571680.889166116] [joint_state_broadcaster]: 'joints' or 'interfaces' parameter is empty. All available state interfaces will be published
+[rviz2-3] Warning: class_loader.impl: SEVERE WARNING!!! A namespace collision has occurred with plugin factory for class rviz_default_plugins::displays::InteractiveMarkerDisplay. New factory will OVERWRITE existing one. This situation occurs when libraries containing plugins are directly linked against an executable (the one running right now generating this message). Please separate plugins out into their own library or just don't link against the library and use either class_loader::ClassLoader/MultiLibraryClassLoader to open.
+[rviz2-3]          at line 321 in /opt/ros/jazzy/include/class_loader/class_loader/class_loader_core.hpp
+[rviz2-3] [WARN] [1781571680.900816199] [rcl.logging_rosout]: Publisher already registered for node name: 'rviz2_moveit'. If this is due to multiple nodes with the same name then all logs for the logger named 'rviz2_moveit' will go out over the existing publisher. As soon as any node with that name is destructed it will unregister the publisher, preventing any further logs for that name from being published on the rosout topic.
+[ros2_control_node-5] [INFO] [1781571680.931974013] [controller_manager]: Activating controllers: [ joint_state_broadcaster ]
+[ros2_control_node-5] [INFO] [1781571680.995806319] [controller_manager]: Successfully switched controllers!
+[move_group-2] [INFO] [1781571681.061861990] [move_group.moveit.moveit.ros.pointcloud_octomap_updater]: Listening to '/camera/depth/points' using message filter with target frame 'world '
+[spawner-6] [INFO] [1781571681.064549235] [spawner_joint_state_broadcaster]: Configured and activated joint_state_broadcaster
+[move_group-2] [INFO] [1781571681.071678218] [move_group.moveit.moveit.planners.pilz.joint_limits_aggregator]: Reading limits from namespace robot_description_planning
+[move_group-2] [INFO] [1781571681.088338010] [move_group.moveit.moveit.planners.pilz.command_planner]: Available plugins: pilz_industrial_motion_planner/PlanningContextLoaderCIRC pilz_industrial_motion_planner/PlanningContextLoaderLIN pilz_industrial_motion_planner/PlanningContextLoaderPTP 
+[move_group-2] [INFO] [1781571681.088390765] [move_group.moveit.moveit.planners.pilz.command_planner]: About to load: pilz_industrial_motion_planner/PlanningContextLoaderCIRC
+[move_group-2] [INFO] [1781571681.091020052] [move_group.moveit.moveit.planners.pilz.command_planner]: Registered Algorithm [CIRC]
+[move_group-2] [INFO] [1781571681.091128643] [move_group.moveit.moveit.planners.pilz.command_planner]: About to load: pilz_industrial_motion_planner/PlanningContextLoaderLIN
+[move_group-2] [INFO] [1781571681.092977740] [move_group.moveit.moveit.planners.pilz.command_planner]: Registered Algorithm [LIN]
+[move_group-2] [INFO] [1781571681.093049768] [move_group.moveit.moveit.planners.pilz.command_planner]: About to load: pilz_industrial_motion_planner/PlanningContextLoaderPTP
+[move_group-2] [INFO] [1781571681.094350726] [move_group.moveit.moveit.planners.pilz.command_planner]: Registered Algorithm [PTP]
+[move_group-2] [INFO] [1781571681.094410077] [move_group.moveit.moveit.ros.planning_pipeline]: Successfully loaded planner 'Pilz Industrial Motion Planner'
+[move_group-2] [INFO] [1781571681.096335639] [move_group]: Try loading adapter 'default_planning_request_adapters/ResolveConstraintFrames'
+[move_group-2] [INFO] [1781571681.097544754] [move_group]: Loaded adapter 'default_planning_request_adapters/ResolveConstraintFrames'
+[move_group-2] [INFO] [1781571681.097604766] [move_group]: Try loading adapter 'default_planning_request_adapters/ValidateWorkspaceBounds'
+[move_group-2] [INFO] [1781571681.097906761] [move_group]: Loaded adapter 'default_planning_request_adapters/ValidateWorkspaceBounds'
+[move_group-2] [INFO] [1781571681.097926324] [move_group]: Try loading adapter 'default_planning_request_adapters/CheckStartStateBounds'
+[move_group-2] [INFO] [1781571681.097956660] [move_group]: Loaded adapter 'default_planning_request_adapters/CheckStartStateBounds'
+[move_group-2] [INFO] [1781571681.097963452] [move_group]: Try loading adapter 'default_planning_request_adapters/CheckStartStateCollision'
+[move_group-2] [INFO] [1781571681.097976360] [move_group]: Loaded adapter 'default_planning_request_adapters/CheckStartStateCollision'
+[move_group-2] [INFO] [1781571681.099659586] [move_group]: Try loading adapter 'default_planning_response_adapters/ValidateSolution'
+[move_group-2] [INFO] [1781571681.103737537] [move_group]: Loaded adapter 'default_planning_response_adapters/ValidateSolution'
+[move_group-2] [INFO] [1781571681.103771888] [move_group]: Try loading adapter 'default_planning_response_adapters/DisplayMotionPath'
+[move_group-2] [INFO] [1781571681.104842802] [move_group]: Loaded adapter 'default_planning_response_adapters/DisplayMotionPath'
+[move_group-2] [INFO] [1781571681.114489167] [move_group.moveit.moveit.ros.planning_pipeline]: Successfully loaded planner 'STOMP'
+[move_group-2] [INFO] [1781571681.116603273] [move_group]: Try loading adapter 'default_planning_request_adapters/ResolveConstraintFrames'
+[move_group-2] [INFO] [1781571681.116783729] [move_group]: Loaded adapter 'default_planning_request_adapters/ResolveConstraintFrames'
+[move_group-2] [INFO] [1781571681.116795022] [move_group]: Try loading adapter 'default_planning_request_adapters/ValidateWorkspaceBounds'
+[move_group-2] [INFO] [1781571681.117584153] [move_group]: Loaded adapter 'default_planning_request_adapters/ValidateWorkspaceBounds'
+[move_group-2] [INFO] [1781571681.117628300] [move_group]: Try loading adapter 'default_planning_request_adapters/CheckStartStateBounds'
+[move_group-2] [INFO] [1781571681.117658453] [move_group]: Loaded adapter 'default_planning_request_adapters/CheckStartStateBounds'
+[move_group-2] [INFO] [1781571681.117664884] [move_group]: Try loading adapter 'default_planning_request_adapters/CheckStartStateCollision'
+[move_group-2] [INFO] [1781571681.117678505] [move_group]: Loaded adapter 'default_planning_request_adapters/CheckStartStateCollision'
+[move_group-2] [INFO] [1781571681.119433860] [move_group]: Try loading adapter 'default_planning_response_adapters/AddTimeOptimalParameterization'
+[move_group-2] [INFO] [1781571681.120283082] [move_group]: Loaded adapter 'default_planning_response_adapters/AddTimeOptimalParameterization'
+[move_group-2] [INFO] [1781571681.120309354] [move_group]: Try loading adapter 'default_planning_response_adapters/ValidateSolution'
+[move_group-2] [INFO] [1781571681.120826427] [move_group]: Loaded adapter 'default_planning_response_adapters/ValidateSolution'
+[move_group-2] [INFO] [1781571681.120847570] [move_group]: Try loading adapter 'default_planning_response_adapters/DisplayMotionPath'
+[move_group-2] [INFO] [1781571681.121948881] [move_group]: Loaded adapter 'default_planning_response_adapters/DisplayMotionPath'
+[move_group-2] [INFO] [1781571681.143654801] [move_group.moveit.moveit.ros.planning_pipeline]: Successfully loaded planner 'OMPL'
+[move_group-2] [INFO] [1781571681.146224053] [move_group]: Try loading adapter 'default_planning_request_adapters/ResolveConstraintFrames'
+[move_group-2] [INFO] [1781571681.146501806] [move_group]: Loaded adapter 'default_planning_request_adapters/ResolveConstraintFrames'
+[move_group-2] [INFO] [1781571681.146524046] [move_group]: Try loading adapter 'default_planning_request_adapters/ValidateWorkspaceBounds'
+[move_group-2] [INFO] [1781571681.147036245] [move_group]: Loaded adapter 'default_planning_request_adapters/ValidateWorkspaceBounds'
+[move_group-2] [INFO] [1781571681.147081371] [move_group]: Try loading adapter 'default_planning_request_adapters/CheckStartStateBounds'
+[move_group-2] [INFO] [1781571681.147135542] [move_group]: Loaded adapter 'default_planning_request_adapters/CheckStartStateBounds'
+[move_group-2] [INFO] [1781571681.147149087] [move_group]: Try loading adapter 'default_planning_request_adapters/CheckStartStateCollision'
+[move_group-2] [INFO] [1781571681.147178761] [move_group]: Loaded adapter 'default_planning_request_adapters/CheckStartStateCollision'
+[move_group-2] [INFO] [1781571681.149777471] [move_group]: Try loading adapter 'default_planning_response_adapters/AddTimeOptimalParameterization'
+[move_group-2] [INFO] [1781571681.150631063] [move_group]: Loaded adapter 'default_planning_response_adapters/AddTimeOptimalParameterization'
+[move_group-2] [INFO] [1781571681.150661233] [move_group]: Try loading adapter 'default_planning_response_adapters/ValidateSolution'
+[move_group-2] [INFO] [1781571681.151291346] [move_group]: Loaded adapter 'default_planning_response_adapters/ValidateSolution'
+[move_group-2] [INFO] [1781571681.151323820] [move_group]: Try loading adapter 'default_planning_response_adapters/DisplayMotionPath'
+[move_group-2] [INFO] [1781571681.152397564] [move_group]: Loaded adapter 'default_planning_response_adapters/DisplayMotionPath'
+[move_group-2] [INFO] [1781571681.159524337] [move_group.moveit.moveit.ros.planning_pipeline]: Successfully loaded planner 'CHOMP'
+[move_group-2] [INFO] [1781571681.161520596] [move_group]: Try loading adapter 'default_planning_request_adapters/ResolveConstraintFrames'
+[move_group-2] [INFO] [1781571681.161723197] [move_group]: Loaded adapter 'default_planning_request_adapters/ResolveConstraintFrames'
+[move_group-2] [INFO] [1781571681.161746633] [move_group]: Try loading adapter 'default_planning_request_adapters/ValidateWorkspaceBounds'
+[move_group-2] [INFO] [1781571681.162094056] [move_group]: Loaded adapter 'default_planning_request_adapters/ValidateWorkspaceBounds'
+[move_group-2] [INFO] [1781571681.162126076] [move_group]: Try loading adapter 'default_planning_request_adapters/CheckStartStateBounds'
+[move_group-2] [INFO] [1781571681.162183148] [move_group]: Loaded adapter 'default_planning_request_adapters/CheckStartStateBounds'
+[move_group-2] [INFO] [1781571681.162198561] [move_group]: Try loading adapter 'default_planning_request_adapters/CheckStartStateCollision'
+[move_group-2] [INFO] [1781571681.162229023] [move_group]: Loaded adapter 'default_planning_request_adapters/CheckStartStateCollision'
+[move_group-2] [INFO] [1781571681.165133491] [move_group]: Try loading adapter 'default_planning_response_adapters/AddTimeOptimalParameterization'
+[move_group-2] [INFO] [1781571681.166081800] [move_group]: Loaded adapter 'default_planning_response_adapters/AddTimeOptimalParameterization'
+[move_group-2] [INFO] [1781571681.166106590] [move_group]: Try loading adapter 'default_planning_response_adapters/ValidateSolution'
+[move_group-2] [INFO] [1781571681.166651636] [move_group]: Loaded adapter 'default_planning_response_adapters/ValidateSolution'
+[move_group-2] [INFO] [1781571681.167001069] [move_group]: Try loading adapter 'default_planning_response_adapters/DisplayMotionPath'
+[move_group-2] [INFO] [1781571681.168019711] [move_group]: Loaded adapter 'default_planning_response_adapters/DisplayMotionPath'
+[move_group-2] [INFO] [1781571681.218275091] [move_group.moveit.moveit.plugins.simple_controller_manager]: Added FollowJointTrajectory controller for arm_controller
+[move_group-2] [INFO] [1781571681.220816103] [move_group.moveit.moveit.plugins.simple_controller_manager]: Added FollowJointTrajectory controller for gripper_controller
+[move_group-2] [INFO] [1781571681.221200048] [move_group.moveit.moveit.plugins.simple_controller_manager]: Returned 2 controllers in list
+[move_group-2] [INFO] [1781571681.221278177] [move_group.moveit.moveit.plugins.simple_controller_manager]: Returned 2 controllers in list
+[move_group-2] [INFO] [1781571681.221880336] [move_group.moveit.moveit.ros.trajectory_execution_manager]: Trajectory execution is managing controllers
+[move_group-2] [INFO] [1781571681.221908757] [move_group]: MoveGroup debug mode is ON
+[checker_board_server-9] [INFO] [1781571681.257317478] [checker_board_server.moveit.ros.move_group_interface]: Ready to take commands for planning group arm.
+[move_gripper_server-10] [INFO] [1781571681.258283386] [move_gripper_server.moveit.ros.move_group_interface]: Ready to take commands for planning group gripper.
+[move_to_pose_server-7] [INFO] [1781571681.258364476] [move_to_pose_server.moveit.ros.move_group_interface]: Ready to take commands for planning group arm.
+[move_group-2] [INFO] [1781571681.261035185] [move_group.moveit.moveit.planners.pilz.move_group_sequence_action]: initialize move group sequence action
+[move_group-2] [INFO] [1781571681.268079606] [move_group.moveit.moveit.planners.pilz.joint_limits_aggregator]: Reading limits from namespace robot_description_planning
+[move_group-2] [INFO] [1781571681.268462735] [move_group.moveit.moveit.planners.pilz.joint_limits_aggregator]: Reading limits from namespace robot_description_planning
+[move_group-2] [INFO] [1781571681.272438598] [move_group.moveit.moveit.ros.move_group.executable]: 
+[move_group-2] 
+[move_group-2] ********************************************************
+[move_group-2] * MoveGroup using: 
+[move_group-2] *     - apply_planning_scene_service
+[move_group-2] *     - clear_octomap_service
+[move_group-2] *     - get_group_urdf
+[move_group-2] *     - load_geometry_from_file
+[move_group-2] *     - CartesianPathService
+[move_group-2] *     - execute_trajectory_action
+[move_group-2] *     - get_planning_scene_service
+[move_group-2] *     - kinematics_service
+[move_group-2] *     - move_action
+[move_group-2] *     - motion_plan_service
+[move_group-2] *     - query_planners_service
+[move_group-2] *     - state_validation_service
+[move_group-2] *     - save_geometry_to_file
+[move_group-2] *     - SequenceAction
+[move_group-2] *     - SequenceService
+[move_group-2] ********************************************************
+[move_group-2] 
+[move_group-2] [INFO] [1781571681.272529344] [move_group.moveit.moveit.ros.move_group.context]: MoveGroup context using pipeline ompl
+[move_group-2] [INFO] [1781571681.272557994] [move_group.moveit.moveit.ros.move_group.context]: MoveGroup context initialization complete
+[move_group-2] Loading 'move_group/ApplyPlanningSceneService'...
+[move_group-2] Loading 'move_group/ClearOctomapService'...
+[move_group-2] Loading 'move_group/GetUrdfService'...
+[move_group-2] Loading 'move_group/LoadGeometryFromFileService'...
+[move_group-2] Loading 'move_group/MoveGroupCartesianPathService'...
+[move_group-2] Loading 'move_group/MoveGroupExecuteTrajectoryAction'...
+[move_group-2] Loading 'move_group/MoveGroupGetPlanningSceneService'...
+[move_group-2] Loading 'move_group/MoveGroupKinematicsService'...
+[move_group-2] Loading 'move_group/MoveGroupMoveAction'...
+[move_group-2] Loading 'move_group/MoveGroupPlanService'...
+[move_group-2] Loading 'move_group/MoveGroupQueryPlannersService'...
+[move_group-2] Loading 'move_group/MoveGroupStateValidationService'...
+[move_group-2] Loading 'move_group/SaveGeometryToFileService'...
+[move_group-2] Loading 'pilz_industrial_motion_planner/MoveGroupSequenceAction'...
+[move_group-2] Loading 'pilz_industrial_motion_planner/MoveGroupSequenceService'...
+[move_group-2] 
+[move_group-2] You can start planning now!
+[move_group-2] 
+[move_pose_cartesian_server-8] [INFO] [1781571681.273839123] [move_pose_cartesian_server.moveit.ros.move_group_interface]: Ready to take commands for planning group arm.
+[move_gripper_server-10] [INFO] [1781571681.294498307] [move_gripper_server.moveit.ros.current_state_monitor]: Listening to joint states on topic 'joint_states'
+[move_to_pose_server-7] [INFO] [1781571681.316512140] [move_to_pose_server.moveit.ros.current_state_monitor]: Listening to joint states on topic 'joint_states'
+[checker_board_server-9] [INFO] [1781571681.320478904] [checker_board_server.moveit.ros.current_state_monitor]: Listening to joint states on topic 'joint_states'
+[move_pose_cartesian_server-8] [INFO] [1781571681.327187096] [move_pose_cartesian_server.moveit.ros.current_state_monitor]: Listening to joint states on topic 'joint_states'
+[INFO] [spawner-6]: process has finished cleanly [pid 17063]
+[INFO] [spawner-12]: process started with pid [17255]
+[spawner-12] [INFO] [1781571681.635025529] [spawner_arm_controller]: Setting controller param "params_file" to "['/home/minhquang/ros2_dev/install/robot_control/share/robot_control/config/robot_controllers.yaml']" for arm_controller
+[ros2_control_node-5] [INFO] [1781571681.641506201] [controller_manager]: Loading controller : 'arm_controller' of type 'joint_trajectory_controller/JointTrajectoryController'
+[ros2_control_node-5] [INFO] [1781571681.641594980] [controller_manager]: Loading controller 'arm_controller'
+[ros2_control_node-5] [INFO] [1781571681.644851390] [controller_manager]: Controller 'arm_controller' node arguments: --ros-args --params-file /tmp/launch_params_30wsj7r3 --params-file /home/minhquang/ros2_dev/install/robot_control/share/robot_control/config/robot_controllers.yaml --params-file /home/minhquang/ros2_dev/install/robot_control/share/robot_control/config/robot_controllers.yaml 
+[spawner-12] [INFO] [1781571681.730710244] [spawner_arm_controller]: Loaded arm_controller
+[ros2_control_node-5] [INFO] [1781571681.731686194] [controller_manager]: Configuring controller: 'arm_controller'
+[ros2_control_node-5] [INFO] [1781571681.732060621] [arm_controller]: No specific joint names are used for command interfaces. Using 'joints' parameter.
+[ros2_control_node-5] [INFO] [1781571681.732157770] [arm_controller]: Command interfaces are [position velocity] and state interfaces are [position velocity].
+[ros2_control_node-5] [INFO] [1781571681.732202685] [arm_controller]: Using 'splines' interpolation method.
+[ros2_control_node-5] [INFO] [1781571681.734474854] [arm_controller]: Action status changes will be monitored at 20.00 Hz.
+[ros2_control_node-5] [INFO] [1781571681.739258027] [arm_controller]: No scaling interface set. This controller will not read speed scaling from the hardware.
+[ros2_control_node-5] [INFO] [1781571681.798232679] [controller_manager]: Activating controllers: [ arm_controller ]
+[ros2_control_node-5] [INFO] [1781571681.862797073] [controller_manager]: Successfully switched controllers!
+[spawner-12] [INFO] [1781571681.932556700] [spawner_arm_controller]: Configured and activated arm_controller
+[INFO] [spawner-12]: process has finished cleanly [pid 17255]
+[INFO] [spawner-13]: process started with pid [17269]
+[move_gripper_server-10] [INFO] [1781571682.296497432] [move_gripper_server]: GripperExecutor initialized | group=gripper | planning_frame=world | ee_link= | range=[0.0000, 0.0500]
+[move_to_pose_server-7] [INFO] [1781571682.318999541] [move_to_pose_server.remote_control]: RemoteControl Ready.
+[move_to_pose_server-7] [INFO] [1781571682.319051784] [move_to_pose_server]: MoveItExecutor initialized | group=arm | planning_frame=world | ee_link=tcp_link
+[checker_board_server-9] [INFO] [1781571682.322962434] [checker_board_server.remote_control]: RemoteControl Ready.
+[checker_board_server-9] [INFO] [1781571682.323037541] [checker_board_server]: MoveItExecutor initialized | group=arm | planning_frame=world | ee_link=tcp_link
+[move_pose_cartesian_server-8] [INFO] [1781571682.329428466] [move_pose_cartesian_server.remote_control]: RemoteControl Ready.
+[move_pose_cartesian_server-8] [INFO] [1781571682.329483149] [move_pose_cartesian_server]: MoveItExecutor initialized | group=arm | planning_frame=world | ee_link=tcp_link
+[spawner-13] [INFO] [1781571682.451533493] [spawner_gripper_controller]: Setting controller param "params_file" to "['/home/minhquang/ros2_dev/install/robot_control/share/robot_control/config/robot_controllers.yaml']" for gripper_controller
+[ros2_control_node-5] [INFO] [1781571682.457387254] [controller_manager]: Loading controller : 'gripper_controller' of type 'joint_trajectory_controller/JointTrajectoryController'
+[ros2_control_node-5] [INFO] [1781571682.457430346] [controller_manager]: Loading controller 'gripper_controller'
+[ros2_control_node-5] [INFO] [1781571682.457780282] [controller_manager]: Controller 'gripper_controller' node arguments: --ros-args --params-file /tmp/launch_params_30wsj7r3 --params-file /home/minhquang/ros2_dev/install/robot_control/share/robot_control/config/robot_controllers.yaml --params-file /home/minhquang/ros2_dev/install/robot_control/share/robot_control/config/robot_controllers.yaml 
+[spawner-13] [INFO] [1781571682.530661605] [spawner_gripper_controller]: Loaded gripper_controller
+[ros2_control_node-5] [INFO] [1781571682.531848510] [controller_manager]: Configuring controller: 'gripper_controller'
+[ros2_control_node-5] [INFO] [1781571682.532024601] [gripper_controller]: No specific joint names are used for command interfaces. Using 'joints' parameter.
+[ros2_control_node-5] [INFO] [1781571682.532056815] [gripper_controller]: Command interfaces are [position] and state interfaces are [position velocity].
+[ros2_control_node-5] [INFO] [1781571682.532071874] [gripper_controller]: Using 'splines' interpolation method.
+[ros2_control_node-5] [INFO] [1781571682.534144904] [gripper_controller]: Action status changes will be monitored at 20.00 Hz.
+[ros2_control_node-5] [INFO] [1781571682.538475739] [gripper_controller]: Setting initial scaling factor to 1.000000
+[ros2_control_node-5] [INFO] [1781571682.538523470] [gripper_controller]: No scaling interface set. This controller will not read speed scaling from the hardware.
+[ros2_control_node-5] [INFO] [1781571682.597307259] [controller_manager]: Activating controllers: [ gripper_controller ]
+[ros2_control_node-5] [INFO] [1781571682.662569299] [controller_manager]: Successfully switched controllers!
+[spawner-13] [INFO] [1781571682.731034397] [spawner_gripper_controller]: Configured and activated gripper_controller
+[INFO] [spawner-13]: process has finished cleanly [pid 17269]
+[rviz2-3] [ERROR] [1781571683.949442561] [rviz2_moveit.moveit.ros.motion_planning_frame]: Action server: /recognize_objects not available
+[rviz2-3] [INFO] [1781571683.969421228] [rviz2_moveit.moveit.ros.motion_planning_frame]: MoveGroup namespace changed: / -> . Reloading params.
+[rviz2-3] [WARN] [1781571684.001663586] [rcl.logging_rosout]: Publisher already registered for node name: 'rviz2_moveit'. If this is due to multiple nodes with the same name then all logs for the logger named 'rviz2_moveit' will go out over the existing publisher. As soon as any node with that name is destructed it will unregister the publisher, preventing any further logs for that name from being published on the rosout topic.
+[rviz2-3] [INFO] [1781571684.061557515] [rviz2_moveit.moveit.ros.rdf_loader]: Loaded robot model in 0.00668888 seconds
+[rviz2-3] [INFO] [1781571684.061955713] [rviz2_moveit.moveit.core.robot_model]: Loading robot model 'robot'...
+[rviz2-3] [INFO] [1781571684.144484528] [rviz2_moveit.moveit.kinematics.kdl_kinematics_plugin]: Joint weights for group 'arm': 1 1 1 1 1 1
+[rviz2-3] [INFO] [1781571684.324515896] [rviz2_moveit.moveit.ros.planning_scene_monitor]: Starting planning scene monitor
+[rviz2-3] [INFO] [1781571684.325737966] [rviz2_moveit.moveit.ros.planning_scene_monitor]: Listening to '/monitored_planning_scene'
+[rviz2-3] [INFO] [1781571684.446958682] [interactive_marker_display_110402115537872]: Connected on namespace: /rviz_moveit_motion_planning_display/robot_interaction_interactive_marker_topic
+[rviz2-3] [INFO] [1781571684.455121614] [interactive_marker_display_110402115537872]: Sending request for interactive markers
+[rviz2-3] [INFO] [1781571684.488221463] [interactive_marker_display_110402115537872]: Service response received for initialization
+[rviz2-3] [INFO] [1781571684.554635036] [rviz2_moveit.moveit.ros.motion_planning_frame]: group arm
+[rviz2-3] [INFO] [1781571684.554669868] [rviz2_moveit.moveit.ros.motion_planning_frame]: Constructing new MoveGroup connection for group 'arm' in namespace ''
+[rviz2-3] [INFO] [1781571684.575263957] [rviz2_moveit.moveit.ros.move_group_interface]: Ready to take commands for planning group arm.

@@ -22,6 +22,7 @@ from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription, LogI
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
+from launch_ros.parameter_descriptions import ParameterValue
 
 
 def generate_launch_description() -> LaunchDescription:
@@ -120,6 +121,16 @@ def generate_launch_description() -> LaunchDescription:
             "auto_plan_on_start": LaunchConfiguration("auto_plan_on_start"),
             "manual_prompt_on_start": LaunchConfiguration("manual_prompt_on_start"),
             "auto_execute_after_plan": LaunchConfiguration("auto_execute_after_plan"),
+            "manual_default_target": ParameterValue([
+                "[",
+                LaunchConfiguration("target_x"),
+                ", ",
+                LaunchConfiguration("target_y"),
+                ", ",
+                LaunchConfiguration("target_z"),
+                "]",
+            ], value_type=list[float]),
+            "manual_default_obstacle_size": [0.0, 0.0, 0.0],
             "workspace_min_base": [0.250, -0.150, 0.020],
             "workspace_max_base": [0.500, 0.150, 0.300],
             "use_current_tcp_orientation_for_execution": True,
@@ -129,8 +140,18 @@ def generate_launch_description() -> LaunchDescription:
             "preposition_clamp_to_workspace": True,
             "preposition_verify_timeout_sec": 3.0,
             "update_start_tcp_from_tf_before_plan": True,
-            "fallback_to_final_pose_on_execute_failure": True,
-            "execute_final_pose_only": True,
+            "fallback_to_final_pose_on_execute_failure": False,
+            "execute_final_pose_only": False,
+            "use_planning_scene_obstacles": True,
+            "planning_scene_service_name": "/get_planning_scene",
+            "planning_scene_frame": "base_link",
+            "path_collision_check_step_m": 0.01,
+            "path_collision_clearance_margin_m": 0.05,
+            "obstacle_safety_filter_enabled": True,
+            "obstacle_safety_margin_m": 0.05,
+            "obstacle_safety_check_step_m": 0.005,
+            "execute_collision_check_step_m": 0.01,
+            "execute_collision_clearance_margin_m": 0.05,
         }],
     )
 

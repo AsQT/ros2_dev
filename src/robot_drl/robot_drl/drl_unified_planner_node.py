@@ -33,12 +33,16 @@ Services (new):
 
 import sys
 import threading
+import time
 from dataclasses import dataclass
 from typing import Optional
 
 import numpy as np
 import rclpy
 from geometry_msgs.msg import PointStamped
+from moveit_msgs.msg import PlanningSceneComponents
+from moveit_msgs.srv import GetPlanningScene, GetPositionIK
+from sensor_msgs.msg import JointState
 from std_msgs.msg import Bool
 
 from robot_drl import config
@@ -47,7 +51,16 @@ from robot_drl.drl_planner_core import (
     PlanningResult,
     load_planner,
 )
-from robot_drl.drl_planner_node_base import DrlPlannerNodeBase
+from robot_drl.drl_planner_node_base import DrlPlannerNodeBase, _EXECUTION_QUATERNION
+from robot_drl.planning_scene_adapter import (
+    PlanningSceneObstacleError,
+    SceneObstacle,
+    manual_obstacle,
+    planning_scene_to_obstacles,
+    point_aabb_signed_distance,
+    select_obstacle_for_policy,
+    validate_cartesian_path_against_obstacles,
+)
 from std_srvs.srv import Trigger
 
 # Lazy import — the Box message type is optional.
@@ -208,6 +221,29 @@ class DrlUnifiedPlannerNode(DrlPlannerNodeBase):
         )
         self.declare_parameter("vision_require_target_detected", True)
         self.declare_parameter("vision_use_obstacle_if_detected", True)
+        self.declare_parameter("use_planning_scene_obstacles", True)
+        self.declare_parameter(
+            "planning_scene_service_name",
+            "/get_planning_scene",
+        )
+        self.declare_parameter("planning_scene_timeout_sec", 2.0)
+        self.declare_parameter("planning_scene_frame", "base_link")
+        self.declare_parameter("require_planning_scene_obstacle_transform", True)
+        self.declare_parameter("path_collision_check_step_m", 0.01)
+        self.declare_parameter("path_collision_clearance_margin_m", 0.0)
+        self.declare_parameter("publish_failed_collision_path", False)
+        self.declare_parameter("obstacle_safety_filter_enabled", True)
+        self.declare_parameter(
+            "obstacle_safety_margin_m",
+            config.DEFAULT_OBSTACLE_SAFETY_MARGIN,
+        )
+        self.declare_parameter("obstacle_safety_check_step_m", 0.005)
+        self.declare_parameter("validate_path_with_moveit_ik", True)
+        self.declare_parameter("compute_ik_service_name", "/compute_ik")
+        self.declare_parameter("moveit_group_name", "arm")
+        self.declare_parameter("moveit_ik_link_name", "tcp_link")
+        self.declare_parameter("moveit_ik_timeout_sec", 0.2)
+        self.declare_parameter("moveit_ik_max_samples", 80)
         self.declare_parameter(
             "calibrated_start_tcp_base",
             np.asarray(calibrated_start_tcp_base, dtype=np.float32).tolist(),
@@ -273,6 +309,57 @@ class DrlUnifiedPlannerNode(DrlPlannerNodeBase):
         self._vision_use_obstacle_if_detected = bool(
             self.get_parameter("vision_use_obstacle_if_detected").value
         )
+        self._use_planning_scene_obstacles = bool(
+            self.get_parameter("use_planning_scene_obstacles").value
+        )
+        self._planning_scene_service_name = str(
+            self.get_parameter("planning_scene_service_name").value
+        )
+        self._planning_scene_timeout_sec = float(
+            self.get_parameter("planning_scene_timeout_sec").value
+        )
+        self._planning_scene_frame = str(
+            self.get_parameter("planning_scene_frame").value
+        )
+        self._require_planning_scene_obstacle_transform = bool(
+            self.get_parameter("require_planning_scene_obstacle_transform").value
+        )
+        self._path_collision_check_step_m = float(
+            self.get_parameter("path_collision_check_step_m").value
+        )
+        self._path_collision_clearance_margin_m = float(
+            self.get_parameter("path_collision_clearance_margin_m").value
+        )
+        self._publish_failed_collision_path = bool(
+            self.get_parameter("publish_failed_collision_path").value
+        )
+        self._obstacle_safety_filter_enabled = bool(
+            self.get_parameter("obstacle_safety_filter_enabled").value
+        )
+        self._obstacle_safety_margin_m = float(
+            self.get_parameter("obstacle_safety_margin_m").value
+        )
+        self._obstacle_safety_check_step_m = float(
+            self.get_parameter("obstacle_safety_check_step_m").value
+        )
+        self._validate_path_with_moveit_ik = bool(
+            self.get_parameter("validate_path_with_moveit_ik").value
+        )
+        self._compute_ik_service_name = str(
+            self.get_parameter("compute_ik_service_name").value
+        )
+        self._moveit_group_name = str(
+            self.get_parameter("moveit_group_name").value
+        )
+        self._moveit_ik_link_name = str(
+            self.get_parameter("moveit_ik_link_name").value
+        )
+        self._moveit_ik_timeout_sec = float(
+            self.get_parameter("moveit_ik_timeout_sec").value
+        )
+        self._moveit_ik_max_samples = int(
+            self.get_parameter("moveit_ik_max_samples").value
+        )
         workspace_min_base = np.array(
             self.get_parameter("workspace_min_base").value,
             dtype=np.float32,
@@ -301,6 +388,9 @@ class DrlUnifiedPlannerNode(DrlPlannerNodeBase):
         env_cfg = dict(env_cfg)
         env_cfg["workspace_min"] = workspace_min_base.tolist()
         env_cfg["workspace_max"] = workspace_max_base.tolist()
+        env_cfg["obstacle_safety_filter_enabled"] = self._obstacle_safety_filter_enabled
+        env_cfg["obstacle_safety_margin"] = self._obstacle_safety_margin_m
+        env_cfg["obstacle_safety_check_step_m"] = self._obstacle_safety_check_step_m
 
         # 4. Plumb in the planner core (same pattern as other nodes)
         self._planner = DrlTrajectoryPlannerCore(
@@ -315,6 +405,21 @@ class DrlUnifiedPlannerNode(DrlPlannerNodeBase):
         self._init_base_publishers()
         self._init_base_services()
         self._init_base_execution()
+        self._planning_scene_client = self.create_client(
+            GetPlanningScene,
+            self._planning_scene_service_name,
+        )
+        self._compute_ik_client = self.create_client(
+            GetPositionIK,
+            self._compute_ik_service_name,
+        )
+        self._latest_joint_state: Optional[JointState] = None
+        self._joint_state_sub = self.create_subscription(
+            JointState,
+            "/joint_states",
+            self._on_joint_state,
+            10,
+        )
 
         # 6. Init vision subscriptions (only when in vision mode)
         if self._input_mode == "vision":
@@ -356,6 +461,21 @@ class DrlUnifiedPlannerNode(DrlPlannerNodeBase):
             f"min={self._planner.workspace_min_base.tolist()}, "
             f"max={self._planner.workspace_max_base.tolist()}"
         )
+        self.get_logger().info(
+            f"  PlanningScene obstacles: enabled={self._use_planning_scene_obstacles}, "
+            f"service={self._planning_scene_service_name}, "
+            f"frame={self._planning_scene_frame}"
+        )
+        self.get_logger().info(
+            f"  Obstacle safety filter: enabled={self._obstacle_safety_filter_enabled}, "
+            f"margin={self._obstacle_safety_margin_m:.3f} m, "
+            f"check_step={self._obstacle_safety_check_step_m:.3f} m"
+        )
+        self.get_logger().info(
+            f"  MoveIt IK validation: enabled={self._validate_path_with_moveit_ik}, "
+            f"service={self._compute_ik_service_name}, "
+            f"group={self._moveit_group_name}, link={self._moveit_ik_link_name}"
+        )
         if vn_stats is not None:
             self.get_logger().info(
                 f"  VecNormalize: norm_obs={vn_stats.norm_obs}, "
@@ -363,7 +483,7 @@ class DrlUnifiedPlannerNode(DrlPlannerNodeBase):
             )
         else:
             self.get_logger().info(
-                "  VecNormalize: file not found, using raw observations"
+                "  VecNormalize: not loaded, using raw observations"
             )
         self.get_logger().info("=" * 60)
 
@@ -631,6 +751,243 @@ class DrlUnifiedPlannerNode(DrlPlannerNodeBase):
     # Common planning logic
     # -------------------------------------------------------------------------
 
+    def _on_joint_state(self, msg: JointState) -> None:
+        self._latest_joint_state = msg
+
+    def _fetch_planning_scene_obstacles(self) -> list[SceneObstacle]:
+        """Read world collision objects from MoveIt's PlanningScene service."""
+        if not self._use_planning_scene_obstacles:
+            return []
+
+        if not self._planning_scene_client.service_is_ready():
+            if not self._planning_scene_client.wait_for_service(
+                timeout_sec=self._planning_scene_timeout_sec
+            ):
+                self.get_logger().warn(
+                    "[planning_scene] service "
+                    f"{self._planning_scene_service_name} not available after "
+                    f"{self._planning_scene_timeout_sec:.1f}s"
+                )
+                return []
+
+        req = GetPlanningScene.Request()
+        req.components.components = (
+            PlanningSceneComponents.WORLD_OBJECT_NAMES
+            | PlanningSceneComponents.WORLD_OBJECT_GEOMETRY
+            | PlanningSceneComponents.TRANSFORMS
+        )
+        future = self._planning_scene_client.call_async(req)
+        deadline = time.monotonic() + self._planning_scene_timeout_sec
+        while rclpy.ok() and not future.done():
+            now_sec = time.monotonic()
+            if now_sec > deadline:
+                self.get_logger().warn(
+                    "[planning_scene] request timed out after "
+                    f"{self._planning_scene_timeout_sec:.1f}s"
+                )
+                return []
+            time_sleep = min(0.02, max(0.0, deadline - now_sec))
+            threading.Event().wait(time_sleep)
+
+        try:
+            resp = future.result()
+        except Exception as exc:
+            self.get_logger().warn(f"[planning_scene] request failed: {exc}")
+            return []
+        if resp is None:
+            self.get_logger().warn("[planning_scene] empty response")
+            return []
+
+        try:
+            obstacles = planning_scene_to_obstacles(
+                resp.scene,
+                tf_buffer=self._tf_buffer,
+                target_frame=self._planning_scene_frame,
+                timeout_sec=self._planning_scene_timeout_sec,
+            )
+        except Exception as exc:
+            message = f"[planning_scene] failed to transform collision objects: {exc}"
+            if self._require_planning_scene_obstacle_transform:
+                raise PlanningSceneObstacleError(message) from exc
+            self.get_logger().warn(message)
+            return []
+
+        self.get_logger().info(
+            f"[planning_scene] planning_frame={self._planning_scene_frame} | "
+            f"world_objects={len(resp.scene.world.collision_objects)} | "
+            f"usable_obstacles={len(obstacles)}"
+        )
+        for obs in obstacles:
+            self.get_logger().info(
+                f"[planning_scene] obstacle id={obs.object_id} "
+                f"src_frame={obs.source_frame} type={obs.primitive_type} "
+                f"center_base={np.array2string(obs.center_base, precision=4)} "
+                f"full_size={np.array2string(obs.full_size, precision=4)} "
+                f"quat_xyzw=({obs.pose_quat_xyzw[0]:.4f},"
+                f"{obs.pose_quat_xyzw[1]:.4f},"
+                f"{obs.pose_quat_xyzw[2]:.4f},"
+                f"{obs.pose_quat_xyzw[3]:.4f})"
+            )
+        return obstacles
+
+    def _scene_input_obstacles(self, scene: DrlSceneInput) -> list[SceneObstacle]:
+        if not scene.has_obstacle:
+            return []
+        return [
+            manual_obstacle(
+                scene.obstacle_center_base,
+                scene.obstacle_full_size,
+                object_id=f"{scene.source}_obstacle",
+            )
+        ]
+
+    def _resolve_obstacle_for_policy(
+        self,
+        scene: DrlSceneInput,
+    ) -> tuple[DrlSceneInput, list[SceneObstacle]]:
+        """Prefer PlanningScene world objects, fallback to scene/manual obstacle."""
+        planning_scene_obstacles = self._fetch_planning_scene_obstacles()
+        fallback_obstacles = self._scene_input_obstacles(scene)
+        validation_obstacles = planning_scene_obstacles or fallback_obstacles
+
+        start = self._planner.start_tcp_base if self._planner is not None else config.DEFAULT_START_TCP_BASE
+        selected = select_obstacle_for_policy(
+            validation_obstacles,
+            start_base=start,
+            target_base=scene.target_base,
+        )
+        if selected is None:
+            resolved = DrlSceneInput(
+                target_base=scene.target_base,
+                has_obstacle=False,
+                obstacle_center_base=np.zeros(3, dtype=np.float32),
+                obstacle_full_size=np.zeros(3, dtype=np.float32),
+                source=f"{scene.source}+scene",
+                stamp_sec=scene.stamp_sec,
+            )
+            return resolved, []
+
+        if planning_scene_obstacles:
+            source = f"{scene.source}+planning_scene"
+        else:
+            source = scene.source
+        resolved = DrlSceneInput(
+            target_base=scene.target_base,
+            has_obstacle=True,
+            obstacle_center_base=selected.center_base.copy(),
+            obstacle_full_size=selected.full_size.copy(),
+            source=source,
+            stamp_sec=scene.stamp_sec,
+        )
+        self.get_logger().info(
+            "[/drl/plan] policy obstacle selected "
+            f"id={selected.object_id} source={source} "
+            f"center_base={np.array2string(selected.center_base, precision=4)} "
+            f"full_size={np.array2string(selected.full_size, precision=4)}"
+        )
+        return resolved, validation_obstacles
+
+    def _point_inside_any_obstacle(
+        self,
+        point_base: np.ndarray,
+        obstacles: list[SceneObstacle],
+    ) -> Optional[SceneObstacle]:
+        for obstacle in obstacles:
+            if point_aabb_signed_distance(point_base, obstacle) < 0.0:
+                return obstacle
+        return None
+
+    def _validate_path_with_moveit(self, trajectory_base: list[np.ndarray]) -> tuple[bool, str]:
+        """Sample the final Cartesian path and ask MoveIt IK to avoid collisions."""
+        if not self._validate_path_with_moveit_ik:
+            return True, "MoveIt IK validation disabled."
+        if not trajectory_base:
+            return False, "Trajectory is empty."
+        if not self._compute_ik_client.service_is_ready():
+            if not self._compute_ik_client.wait_for_service(
+                timeout_sec=self._planning_scene_timeout_sec
+            ):
+                return False, (
+                    f"Service {self._compute_ik_service_name} not available "
+                    f"after {self._planning_scene_timeout_sec:.1f}s."
+                )
+
+        from builtin_interfaces.msg import Duration
+        from robot_drl.planning_scene_adapter import iter_cartesian_path_samples
+
+        samples = list(
+            iter_cartesian_path_samples(
+                trajectory_base,
+                max_step_m=self._path_collision_check_step_m,
+            )
+        )
+        if self._moveit_ik_max_samples > 0 and len(samples) > self._moveit_ik_max_samples:
+            indices = np.linspace(
+                0,
+                len(samples) - 1,
+                num=self._moveit_ik_max_samples,
+                dtype=int,
+            )
+            samples = [samples[int(i)] for i in indices]
+
+        qx, qy, qz, qw = _EXECUTION_QUATERNION
+        failures: list[str] = []
+        seed_joint_state = self._latest_joint_state
+        if seed_joint_state is None:
+            self.get_logger().warn(
+                "[/drl/plan] no /joint_states seed yet; MoveIt IK validation "
+                "will use MoveIt's default state"
+            )
+        for seg_idx, sample_idx, sample in samples:
+            req = GetPositionIK.Request()
+            req.ik_request.group_name = self._moveit_group_name
+            req.ik_request.ik_link_name = self._moveit_ik_link_name
+            req.ik_request.avoid_collisions = True
+            if seed_joint_state is not None:
+                req.ik_request.robot_state.joint_state = seed_joint_state
+            timeout_sec = max(float(self._moveit_ik_timeout_sec), 0.0)
+            req.ik_request.timeout = Duration(
+                sec=int(timeout_sec),
+                nanosec=int((timeout_sec % 1.0) * 1e9),
+            )
+            req.ik_request.pose_stamped.header.stamp = self.get_clock().now().to_msg()
+            req.ik_request.pose_stamped.header.frame_id = self._planning_scene_frame
+            req.ik_request.pose_stamped.pose.position.x = float(sample[0])
+            req.ik_request.pose_stamped.pose.position.y = float(sample[1])
+            req.ik_request.pose_stamped.pose.position.z = float(sample[2])
+            req.ik_request.pose_stamped.pose.orientation.x = qx
+            req.ik_request.pose_stamped.pose.orientation.y = qy
+            req.ik_request.pose_stamped.pose.orientation.z = qz
+            req.ik_request.pose_stamped.pose.orientation.w = qw
+
+            future = self._compute_ik_client.call_async(req)
+            deadline = time.monotonic() + max(timeout_sec + 0.5, 0.5)
+            while rclpy.ok() and not future.done():
+                if time.monotonic() > deadline:
+                    return False, (
+                        f"MoveIt IK validation timed out at segment={seg_idx}, "
+                        f"sample={sample_idx}"
+                    )
+                time.sleep(0.01)
+            resp = future.result()
+            if resp is None:
+                return False, (
+                    f"MoveIt IK returned no response at segment={seg_idx}, "
+                    f"sample={sample_idx}"
+                )
+            if resp.error_code.val != 1:
+                failures.append(
+                    f"segment={seg_idx}, sample={sample_idx}, "
+                    f"xyz={np.array2string(sample, precision=4)}, "
+                    f"error_code={resp.error_code.val}"
+                )
+                break
+            seed_joint_state = resp.solution.joint_state
+
+        if failures:
+            return False, "MoveIt IK/collision validation failed: " + failures[0]
+        return True, f"MoveIt IK/collision validation OK for {len(samples)} sample(s)."
+
     def _plan_from_scene_input(self, scene: DrlSceneInput) -> bool:
         """Shared planning entry point for both manual and vision modes.
 
@@ -639,36 +996,112 @@ class DrlUnifiedPlannerNode(DrlPlannerNodeBase):
         Returns:
             True if planning succeeded (converged or not), False on exception.
         """
-        self.get_logger().info(
-            f"[/drl/plan] source={scene.source} | "
-            f"target=({scene.target_base[0]:.4f}, {scene.target_base[1]:.4f}, "
-            f"{scene.target_base[2]:.4f}) | "
-            f"obstacle={scene.has_obstacle}"
-        )
-        if scene.has_obstacle:
-            self.get_logger().info(
-                f"[/drl/plan] obs_center=({scene.obstacle_center_base[0]:.4f}, "
-                f"{scene.obstacle_center_base[1]:.4f}, "
-                f"{scene.obstacle_center_base[2]:.4f}) | "
-                f"obs_size=({scene.obstacle_full_size[0]:.4f}, "
-                f"{scene.obstacle_full_size[1]:.4f}, "
-                f"{scene.obstacle_full_size[2]:.4f})"
-            )
-
         if not self._prepare_tcp_for_plan_blocking(scene.source):
             return False
 
+        try:
+            scene, validation_obstacles = self._resolve_obstacle_for_policy(scene)
+        except Exception as e:
+            self.get_logger().error(f"[/drl/plan] PlanningScene obstacle error: {e}")
+            return False
+
+        start_collision = self._point_inside_any_obstacle(
+            self._planner.start_tcp_base,
+            validation_obstacles,
+        )
+        if start_collision is not None:
+            self.get_logger().error(
+                "[/drl/plan] start TCP lies inside PlanningScene obstacle "
+                f"'{start_collision.object_id}'; refusing to plan."
+            )
+            return False
+        target_collision = self._point_inside_any_obstacle(
+            scene.target_base,
+            validation_obstacles,
+        )
+        if target_collision is not None:
+            self.get_logger().error(
+                "[/drl/plan] target lies inside PlanningScene obstacle "
+                f"'{target_collision.object_id}'; refusing to plan."
+            )
+            return False
+
+        self.get_logger().info(
+            f"[/drl/plan] source={scene.source} | "
+            f"planning_frame={self._planning_scene_frame} | "
+            f"start_tcp_base={np.array2string(self._planner.start_tcp_base, precision=4)} | "
+            f"target_base={np.array2string(scene.target_base, precision=4)} | "
+            f"number_of_obstacles={len(validation_obstacles)} | "
+            f"policy_obstacle={scene.has_obstacle}"
+        )
+        if scene.has_obstacle:
+            self.get_logger().info(
+                f"[/drl/plan] transformed_obstacle_center_base="
+                f"{np.array2string(scene.obstacle_center_base, precision=4)} | "
+                f"transformed_obstacle_full_size="
+                f"{np.array2string(scene.obstacle_full_size, precision=4)}"
+            )
+
+        safety_obstacles_base = [
+            (obs.center_base.copy(), obs.full_size.copy())
+            for obs in validation_obstacles
+        ]
         try:
             result = self._planner.compute_trajectory(
                 target_base=scene.target_base,
                 has_obstacle=scene.has_obstacle,
                 obstacle_center_base=scene.obstacle_center_base,
                 obstacle_full_size=scene.obstacle_full_size,
+                safety_obstacles_base=safety_obstacles_base,
                 source=scene.source,
             )
         except Exception as e:
             self.get_logger().error(f"[/drl/plan] Planning exception: {e}")
             return False
+
+        if not result.converged:
+            self.get_logger().error(
+                "[/drl/plan] DRL rollout did not converge; refusing to publish "
+                f"or execute partial trajectory (dist={result.convergence_dist:.4f} m)."
+            )
+            if self._publish_failed_collision_path:
+                self.log_planning_result(result, source=scene.source)
+                self.publish_planning_result(result)
+            return False
+
+        validation = validate_cartesian_path_against_obstacles(
+            result.trajectory_forward_base,
+            validation_obstacles,
+            max_step_m=self._path_collision_check_step_m,
+            margin_m=self._path_collision_clearance_margin_m,
+        )
+        if validation.valid:
+            self.get_logger().info(
+                "[/drl/plan] Cartesian obstacle validation OK | "
+                f"samples={validation.checked_samples} | "
+                f"min_clearance={validation.min_clearance:.5f} m | "
+                f"{validation.message}"
+            )
+        else:
+            self.get_logger().error(
+                "[/drl/plan] Cartesian obstacle validation FAILED | "
+                f"{validation.message}"
+            )
+            if self._publish_failed_collision_path:
+                self.log_planning_result(result, source=scene.source)
+                self.publish_planning_result(result)
+            return False
+
+        ok_moveit, moveit_msg = self._validate_path_with_moveit(
+            result.trajectory_forward_base
+        )
+        if not ok_moveit:
+            self.get_logger().error(f"[/drl/plan] {moveit_msg}")
+            if self._publish_failed_collision_path:
+                self.log_planning_result(result, source=scene.source)
+                self.publish_planning_result(result)
+            return False
+        self.get_logger().info(f"[/drl/plan] {moveit_msg}")
 
         self.log_planning_result(result, source=scene.source)
         self.publish_planning_result(result)
@@ -719,6 +1152,21 @@ class DrlUnifiedPlannerNode(DrlPlannerNodeBase):
 
     def _get_manual_default_input(self) -> tuple[np.ndarray, bool, np.ndarray, np.ndarray]:
         """Return non-interactive manual defaults from ROS parameters."""
+        self._manual_default_target = np.array(
+            self.get_parameter("manual_default_target").value,
+            dtype=np.float32,
+        )
+        self._manual_default_obstacle_center = np.array(
+            self.get_parameter("manual_default_obstacle_center").value,
+            dtype=np.float32,
+        )
+        self._manual_default_obstacle_size = np.array(
+            self.get_parameter("manual_default_obstacle_size").value,
+            dtype=np.float32,
+        )
+        self._manual_allow_skip_obstacle = bool(
+            self.get_parameter("manual_allow_skip_obstacle").value
+        )
         has_obstacle = not (
             self._manual_allow_skip_obstacle
             and np.allclose(self._manual_default_obstacle_size, 0.0)

@@ -13,14 +13,22 @@
   <depend>launch</depend>
   <depend>launch_ros</depend>
   <depend>rclpy</depend>
+  <depend>rcl_interfaces</depend>
   <depend>std_msgs</depend>
   <depend>std_srvs</depend>
   <depend>geometry_msgs</depend>
+  <depend>sensor_msgs</depend>
+  <depend>moveit_msgs</depend>
+  <depend>ros_gz_interfaces</depend>
+  <depend>shape_msgs</depend>
   <depend>visualization_msgs</depend>
   <depend>tf2_ros</depend>
   <depend>robot_task_executor_msgs</depend>
   <depend>robot_vision_pipeline</depend>
   <depend>python3-yaml</depend>
+
+  <exec_depend>robot_bringup</exec_depend>
+  <exec_depend>robot_task_executor</exec_depend>
 
   <test_depend>python3-pytest</test_depend>
 

@@ -11,4 +11,4 @@ bool emg
 bool stop
 bool communi_err
 
-uint16 status_f
+uint32 status_f

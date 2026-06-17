@@ -41,6 +41,8 @@ setup(
         "console_scripts": [
             "drl_unified_planner_node = robot_drl.drl_unified_planner_node:main",
             "mock_environment_node = robot_drl.mock_environment_node:main",
+            "mock_hw_obstacle_test = robot_drl.mock_hw_obstacle_test:main",
+            "gazebo_obstacle_test = robot_drl.gazebo_obstacle_test:main",
         ],
     },
 )

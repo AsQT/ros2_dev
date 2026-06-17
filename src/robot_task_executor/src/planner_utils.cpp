@@ -528,7 +528,55 @@ bool PlannerUtils::execute_trajectory(const moveit_msgs::msg::RobotTrajectory& t
   move_group_->setMaxVelocityScalingFactor(max_velocity_scaling_);
   move_group_->setMaxAccelerationScalingFactor(max_acceleration_scaling_);
 
-  const auto exec_result = move_group_->execute(trajectory);
+  auto trajectory_to_execute = trajectory;
+  auto& joint_trajectory = trajectory_to_execute.joint_trajectory;
+  if (!joint_trajectory.points.empty() && !joint_trajectory.joint_names.empty())
+  {
+    move_group_->setStartStateToCurrentState();
+    const auto current_state = move_group_->getCurrentState(1.0);
+    if (current_state)
+    {
+      auto& first_point = joint_trajectory.points.front();
+      if (first_point.positions.size() == joint_trajectory.joint_names.size())
+      {
+        double max_abs_delta = 0.0;
+        std::string max_delta_joint;
+        for (size_t i = 0; i < joint_trajectory.joint_names.size(); ++i)
+        {
+          const auto& joint_name = joint_trajectory.joint_names[i];
+          const double current_position = current_state->getVariablePosition(joint_name);
+          const double delta = std::abs(first_point.positions[i] - current_position);
+          if (delta > max_abs_delta)
+          {
+            max_abs_delta = delta;
+            max_delta_joint = joint_name;
+          }
+          first_point.positions[i] = current_position;
+        }
+        RCLCPP_INFO(
+            logger(),
+            "[Planner] Synced trajectory start to current robot state before execute "
+            "(max_delta=%.6f rad at '%s').",
+            max_abs_delta,
+            max_delta_joint.c_str());
+      }
+      else
+      {
+        RCLCPP_WARN(
+            logger(),
+            "[Planner] Cannot sync trajectory start: first point has %zu positions "
+            "but trajectory has %zu joint names.",
+            first_point.positions.size(),
+            joint_trajectory.joint_names.size());
+      }
+    }
+    else
+    {
+      RCLCPP_WARN(logger(), "[Planner] Current robot state unavailable; executing trajectory as planned.");
+    }
+  }
+
+  const auto exec_result = move_group_->execute(trajectory_to_execute);
   if (exec_result != moveit::core::MoveItErrorCode::SUCCESS)
   {
     RCLCPP_ERROR(logger(), "[Planner] execute() failed (error code: %d)", exec_result.val);

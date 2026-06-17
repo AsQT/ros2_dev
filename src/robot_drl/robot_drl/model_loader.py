@@ -12,6 +12,7 @@ import json
 import os
 import sys
 from zipfile import ZipFile
+from zipfile import BadZipFile
 from pathlib import Path
 
 import numpy as np
@@ -77,6 +78,8 @@ def load_model(model_path: str | Path):
 
     if not model_path.exists():
         raise FileNotFoundError(f"Model file not found: {model_path}")
+    if model_path.stat().st_size == 0:
+        raise ValueError(f"Model file is empty: {model_path}")
 
     _patch_numpy_pickle_alias()
 
@@ -100,7 +103,10 @@ def load_model(model_path: str | Path):
         "replay_buffer": None,
     }
 
-    algo_name = _detect_algorithm(model_path)
+    try:
+        algo_name = _detect_algorithm(model_path)
+    except BadZipFile as exc:
+        raise ValueError(f"Model file is not a valid SB3 zip: {model_path}") from exc
     algo_cls = {"DDPG": DDPG, "SAC": SAC, "TD3": TD3}[algo_name]
     print(f"[model_loader] Loading {algo_name} model: {model_path}")
 

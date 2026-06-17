@@ -1,20 +1,18 @@
 #!/usr/bin/env python3
-"""rs485_hw_gui.py
+"""robot_hw_gui.py
 
-GUI kiểm tra phần cứng RS-485 (Qt) – tối ưu để nhìn rõ 6 trục.
+GUI kiểm tra phần cứng Robot TCP (Qt) – tối ưu để nhìn rõ 6 trục.
 
 Nguyên tắc:
-  - STATE: subscribe topics (/joint_states, /rs485_hw/connected, /rs485_hw/status_*)
+  - STATE: subscribe topics (/joint_states, /robot_hw/connected, /robot_hw/status_*)
   - COMMAND: gọi service trong robot_hardware_interface:
-      /rs485_hw/connect (Trigger)
-      /rs485_hw/disconnect (Trigger)
-      /rs485_hw/servo_on_axis (ServoOnAxis)
-      /rs485_hw/servo_on_all  (ServoOnAll)
-      /rs485_hw/jog           (Jog)
-      /rs485_hw/run_axis      (RunAxis)
-      /rs485_hw/home          (Home)
-      /rs485_hw/stop_axis     (StopAxis)
-      /rs485_hw/stop_all      (StopAll)
+      /robot_hw/servo_on_axis (ServoOnAxis)
+      /robot_hw/servo_on_all  (ServoOnAll)
+      /robot_hw/jog           (Jog)
+      /robot_hw/run_axis      (RunAxis)
+      /robot_hw/home          (Home)
+      /robot_hw/stop_axis     (StopAxis)
+      /robot_hw/stop_all      (StopAll)
 
 Mặc định dùng đơn vị ROS:
   - pos: rad, vel: rad/s
@@ -38,7 +36,6 @@ from rclpy.node import Node
 from sensor_msgs.msg import JointState
 from std_msgs.msg import Bool, UInt16MultiArray, String
 #from robot_hardware_interface.msg import StatusFlags6
-from std_srvs.srv import Trigger
 
 from qtpy import QtCore, QtGui, QtWidgets
 
@@ -82,11 +79,11 @@ class Backend(Node):
     """ROS backend chạy trong thread riêng."""
 
     def __init__(self):
-        super().__init__("rs485_hw_gui_backend")
+        super().__init__("robot_hw_gui_backend")
 
         # --- params ---
-        self.declare_parameter("joint_names", ["joint_1", "joint_2", "joint_3", "joint_4", "joint_5", "joint_6","joint_gl","joint_gl"])
-        self.declare_parameter("axis_ids", [0, 1, 2, 3, 4, 5, 6, 7]) 
+        self.declare_parameter("joint_names", ["joint_1", "joint_2", "joint_3", "joint_4", "joint_5", "joint_6"])
+        self.declare_parameter("axis_ids", [0, 1, 2, 3, 4, 5])
 
         self.joint_names: List[str] = list(self.get_parameter("joint_names").value)
         self.axis_ids: List[int] = [int(x) for x in self.get_parameter("axis_ids").value]
@@ -100,21 +97,18 @@ class Backend(Node):
 
         # --- subscribers ---
         self.create_subscription(JointState, "/joint_states", self._on_js, 20)
-        self.create_subscription(Bool, "/rs485_hw/connected", self._on_connected, 10)
-        self.create_subscription(String, "/rs485_hw/status_text", self._on_text, 10)
+        self.create_subscription(Bool, "/robot_hw/connected", self._on_connected, 10)
+        self.create_subscription(String, "/robot_hw/status_text", self._on_text, 10)
 
         # --- services ---
-        self.cli_connect = self.create_client(Trigger, "/rs485_hw/connect")
-        self.cli_disconnect = self.create_client(Trigger, "/rs485_hw/disconnect")
-
         # custom
-        self.cli_servo_on_axis = self.create_client(ServoOnAxis, "/rs485_hw/servo_on_axis") if ServoOnAxis else None
-        self.cli_servo_on_all = self.create_client(ServoOnAll, "/rs485_hw/servo_on_all") if ServoOnAll else None
-        self.cli_jog = self.create_client(Jog, "/rs485_hw/jog") if Jog else None
-        self.cli_run_axis = self.create_client(RunAxis, "/rs485_hw/run_axis") if RunAxis else None
-        self.cli_home = self.create_client(Home, "/rs485_hw/home") if Home else None
-        self.cli_stop_axis = self.create_client(StopAxis, "/rs485_hw/stop_axis") if StopAxis else None
-        self.cli_stop_all = self.create_client(StopAll, "/rs485_hw/stop_all") if StopAll else None
+        self.cli_servo_on_axis = self.create_client(ServoOnAxis, "/robot_hw/servo_on_axis") if ServoOnAxis else None
+        self.cli_servo_on_all = self.create_client(ServoOnAll, "/robot_hw/servo_on_all") if ServoOnAll else None
+        self.cli_jog = self.create_client(Jog, "/robot_hw/jog") if Jog else None
+        self.cli_run_axis = self.create_client(RunAxis, "/robot_hw/run_axis") if RunAxis else None
+        self.cli_home = self.create_client(Home, "/robot_hw/home") if Home else None
+        self.cli_stop_axis = self.create_client(StopAxis, "/robot_hw/stop_axis") if StopAxis else None
+        self.cli_stop_all = self.create_client(StopAll, "/robot_hw/stop_all") if StopAll else None
 
     # ---- subscribers ----
     def _on_connected(self, msg: Bool) -> None:
@@ -151,18 +145,6 @@ class Backend(Node):
         if cli.service_is_ready():
             return True
         return bool(cli.wait_for_service(timeout_sec=timeout_s))
-
-    def call_trigger(self, cli, timeout_s: float = 1.5) -> Tuple[bool, int, str]:
-        if not self._wait_service(cli, timeout_s):
-            return (False, 1, "service not available")
-        fut = cli.call_async(Trigger.Request())
-        t0 = time.time()
-        while rclpy.ok() and (not fut.done()) and (time.time() - t0) < timeout_s:
-            time.sleep(0.01)
-        if (not fut.done()) or (fut.result() is None):
-            return (False, 2, "no response (timeout)")
-        res = fut.result()
-        return (bool(res.success), 0 if res.success else 3, str(res.message))
 
     def servo_on_axis(self, axis_id: int, state: int, timeout_s: float = 1.5) -> Tuple[bool, int, str]:
         if self.cli_servo_on_axis is None:
@@ -405,7 +387,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.backend = backend
         self.pool = QtCore.QThreadPool.globalInstance()
 
-        self.setWindowTitle("RS485 HW GUI (Services)")
+        self.setWindowTitle("Robot TCP HW GUI (Services)")
         self.resize(1200, 720)
 
         cw = QtWidgets.QWidget()
@@ -421,8 +403,6 @@ class MainWindow(QtWidgets.QMainWindow):
         self.lb_status = QtWidgets.QLabel("status: --")
         self.lb_status.setStyleSheet("font-size: 11pt; color:#0B1F35;")
 
-        self.btn_connect = QtWidgets.QPushButton("Connect")
-        self.btn_disconnect = QtWidgets.QPushButton("Disconnect")
         self.btn_servo_all_on = QtWidgets.QPushButton("Servo ALL ON")
         self.btn_servo_all_off = QtWidgets.QPushButton("Servo ALL OFF")
         self.btn_stop_all = QtWidgets.QPushButton("STOP ALL")
@@ -431,8 +411,6 @@ class MainWindow(QtWidgets.QMainWindow):
         top.addWidget(self.lb_conn)
         top.addSpacing(10)
         top.addWidget(self.lb_status, 1)
-        top.addWidget(self.btn_connect)
-        top.addWidget(self.btn_disconnect)
         top.addWidget(self.btn_servo_all_on)
         top.addWidget(self.btn_servo_all_off)
         top.addWidget(self.btn_stop_all)
@@ -472,8 +450,6 @@ class MainWindow(QtWidgets.QMainWindow):
         self._timer.start(100)  # 10 Hz
 
         # global buttons
-        self.btn_connect.clicked.connect(lambda: self._call(self.backend.call_trigger, self.backend.cli_connect))
-        self.btn_disconnect.clicked.connect(lambda: self._call(self.backend.call_trigger, self.backend.cli_disconnect))
         self.btn_servo_all_on.clicked.connect(lambda: self._call(self.backend.servo_on_all, 1))
         self.btn_servo_all_off.clicked.connect(lambda: self._call(self.backend.servo_on_all, 0))
         self.btn_stop_all.clicked.connect(lambda: self._call(self.backend.stop_all))

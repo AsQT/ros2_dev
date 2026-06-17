@@ -2,6 +2,7 @@ import os
 
 from launch                             import LaunchDescription
 from launch.actions                     import DeclareLaunchArgument
+from launch.conditions                  import IfCondition
 from launch.substitutions               import LaunchConfiguration
 from launch.actions                     import IncludeLaunchDescription
 from launch.launch_description_sources  import PythonLaunchDescriptionSource
@@ -14,6 +15,7 @@ def generate_launch_description():
 
     use_sim_time            = LaunchConfiguration("use_sim_time")
     use_mock                = LaunchConfiguration("use_mock")
+    start_controller_manager = LaunchConfiguration("start_controller_manager")
     pkg_share               = get_package_share_directory("robot_moveit")
     rviz_config_file        = os.path.join(pkg_share, "config", "moveit.rviz")
     robot_description_pkg   = get_package_share_directory("robot_description")
@@ -74,7 +76,8 @@ def generate_launch_description():
                                 "controllers.launch.py"  )   ),
                             launch_arguments={
                                 "use_sim_time": use_sim_time,
-                                "use_mock":     use_mock,           }.items()   )
+                                "use_mock":     use_mock,           }.items(),
+                            condition=IfCondition(start_controller_manager)   )
 
     return LaunchDescription([
                             DeclareLaunchArgument(
@@ -83,6 +86,11 @@ def generate_launch_description():
                             DeclareLaunchArgument(
                                 "use_mock",    default_value="true",
                                 description="Use Mock Hardware ",    ),
+                            DeclareLaunchArgument(
+                                "start_controller_manager",
+                                default_value="true",
+                                description="Start ros2_control controller manager from robot_control",
+                            ),
 
         node_static_tf,
         node_move_group,

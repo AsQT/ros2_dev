@@ -195,3 +195,14 @@ Verify `FRAME_Z_OFFSET = 0.330` matches actual table height.
 ```bash
 ls ~/ros2/src/robot_drl/models/
 ```
+ros2 launch robot_drl drl_mock_hw_obstacle_test.launch.py \
+  execute:=true \
+  case_count:=1 \
+  random_seed:=2 \
+  randomize_obstacle_count:=false \
+  obstacle_count:=1
+
+  ros2 launch robot_drl drl_mock_hw.launch.py \
+  input_mode:=manual \
+  auto_plan_on_start:=true \
+  auto_execute_after_plan:=true
