@@ -8,5 +8,5 @@
     ],
     "C_Cpp.errorSquiggles": "disabled",
     "ROS2.distro": "jazzy",
-    "cmake.sourceDirectory": "/home/minhquang/ros2/src/astra_camera"
+    "cmake.sourceDirectory": "/home/minhquang/ros2_dev/src/robot_bringup"
 }

@@ -1,0 +1,1553 @@
+BÁO CÁO CẤU TRÚC SAC CHO DRL_PATHPLANNING_TRAINNING
+Ngày phân tích: 2026-06-17
+
+Phạm vi và cách truy vết
+- Thư mục được kiểm tra: DRL_Pathplanning_trainning/
+- Config huấn luyện SAC hiện hành: config/environment.yaml.
+- Run SAC mới nhất có model hoàn chỉnh được dùng để đối chiếu metadata/checkpoint:
+  Data/Training/SAC/FRAME_ONLY/run_20260611_185909
+- Không chạy huấn luyện dài, không ghi đè model/checkpoint.
+- Đã chạy runtime introspection nhẹ bằng .venv/Scripts/python.exe để:
+  1. Khởi tạo SAC với đúng environment/config hiện tại.
+  2. Load final_model.zip của run_20260611_185909 ở device=cpu để kiểm tra metadata model.
+  3. Load replay_buffer.pkl để lấy shape thật.
+  4. Chạy một reset() và một step() an toàn trong environment.
+
+Nguồn chính:
+- config/environment.yaml
+- Training/train_sac.py
+- src/drl_pathplanning/gymnasium/cartesian_frame_env.py
+- src/drl_pathplanning/gymnasium/reward.py
+- src/drl_pathplanning/gymnasium/spaces.py
+- src/drl_pathplanning/geometry/collision_geometry.py
+- src/drl_pathplanning/training/sb3_factory.py
+- src/drl_pathplanning/training/env_factory.py
+- src/drl_pathplanning/training/trainer.py
+- src/drl_pathplanning/training/callbacks.py
+- src/drl_pathplanning/training/io.py
+- Data/Training/SAC/FRAME_ONLY/run_20260611_185909/run_info.json
+- Data/Training/SAC/FRAME_ONLY/run_20260611_185909/config.json
+- Data/Training/SAC/FRAME_ONLY/run_20260611_185909/model/best_model_info.json
+- Data/Training/SAC/FRAME_ONLY/run_20260611_185909/replay_buffer.pkl
+- .venv/Lib/site-packages/stable_baselines3/sac/sac.py
+- .venv/Lib/site-packages/stable_baselines3/sac/policies.py
+- .venv/Lib/site-packages/stable_baselines3/common/policies.py
+- .venv/Lib/site-packages/stable_baselines3/common/distributions.py
+- .venv/Lib/site-packages/stable_baselines3/common/buffers.py
+
+1. Tổng quan hệ thống huấn luyện
+
+Mục tiêu của mô hình SAC:
+- Học policy điều khiển một điểm Cartesian 3-D từ vị trí start đến target trong workspace, tránh obstacle dạng AABB.
+- Đây là môi trường frame-only, không phải robot khớp thật.
+
+Robot hoặc môi trường được điều khiển:
+- Project khai báo FRAME_ONLY.
+- Không có robot model, URDF, IK/FK, MoveIt, ROS2.
+- PyBullet chỉ dùng cho visualization tùy chọn, không phải physics/simulation của training.
+- Environment chính: CartesianPathPlanningEnv.
+
+Không gian trạng thái:
+- Observation là Box(-inf, inf, shape=(15,), dtype=float32).
+- Thứ tự ghép:
+  observation = [
+      current_pos,
+      target_pos,
+      err = target_pos - current_pos,
+      rel_obs = (obstacle_center - current_pos) / workspace_range,
+      obs_size = obstacle_half_extent / workspace_range
+  ]
+
+Không gian hành động:
+- Action là Box(-1.0, 1.0, shape=(3,), dtype=float32).
+- Ý nghĩa: delta Cartesian chuẩn hóa theo các trục x, y, z.
+- Môi trường scale vật lý bằng:
+  delta = action * environment.action_step
+  next_pos = current_pos + delta
+- Với config hiện tại: action_step = 0.01 m.
+
+Điều kiện bắt đầu episode:
+- reset() đặt step_count = 0, prev_action = [0,0,0], path_length = 0.
+- Start mode từ config là random.
+- Start sample trong start.random_bounds:
+  min = [0.25, -0.15, 0.1]
+  max = [0.5, 0.15, 0.30]
+- Target mode là random.
+- Obstacle mode là random, size_random.enabled = true.
+
+Điều kiện kết thúc episode:
+- terminated = success OR collision_terminates OR out_of_workspace.
+- success khi distance(target, next_pos) < goal_threshold.
+- collision_terminates chỉ dùng box collision và termination.collision_terminate.
+- out_of_workspace phụ thuộc collision_result == "workspace" và termination.workspace_terminate.
+- truncated khi self._step_count >= max_episode_steps.
+
+Điều kiện thành công:
+- goal_threshold = 0.03 m.
+- success = new_dist < 0.03.
+- Reward success chỉ hợp lệ nếu không collision và không out_of_workspace.
+
+Điều kiện thất bại:
+- Box obstacle collision: terminated nếu termination.collision_terminate = true.
+- Workspace violation: terminated nếu termination.workspace_terminate = true.
+- Timeout: truncated khi vượt max_episode_steps.
+- Không thấy điều kiện NaN/invalid state riêng trong terminated; reward total không finite thì bị gán -1e6.
+
+Luồng dữ liệu tổng quát:
+Environment
+    -> raw observation từ CartesianPathPlanningEnv._build_observation()
+    -> observation preprocessing: chỉ obstacle relative/size được normalize, không VecNormalize
+    -> SAC Actor của Stable-Baselines3
+    -> action trong [-1,1]
+    -> action clipping trong env.step()
+    -> action scaling: delta = action * 0.01 m
+    -> environment step
+    -> next observation, reward, terminated, truncated, info
+    -> replay buffer của SB3
+    -> Actor/Critic/entropy update trong stable_baselines3.sac.sac.SAC.train()
+
+Nguồn:
+- src/drl_pathplanning/__init__.py:5-6, 19-23
+- src/drl_pathplanning/gymnasium/spaces.py:12-15, 19-31, 36-47
+- src/drl_pathplanning/gymnasium/cartesian_frame_env.py:37-39, 81-82, 222-329, 404-565, 578-606
+- config/environment.yaml:26-29, 45-76, 110-113, 188-199
+
+2. Các file liên quan đến SAC
+
+Tên file: Training/train_sac.py
+Vai trò: Entry point huấn luyện SAC từ config/environment.yaml.
+Class chính: Không có.
+Function chính: _parse_args(), main().
+Dữ liệu đầu vào: CLI args, YAML config.
+Dữ liệu đầu ra: Gọi train_sb3_model() để tạo run, train model, save artifacts.
+Nguồn: Training/train_sac.py:92-124
+
+Tên file: Training/train_sac_continue_checkpoint.py
+Vai trò: Continue training SAC từ checkpoint, không load replay buffer cũ.
+Class chính: Không có class môi trường/SAC.
+Function chính: _create_run_dir(), main().
+Dữ liệu đầu vào: checkpoint .zip, config, timesteps, device.
+Dữ liệu đầu ra: run mới, checkpoint/model/replay buffer mới.
+Nguồn: Training/train_sac_continue_checkpoint.py:2-7, 119, 272-295, 357-396
+
+Tên file: src/drl_pathplanning/training/trainer.py
+Vai trò: Pipeline training chung cho SB3.
+Class chính: TimestepProgressCallback.
+Function chính: train_sb3_model(), _print_banner().
+Dữ liệu đầu vào: Config, algorithm, seed, n_envs, vec_env_type.
+Dữ liệu đầu ra: TrainingRun, final_model.zip, replay_buffer.pkl, logs.
+Nguồn: trainer.py:47-180, 213-291, 407-459
+
+Tên file: src/drl_pathplanning/training/sb3_factory.py
+Vai trò: Tạo Stable-Baselines3 model DDPG/SAC/TD3/PPO từ config.
+Class chính: Không có.
+Function chính: create_sb3_model().
+Dữ liệu đầu vào: algorithm, env, algo_cfg, device.
+Dữ liệu đầu ra: stable_baselines3.SAC object.
+Nguồn: sb3_factory.py:19-96, 133-188
+
+Tên file: src/drl_pathplanning/training/env_factory.py
+Vai trò: Tạo env training, Monitor, DummyVecEnv/SubprocVecEnv, seed, curriculum.
+Class chính: EnvOutput.
+Function chính: make_env_fn(), create_training_env(), _seed_all().
+Dữ liệu đầu vào: Config, seed, n_envs, vec_env_type.
+Dữ liệu đầu ra: VecEnv dùng cho SB3.
+Nguồn: env_factory.py:70-115, 121-137, 194, 219-237, 254-330
+
+Tên file: src/drl_pathplanning/gymnasium/cartesian_frame_env.py
+Vai trò: Environment Gymnasium chính, tạo observation/action/reward/terminated/truncated.
+Class chính: CartesianPathPlanningEnv.
+Function chính: reset(), step(), _build_observation(), _sample_start(), _sample_obstacle_center(), _sample_obstacle_size().
+Dữ liệu đầu vào: action np.ndarray shape=(3,), config.
+Dữ liệu đầu ra: obs, reward, terminated, truncated, info.
+Nguồn: cartesian_frame_env.py:39, 81-152, 222-329, 404-565, 578-721
+
+Tên file: src/drl_pathplanning/gymnasium/reward.py
+Vai trò: Reward calculator.
+Class chính: RewardCalculator.
+Function chính: compute().
+Dữ liệu đầu vào: prev_pos, current_pos, target_pos, action, success/collision/workspace/timeout flags.
+Dữ liệu đầu ra: total reward và reward_components.
+Nguồn: reward.py:17-29, 47-139
+
+Tên file: src/drl_pathplanning/gymnasium/spaces.py
+Vai trò: Khai báo observation/action dimension và Gymnasium Box spaces.
+Class chính: Không có.
+Function chính: make_action_space(), make_observation_space().
+Dữ liệu đầu vào: Không có.
+Dữ liệu đầu ra: gymnasium.spaces.Box.
+Nguồn: spaces.py:12-47
+
+Tên file: src/drl_pathplanning/geometry/collision_geometry.py
+Vai trò: Geometry AABB, workspace, table, obstacle collision, obstacle observation normalization.
+Class chính: GeometryCollisionChecker, CollisionResult.
+Function chính: validate_workspace(), check_point_in_box(), check_segment_intersects_box(), normalize_obstacle_info(), check().
+Dữ liệu đầu vào: current_pos, next_pos, obstacle/table/workspace geometry.
+Dữ liệu đầu ra: CollisionResult hoặc normalized obstacle features.
+Nguồn: collision_geometry.py:132-145, 225-334
+
+Tên file: src/drl_pathplanning/training/target_provider.py
+Vai trò: Sinh target random/static/fixed.
+Class chính: TargetProvider.
+Function chính: get_target(), _sample_random(), get_target_region_corners().
+Dữ liệu đầu vào: target bounds, rng, mode.
+Dữ liệu đầu ra: target_pos shape=(3,).
+Nguồn: target_provider.py:31, 78, 170-195, 246-271
+
+Tên file: src/drl_pathplanning/training/callbacks.py
+Vai trò: Logging, eval best model, checkpoint, termination stats.
+Class chính: EpisodeCallback, TerminationStatsCallback, EvalBestModelCallback, SaveCheckpointCallback.
+Function chính: _on_step(), _run_eval().
+Dữ liệu đầu vào: SB3 locals, infos, dones, model.
+Dữ liệu đầu ra: progress logs, best_model.zip, checkpoint_t*.zip.
+Nguồn: callbacks.py:32-93, 347-386, 687-879, 987-1019
+
+Tên file: src/drl_pathplanning/training/io.py
+Vai trò: Save/load artifacts.
+Class chính: Không có.
+Function chính: save_final_model(), save_replay_buffer(), load_replay_buffer(), save_full_config_snapshots().
+Dữ liệu đầu vào: model, run_dir, config.
+Dữ liệu đầu ra: final_model.zip, replay_buffer.pkl, config snapshots, run_info.json.
+Nguồn: io.py:21, 125, 149, 178, 424
+
+Tên file: Evaluation/predict_model_sac.py
+Vai trò: Evaluation/inference script cho SAC.
+Class chính: Không có.
+Function chính: main().
+Dữ liệu đầu vào: run/model/config, deterministic flag.
+Dữ liệu đầu ra: prediction metrics/trajectories.
+Nguồn: predict_model_sac.py:40, 100-143, 155-167
+
+Tên file: Evaluation/predict_common.py
+Vai trò: Helpers đánh giá model, tạo env eval, chạy random/static episodes.
+Class chính: Không có.
+Function chính: resolve_model_path(), create_eval_env(), run_random_episodes(), run_static_episodes().
+Dữ liệu đầu vào: model, env, cfg, num_episodes.
+Dữ liệu đầu ra: results list, CSV/JSON trajectory.
+Nguồn: predict_common.py:49, 83, 126-173, 225-261
+
+Tên file: requirements.txt
+Vai trò: Pin framework versions.
+Class chính: Không có.
+Function chính: Không có.
+Dữ liệu đầu vào/ra: dependency list.
+Nguồn: requirements.txt:21-25, 31, 37, 48, 54
+
+3. Framework và implementation SAC
+
+SAC được dùng từ thư viện, không tự cài đặt trong project.
+- Class: stable_baselines3.SAC.
+- Policy config: MlpPolicy.
+- Policy class runtime: SACPolicy.
+- Actor runtime class: Actor.
+- Critic runtime class: ContinuousCritic.
+- Action distribution: SquashedDiagGaussianDistribution.
+
+Phiên bản thư viện:
+- requirements.txt: stable-baselines3==2.3.0, gymnasium==0.29.1, torch==2.2.2+cu121, numpy==1.26.4.
+- Runtime .venv kiểm tra được: stable-baselines3 2.3.0, gymnasium 0.29.1, torch 2.2.2+cu121, numpy 1.26.4.
+
+Device:
+- config/environment.yaml đặt training.device = cuda.
+- trainer.py thực tế chọn device = "cuda" nếu torch.cuda.is_available() else "cpu".
+- run_20260611_185909/run_info.json ghi device = cuda.
+- Runtime introspection hiện tại phát hiện CUDA available = true, GPU = NVIDIA RTX 2000 Ada Generation.
+- Khi load model để phân tích, model được load device=cpu để không huấn luyện và không ghi đè checkpoint.
+
+Kiểu tensor:
+- Observation/action env dtype: np.float32.
+- Torch default dtype runtime: torch.float32.
+- Replay buffer sample dtype: torch.float32.
+
+Seed:
+- config/environment.yaml: seed = 42.
+- run_info.json: seed = 42.
+- env_factory._seed_all seed Python, NumPy, Torch, CUDA.
+
+Số environment song song:
+- config: training.n_envs = 28.
+- vec_env_type = auto.
+- env_factory: auto chọn DummyVecEnv nếu n_envs==1, SubprocVecEnv nếu n_envs>1.
+- Vì n_envs=28, training hiện tại dùng SubprocVecEnv, trừ khi GUI mode ép n_envs=1.
+
+Vectorized env và normalization:
+- Có Monitor wrapper.
+- Có SubprocVecEnv cho training hiện tại.
+- VecNormalize bị tắt có chủ ý; không normalize observation/reward bằng running mean/variance.
+
+Nguồn:
+- config/environment.yaml:188-199, 239-252
+- run_info.json:2, 11-16
+- env_factory.py:8, 70-115, 121-137, 194, 230-237, 318-330
+- trainer.py:213
+- sb3_factory.py:19-96, 133-188
+- requirements.txt:21-25, 31, 37
+
+4. Cấu trúc toàn bộ mạng neural trong SAC
+
+Thông số chung:
+- observation_dim = 15.
+- action_dim = 3.
+- policy_kwargs.net_arch = [256, 256].
+- activation_fn runtime: ReLU theo default của SB3 Actor/ContinuousCritic.
+- Feature extractor: FlattenExtractor, không có tham số.
+- Không thấy LayerNorm, BatchNorm, Dropout trong actor/critic hiện tại.
+- Weight init riêng trong project: Không xác định được từ mã nguồn hiện tại.
+  Cần kiểm tra torch.nn.Linear.reset_parameters nếu muốn mô tả default init của PyTorch.
+
+4.1 Actor network
+
+Tên mạng: Actor
+Vai trò: Nhận observation 15-D và sinh action phân phối Gaussian squashed bằng tanh.
+Input dimension: 15
+Output dimension: 3 action
+
+Layer feature extractor:
+- Loại layer: FlattenExtractor
+- Input: [batch_size, 15]
+- Output: [batch_size, 15]
+- Số neuron: không có
+- Activation: không có
+- Bias: không có
+- Tham số: 0
+
+Layer 1:
+- Loại layer: Linear
+- Input: 15
+- Output: 256
+- Weight matrix: [256, 15]
+- Bias vector: [256]
+- Số tham số: 256*15 + 256 = 4096
+- Activation sau layer: ReLU
+- Có bias: có
+
+Layer 2:
+- Loại layer: Linear
+- Input: 256
+- Output: 256
+- Weight matrix: [256, 256]
+- Bias vector: [256]
+- Số tham số: 256*256 + 256 = 65792
+- Activation sau layer: ReLU
+- Có bias: có
+
+Mean head:
+- Loại layer: Linear
+- Input: 256
+- Output: 3
+- Weight matrix: [3, 256]
+- Bias vector: [3]
+- Số tham số: 3*256 + 3 = 771
+
+Log_std head:
+- Loại layer: Linear
+- Input: 256
+- Output: 3
+- Weight matrix: [3, 256]
+- Bias vector: [3]
+- Số tham số: 3*256 + 3 = 771
+
+Tổng Actor parameters: 71430.
+
+4.2 Critic Q1 network
+
+Tên mạng: Critic Q1
+Vai trò: Ước lượng Q(s,a).
+Input dimension: observation_dim + action_dim = 15 + 3 = 18
+Output dimension: 1
+
+Layer 1:
+- Linear(18 -> 256)
+- Weight matrix: [256, 18]
+- Bias vector: [256]
+- Số tham số: 256*18 + 256 = 4864
+- Activation: ReLU
+- Có bias: có
+
+Layer 2:
+- Linear(256 -> 256)
+- Weight matrix: [256, 256]
+- Bias vector: [256]
+- Số tham số: 256*256 + 256 = 65792
+- Activation: ReLU
+- Có bias: có
+
+Output layer:
+- Linear(256 -> 1)
+- Weight matrix: [1, 256]
+- Bias vector: [1]
+- Số tham số: 1*256 + 1 = 257
+
+Tổng Q1 parameters: 70913.
+
+4.3 Critic Q2 network
+
+Q2 có kiến trúc giống Q1 nhưng là module qf1 độc lập, không share weight với qf0.
+Tổng Q2 parameters: 70913.
+Tổng Critic online parameters: 141826.
+
+4.4 Target Critic Q1/Q2
+
+Target Critic gồm 2 Q-network có kiến trúc y hệt online critic.
+- Target Q1 parameters: 70913.
+- Target Q2 parameters: 70913.
+- Tổng Critic target parameters: 141826.
+- Target critic được cập nhật bằng Polyak update:
+  target_param = (1 - tau) * target_param + tau * param
+- tau = 0.005.
+- target_update_interval = 1 theo SB3 default và runtime loaded model.
+
+4.5 Entropy coefficient
+
+- ent_coef config = auto.
+- SB3 tạo log_ent_coef shape=[1], requires_grad=True.
+- target_entropy runtime = -3.0, vì action_dim=3 và target_entropy="auto".
+- Optimizer: Adam lr=0.0003, eps=1e-08, weight_decay=0.
+- Biến này là 1 scalar trainable ngoài policy network.
+
+4.6 MLP và "kernel"
+
+Mạng hiện tại là MLP dùng Linear/FullyConnected.
+- Không có convolution kernel như CNN.
+- Mỗi Linear layer dùng ma trận trọng số [out_features, in_features] và bias [out_features].
+- Không có Conv2d, kernel_size, stride, padding, input/output channel.
+
+4.7 Tổng số tham số
+
+Theo runtime introspection:
+- Actor: 71430
+- Critic online Q1+Q2: 141826
+- Critic target Q1+Q2: 141826
+- log_ent_coef: 1
+- Policy registered parameters gồm actor + critic + critic_target: 355082
+- Effective optimizer-managed trainable parameters:
+  Actor + Critic online + log_ent_coef = 71430 + 141826 + 1 = 213257
+- Tổng parameters kể cả target + log_ent_coef = 355082 + 1 = 355083
+
+Lưu ý:
+- Runtime cho thấy critic_target parameters vẫn requires_grad=True trong PyTorch, nhưng target network không nằm trong optimizer; nó chỉ được cập nhật bởi polyak_update.
+
+Nguồn:
+- Runtime introspection bằng .venv
+- config/environment.yaml:239-252
+- sb3_factory.py:81-96, 133-188
+- stable_baselines3/sac/policies.py:21-22, 50-103, 147-175
+- stable_baselines3/common/policies.py:912-977
+- stable_baselines3/sac/sac.py:103-188, 199-298
+- stable_baselines3/common/utils.py:447-471
+
+5. Actor network
+
+Actor nhận observation vector 15-D:
+- Không phải Dict observation.
+- Không có image/CNN.
+- FlattenExtractor giữ vector phẳng.
+- Input tensor ví dụ: [batch_size, 15].
+
+Actor tạo:
+- mean_actions shape [batch_size, 3]
+- log_std shape [batch_size, 3]
+- log_std bị clamp trong SB3:
+  LOG_STD_MIN = -20
+  LOG_STD_MAX = 2
+
+Phân phối:
+- Nếu use_sde=false, actor dùng SquashedDiagGaussianDistribution.
+- u được sample từ Gaussian bằng reparameterization trick.
+- action = tanh(u).
+- log probability có correction sau tanh:
+  log_prob -= sum(log(1 - action^2 + epsilon))
+- epsilon của SquashedDiagGaussianDistribution default = 1e-6.
+
+Công thức:
+u = mean + std * epsilon
+a = tanh(u)
+
+Action sau Actor:
+- Nằm trong [-1, 1] từng chiều do tanh.
+- Vì env action_space cũng [-1,1], SB3 không cần scale thêm về biên khác.
+- env.step() vẫn clip action vào [-1,1].
+- Delta vật lý = action * 0.01 m.
+
+Ý nghĩa action:
+- action[0] = delta x chuẩn hóa, scale vật lý tối đa +/-0.01 m mỗi step.
+- action[1] = delta y chuẩn hóa, scale vật lý tối đa +/-0.01 m mỗi step.
+- action[2] = delta z chuẩn hóa, scale vật lý tối đa +/-0.01 m mỗi step.
+- Không phải delta joint position, joint velocity, absolute joint position, IK, MoveIt, Gazebo hay mock hardware.
+
+Shape ví dụ:
+- Observation batch: [batch_size, 15]
+- Actor hidden layer 1: [batch_size, 256]
+- Actor hidden layer 2: [batch_size, 256]
+- Mean: [batch_size, 3]
+- Log std: [batch_size, 3]
+- Sampled action: [batch_size, 3]
+
+Nguồn:
+- spaces.py:12-15, 19-31, 36-47
+- cartesian_frame_env.py:37-39, 404-409
+- stable_baselines3/sac/policies.py:21-22, 84-103, 147-175
+- stable_baselines3/common/distributions.py:207-260
+
+6. Critic network
+
+Critic nhận observation và action:
+- Observation được extract feature bằng FlattenExtractor: [batch_size, 15].
+- Action shape: [batch_size, 3].
+- ContinuousCritic concatenate tại forward():
+  qvalue_input = cat([features, actions], dim=1)
+- critic_input_dim = 15 + 3 = 18.
+
+Output:
+- Q1 output: [batch_size, 1].
+- Q2 output: [batch_size, 1].
+- Q1 và Q2 kiến trúc giống nhau nhưng độc lập tham số.
+
+Double Q-learning:
+- Target dùng min(target_q1, target_q2).
+- Actor loss cũng dùng min(Q1,Q2).
+
+Target Q-value theo SB3:
+target_q =
+    reward
+  + (1 - done) * gamma *
+    (min(target_q1(next_obs,next_action), target_q2(next_obs,next_action))
+     - alpha * next_log_prob)
+
+Discount và target update:
+- gamma = 0.99.
+- tau = 0.005.
+- target_update_interval = 1.
+
+Terminated/truncated trong target:
+- ReplayBuffer sample trả dones đã nhân với (1 - timeouts) nếu handle_timeout_termination=True.
+- Vì replay buffer lưu TimeLimit.truncated nếu info có key đó; env hiện không tự set key "TimeLimit.truncated".
+- Nếu SB3 VecEnv/Monitor thêm TimeLimit.truncated thì timeout không bootstrap-cut; nếu không, truncated có thể nằm trong done theo wrapper. Cần kiểm tra actual infos trong vectorized wrapper để xác định tuyệt đối.
+
+Nguồn:
+- stable_baselines3/common/policies.py:912-977
+- stable_baselines3/sac/sac.py:245-285
+- stable_baselines3/common/buffers.py:157-227, 253-324
+- Runtime introspection replay buffer
+
+7. Entropy coefficient
+
+Cấu hình hiện tại:
+- ent_coef = auto.
+- target_entropy = auto trong YAML.
+- Runtime SB3 đặt target_entropy = -3.0 vì action_dim=3.
+- log_ent_coef shape = [1], initial value theo SB3 khi auto là log(1.0)=0.0.
+- Optimizer alpha: Adam lr=0.0003, eps=1e-08, weight_decay=0.
+
+Loss alpha theo implementation:
+ent_coef_loss =
+    -mean(log_ent_coef * detach(log_prob + target_entropy))
+
+Quan hệ exploration:
+- alpha = exp(log_ent_coef).
+- Alpha cao làm actor ưu tiên entropy hơn, action stochastic hơn.
+- Alpha thấp làm policy thiên về Q-value hơn.
+- Đây không phải mô tả lý thuyết trừu tượng: config đang dùng auto và runtime có log_ent_coef trainable.
+
+Nguồn:
+- config/environment.yaml:249-250
+- stable_baselines3/sac/sac.py:148-188, 225-243
+- Runtime introspection
+
+8. Cấu trúc observation
+
+Observation vector shape=(15,), dtype=float32.
+
+Thứ tự concatenate:
+observation = [
+    current_pos,   # index 0-2
+    target_pos,    # index 3-5
+    err,           # index 6-8
+    rel_obs,       # index 9-11
+    obs_size       # index 12-14
+]
+
+Bảng index:
+Index       Thành phần                         Số chiều
+0-2         current_pos [x,y,z]                 3
+3-5         target_pos [x,y,z]                  3
+6-8         err = target_pos - current_pos      3
+9-11        rel_obs                             3
+12-14       obs_size                            3
+Tổng observation dimension: 15
+
+Chi tiết từng thành phần:
+
+Tên thành phần: current_pos
+Nguồn dữ liệu: self._current_pos trong environment.
+File/function: cartesian_frame_env.py, reset(), step(), _build_observation().
+Số chiều: 3.
+Đơn vị gốc: mét.
+Khoảng vật lý: trong workspace [0.25,0.5], [-0.15,0.15], [0.02,0.3] khi hợp lệ.
+Cách chuẩn hóa: không chuẩn hóa.
+Khoảng sau chuẩn hóa: giữ nguyên mét.
+Ý nghĩa tránh vật cản: vị trí hiện tại của điểm agent.
+
+Tên thành phần: target_pos
+Nguồn dữ liệu: TargetProvider.
+File/function: target_provider.py, _sample_random(), get_target().
+Số chiều: 3.
+Đơn vị gốc: mét.
+Khoảng vật lý config target random_bounds: x [0.25,0.5], y [-0.15,0.15], z [0.02,0.15].
+Cách chuẩn hóa: không chuẩn hóa.
+Khoảng sau chuẩn hóa: giữ nguyên mét.
+Ghi chú quan trọng: random target z bị code ép thành 0.10, không dùng toàn bộ z range trong config.
+Ý nghĩa tránh vật cản: mục tiêu cuối cần tới.
+
+Tên thành phần: err
+Nguồn dữ liệu: self._target_pos - self._current_pos.
+File/function: cartesian_frame_env.py:_build_observation().
+Số chiều: 3.
+Đơn vị gốc: mét.
+Khoảng vật lý: chênh lệch target-current; phụ thuộc workspace và target.
+Cách chuẩn hóa: không chuẩn hóa.
+Khoảng sau chuẩn hóa: giữ nguyên mét.
+Ý nghĩa tránh vật cản: vector hướng tới goal.
+
+Tên thành phần: rel_obs
+Nguồn dữ liệu: normalize_obstacle_info().
+File/function: collision_geometry.py:normalize_obstacle_info().
+Số chiều: 3.
+Đơn vị gốc: không thứ nguyên sau normalize.
+Công thức:
+rel_obs = (obstacle_center - current_pos) / workspace_range
+workspace_range = [0.25, 0.30, 0.28]
+Khoảng sau chuẩn hóa: phụ thuộc vị trí obstacle/current; thường cỡ [-1,1] nhưng không bị clip.
+Ý nghĩa tránh vật cản: vector tương đối từ agent tới obstacle.
+
+Tên thành phần: obs_size
+Nguồn dữ liệu: normalize_obstacle_info().
+File/function: collision_geometry.py:normalize_obstacle_info().
+Số chiều: 3.
+Đơn vị gốc: không thứ nguyên sau normalize.
+Công thức:
+obs_size = obstacle_half_extent / workspace_range
+Ghi chú: docstring env nói "box_size", nhưng code thực tế dùng half_extent.
+Khoảng từ config size_random:
+- size_x [0.05,0.10] -> half_x [0.025,0.05] -> normalized x [0.10,0.20]
+- size_y [0.05,0.10] -> half_y [0.025,0.05] -> normalized y [0.0833,0.1667]
+- size_z [0.05,0.15] -> half_z [0.025,0.075] -> normalized z [0.0893,0.2679]
+Ý nghĩa tránh vật cản: kích thước obstacle tương đối.
+
+Các thành phần không tồn tại trong observation hiện tại:
+- Joint position: Không xác định được từ mã nguồn hiện tại vì project FRAME_ONLY, không có joint.
+- Joint velocity: Không xác định được từ mã nguồn hiện tại.
+- TCP orientation/quaternion: Không có.
+- Goal orientation: Không có.
+- Khoảng cách scalar tới goal: không nằm trong observation, chỉ có trong info.
+- Collision flag: không nằm trong observation.
+- Previous action: không nằm trong observation.
+- Step progress: không nằm trong observation.
+- Distance từng link tới obstacle: không có link robot.
+
+Nguồn:
+- spaces.py:12-15, 36-47
+- cartesian_frame_env.py:578-606
+- collision_geometry.py:132-145
+- target_provider.py:170-195
+
+9. Chuẩn hóa dữ liệu observation
+
+Pipeline thực tế:
+Raw environment data
+-> unit conversion: không thấy đổi đơn vị, toàn bộ dùng mét
+-> clipping: không clip observation
+-> partial normalization: chỉ obstacle relative/half_extent chia workspace_range
+-> concatenate np.float32 vector
+-> vectorized environment SubprocVecEnv
+-> PyTorch tensor float32 trong SB3
+-> neural network
+
+Không có:
+- Đổi degree sang radian.
+- Joint limit normalization.
+- Cartesian position normalization cho current_pos/target_pos/err.
+- Quaternion normalization.
+- Running mean/variance.
+- VecNormalize.
+- File normalization statistics khi save model.
+- Load normalization statistics khi inference.
+
+Công thức từng thành phần:
+- current_pos_norm = current_pos. Thành phần này hiện đang được đưa trực tiếp vào mạng, chưa chuẩn hóa.
+- target_pos_norm = target_pos. Thành phần này hiện đang được đưa trực tiếp vào mạng, chưa chuẩn hóa.
+- err_norm = target_pos - current_pos. Thành phần này hiện đang được đưa trực tiếp vào mạng, chưa chuẩn hóa.
+- rel_obs = (obstacle_center - current_pos) / workspace_range.
+- obs_size = obstacle_half_extent / workspace_range.
+
+Đánh giá rủi ro:
+Hiện trạng:
+- Một phần observation là mét raw, một phần là normalized obstacle feature.
+Rủi ro:
+- Scale không hoàn toàn đồng nhất; tuy các giá trị đều nhỏ cỡ 0.01-1.0 trong config hiện tại, policy vẫn phải tự học scale.
+Đề xuất:
+- Thêm observation normalization nhất quán hoặc VecNormalize có lưu/freeze stats khi inference.
+Mức ưu tiên: Trung bình.
+
+Nguồn:
+- env_factory.py:8, 237
+- cartesian_frame_env.py:578-606
+- collision_geometry.py:132-145
+- Evaluation/predict_model_sac.py:118
+
+10. Cấu trúc action
+
+Action dimension: 3.
+Action space Gymnasium:
+- Box(low=-1.0, high=1.0, shape=(3,), dtype=float32).
+
+Dữ liệu Actor xuất ra:
+- SB3 Actor xuất action sau tanh trong [-1,1].
+- Với deterministic=True, dùng mode của distribution rồi tanh.
+- Với training, sample stochastic.
+
+Unscale/action physical:
+- env.step() clip action vào action_space.
+- delta = action * action_step.
+- action_step = 0.01 m.
+- next_pos = current_pos + delta.
+
+Bảng action:
+Action index   Ý nghĩa   Khoảng RL   Hệ số scale   Đơn vị vật lý
+0              dx        [-1,1]      0.01          m/step
+1              dy        [-1,1]      0.01          m/step
+2              dz        [-1,1]      0.01          m/step
+
+Giới hạn joint/velocity:
+- Không có joint limit hoặc velocity limit vì không có robot joint.
+- Không có FK/IK/MoveIt/Gazebo.
+- Action được gửi trực tiếp tới mô hình điểm Cartesian nội bộ.
+
+Action vượt giới hạn:
+- Bị np.clip(action, low, high) trong env.step().
+
+Nguồn:
+- spaces.py:12-31
+- cartesian_frame_env.py:37-39, 404-409
+- config/environment.yaml:26-29
+
+11. Hàm phần thưởng
+
+Công thức tổng quát đúng với implementation:
+R_total =
+    R_success
+  + R_collision
+  + R_distance
+  + R_workspace
+  + R_episode
+  + R_time
+  + R_shake
+
+Trong đó:
+- d_t = ||target_pos - current_pos||
+- valid_success = is_success and not is_collision and not is_out_of_workspace
+- R_success = +20.0 nếu valid_success, ngược lại 0
+- R_collision = -300.0 nếu is_collision, ngược lại 0
+- R_workspace = -300.0 nếu is_out_of_workspace, ngược lại 0
+- R_episode = -50.0 nếu is_timeout, ngược lại 0
+- R_distance = -1.5 * d_t
+- R_time = 0.0 vì time_penalty = 0.0
+- R_shake = -0.005 nếu action hiện tại đổi hướng so với action trước:
+  norm_prod > 1e-6 và dot(action, prev_action)/norm_prod < 0.0
+
+Bảng reward components:
+
+Tên: Distance-to-goal reward
+Công thức: R_distance = -distance_scale * ||target-current||
+Hệ số: distance_scale = 1.5
+Điều kiện áp dụng: mọi step
+Khoảng giá trị: trong workspace hợp lệ xấp xỉ [-(1.5*sqrt(0.25^2+0.30^2+0.28^2)), 0] = [-0.721,0], có thể khác nếu out-of-workspace.
+Ý nghĩa: kéo agent gần target.
+File/dòng code: reward.py:74-87
+
+Tên: Progress reward
+Công thức: Không có trong implementation.
+Hệ số: Không xác định được từ mã nguồn hiện tại.
+Điều kiện áp dụng: Không áp dụng.
+Ghi chú: info có prev_distance/distance nhưng reward không dùng previous_distance - current_distance.
+
+Tên: Success bonus
+Công thức: +success_bonus nếu success và không collision/out_of_workspace.
+Hệ số: +20.0
+Điều kiện áp dụng: valid_success.
+Khoảng giá trị: 0 hoặc +20.
+File/dòng code: reward.py:77-80, config/environment.yaml:142
+
+Tên: Collision penalty
+Công thức: -collision_penalty nếu is_collision.
+Hệ số: -300.0
+Điều kiện áp dụng: env truyền is_collision=box_or_table_collision, nhưng code thực tế chỉ box collision.
+Khoảng giá trị: 0 hoặc -300.
+File/dòng code: reward.py:80, cartesian_frame_env.py:461-470, config/environment.yaml:143
+
+Tên: Obstacle proximity penalty
+Công thức: Không có.
+Hệ số: Không xác định được từ mã nguồn hiện tại.
+Điều kiện áp dụng: Không áp dụng.
+
+Tên: Joint limit penalty
+Công thức: Không có vì không có joint.
+Hệ số: Không xác định được từ mã nguồn hiện tại.
+
+Tên: Action magnitude penalty
+Công thức: Không có explicit ||action|| penalty.
+Hệ số: Không xác định được từ mã nguồn hiện tại.
+
+Tên: Action smoothness/shake penalty
+Công thức:
+cos = dot(action, prev_action) / (||action||*||prev_action||)
+R_shake = -0.005 nếu cos < 0.0 và norm_prod > 1e-6
+Hệ số: shake_penalty_scale = 0.005
+Điều kiện áp dụng: có action_history.
+Khoảng giá trị: 0 hoặc -0.005 mỗi step.
+File/dòng code: reward.py:92-112, config/environment.yaml:154-157
+
+Tên: Time-step penalty
+Công thức: R_time = -time_penalty nếu time_penalty > 0 else 0
+Hệ số: time_penalty = 0.0
+Điều kiện áp dụng: không tạo penalty với config hiện tại.
+Khoảng giá trị: 0.
+File/dòng code: reward.py:89-90, config/environment.yaml:151
+
+Tên: Timeout penalty
+Công thức: R_episode = -timeout_penalty nếu is_timeout.
+Hệ số: -50.0
+Điều kiện áp dụng: truncated.
+Khoảng giá trị: 0 hoặc -50.
+File/dòng code: reward.py:83-84, config/environment.yaml:145
+
+Tên: Orientation error reward/penalty
+Công thức: Không có.
+Hệ số: Không xác định được từ mã nguồn hiện tại.
+
+Tên: Path length penalty
+Công thức: Không có reward term riêng. Path length chỉ dùng info/path_efficiency.
+Hệ số: Không xác định được từ mã nguồn hiện tại.
+
+Tên: End-effector velocity penalty
+Công thức: Không có.
+Hệ số: Không xác định được từ mã nguồn hiện tại.
+
+Tên: Self-collision penalty
+Công thức: Không có robot/link/self-collision.
+Hệ số: Không xác định được từ mã nguồn hiện tại.
+
+Nguồn:
+- reward.py:47-139
+- cartesian_frame_env.py:461-473, 487-565
+- config/environment.yaml:140-157
+
+12. Điều kiện terminated và truncated
+
+Terminated:
+- Goal reached: success = new_dist < goal_threshold.
+- Collision: chỉ box collision nếu termination.collision_terminate = true.
+- Workspace violation: collision_type == "workspace" và workspace_terminate = true.
+- Invalid state: Không xác định được từ mã nguồn hiện tại.
+- Joint limit violation: không có joint.
+- NaN: không có termination riêng.
+
+Truncated:
+- truncated = self._step_count >= max_episode_steps.
+- max_episode_steps = 300.
+- Lưu ý kỹ thuật: điều kiện truncated được tính trước khi self._step_count += 1. Vì vậy episode có thể trả truncated ở step gọi kế tiếp sau khi đã đạt 300, cần test thêm với VecEnv để xác nhận số step thực tế.
+
+Thứ tự ưu tiên termination_reason:
+1. success
+2. collision
+3. workspace_limit
+4. max_steps
+5. none
+
+Ảnh hưởng tới target Q-value:
+- SB3 dùng replay_data.dones trong target_q.
+- ReplayBuffer có cơ chế timeouts nếu info chứa "TimeLimit.truncated".
+- Env hiện trả truncated bool nhưng không tự ghi "TimeLimit.truncated" vào info.
+
+Nguồn:
+- cartesian_frame_env.py:428-459, 475-485
+- stable_baselines3/common/buffers.py:276-321
+
+13. Replay buffer
+
+Kiểu replay buffer:
+- stable_baselines3.common.buffers.ReplayBuffer.
+- Không dùng prioritized replay.
+- Không dùng HER.
+- optimize_memory_usage = false.
+- handle_timeout_termination = true.
+
+Buffer config:
+- buffer_size argument = 1000000.
+- batch_size = 256.
+- learning_starts = 10000.
+- train_freq = 1 step.
+- gradient_steps = 1.
+
+Replay buffer thật từ run_20260611_185909/replay_buffer.pkl:
+- class: ReplayBuffer
+- n_envs: 28
+- internal buffer_size per env: 35714
+- full: true
+- pos: 15
+- obs_shape: [15]
+- action_dim: 3
+- observations_shape: [35714, 28, 15]
+- next_observations_shape: [35714, 28, 15]
+- actions_shape: [35714, 28, 3]
+- rewards_shape: [35714, 28]
+- dones_shape: [35714, 28]
+- timeouts_shape: [35714, 28]
+
+Batch sample thật từ replay_buffer.pkl:
+- observations: [256, 15]
+- actions: [256, 3]
+- next_observations: [256, 15]
+- dones: [256, 1]
+- rewards: [256, 1]
+- device khi sample: cuda:0
+- dtype: torch.float32
+
+Dữ liệu lưu:
+- observation
+- action
+- reward
+- next observation
+- done
+- timeout
+
+Sampling method:
+- Uniform random batch indices theo SB3 ReplayBuffer.sample().
+
+Nguồn:
+- config/environment.yaml:241-248
+- stable_baselines3/common/buffers.py:157-227, 253-324
+- Runtime load replay_buffer.pkl
+
+14. Hyperparameter SAC
+
+Tên tham số                  Giá trị                                           Nguồn
+policy                       MlpPolicy                                         config/environment.yaml:240
+learning_rate                0.0003                                            config/environment.yaml:241
+buffer_size                  1000000                                           config/environment.yaml:242
+learning_starts              10000                                             config/environment.yaml:243
+batch_size                   256                                               config/environment.yaml:244
+tau                          0.005                                             config/environment.yaml:245
+gamma                        0.99                                              config/environment.yaml:246
+train_freq                   1 step                                            config/environment.yaml:247, runtime loaded model
+gradient_steps               1                                                 config/environment.yaml:248
+action_noise                 None cho SAC                                      sb3_factory.py chỉ action_noise cho DDPG/TD3
+replay_buffer_class          ReplayBuffer                                      SB3 default/runtime
+optimize_memory_usage        false                                             runtime ReplayBuffer
+ent_coef                     auto                                              config/environment.yaml:249
+target_update_interval       1                                                 SB3 default/runtime loaded model
+target_entropy               auto -> -3.0 runtime                              config/environment.yaml:250, SB3 runtime
+use_sde                      false                                             runtime loaded policy_kwargs
+sde_sample_freq              -1 default SB3                                    stable_baselines3/sac/sac.py:109-110
+policy_kwargs                net_arch=[256,256]                                config/environment.yaml:251-252
+seed                         42                                                config/run_info
+device                       cuda khi training                                 run_info.json:12
+n_envs                       28                                                config/run_info
+vec_env_type                 auto -> SubprocVecEnv                             env_factory.py:230-235
+total_timesteps              50000000                                          config/run_info
+eval_freq                    50000                                             config/environment.yaml:198
+save_freq                    25000                                             config/environment.yaml:199
+log_interval                 50                                                config/environment.yaml:196
+episode_log_interval         10                                                config/environment.yaml:197
+
+Learning rate schedule:
+- Project truyền learning_rate dạng float 0.0003.
+- SB3 dùng lr_schedule nội bộ hằng số tương ứng.
+
+Nguồn:
+- config/environment.yaml:188-199, 239-252
+- run_info.json:2-16
+- sb3_factory.py:81-96, 133-188
+- Runtime loaded final_model.zip
+
+15. Optimizer và loss function
+
+Optimizer:
+- Actor optimizer: Adam, lr=0.0003, eps=1e-08, weight_decay=0.
+- Critic optimizer: Adam, lr=0.0003, eps=1e-08, weight_decay=0.
+- Entropy coefficient optimizer: Adam, lr=0.0003, eps=1e-08, weight_decay=0.
+
+Critic loss theo SB3:
+critic_loss =
+0.5 * [
+    MSE(Q1(obs, action), target_q)
+  + MSE(Q2(obs, action), target_q)
+]
+
+Actor loss theo SB3:
+actor_loss =
+mean(alpha * log_prob - min(Q1(obs, action_pi), Q2(obs, action_pi)))
+
+Entropy coefficient loss:
+ent_coef_loss =
+-mean(log_ent_coef * detach(log_prob + target_entropy))
+
+Thứ tự update trong SB3 train():
+1. Sample replay buffer.
+2. Actor sinh actions_pi/log_prob cho replay observations.
+3. Tính/update ent_coef nếu auto.
+4. Tính target_q bằng target critic.
+5. Update critic.
+6. Tính actor_loss.
+7. Update actor.
+8. Polyak update critic_target nếu gradient_step % target_update_interval == 0.
+
+Freeze critic khi update actor:
+- Không thấy SB3 freeze critic parameters bằng requires_grad_(False) trong đoạn train SAC hiện tại.
+- Actor loss backprop qua critic computation, nhưng optimizer step chỉ actor.optimizer; critic gradients có thể tồn tại nhưng bị zero trước critic update ở vòng sau.
+
+Gradient clipping:
+- Không thấy gradient clipping trong SAC train() hiện tại.
+
+Nguồn:
+- stable_baselines3/sac/sac.py:199-298
+- Runtime introspection optimizers
+
+16. Quá trình huấn luyện
+
+1. Reset environment
+- Custom env CartesianPathPlanningEnv.reset().
+
+2. Sinh start state
+- _sample_start(), random từ start.random_bounds, reject table/obstacle theo geometry hiện có.
+
+3. Sinh goal
+- _resolve_target() -> TargetProvider.get_target().
+- Random target z bị ép 0.10.
+
+4. Sinh obstacle
+- _sample_obstacle_size() rồi _sample_obstacle_center().
+- Obstacle z = table_top_z + size_z/2.
+- Có resample obstacle nếu target nằm trong inflated AABB.
+
+5. Tạo observation
+- _build_observation().
+
+6. Actor lấy action
+- SB3 SAC Actor.
+
+7. Environment thực hiện action
+- env.step(): clip, scale, update current_pos.
+
+8. Tính next observation
+- _build_observation() sau update state.
+
+9. Tính reward
+- RewardCalculator.compute().
+
+10. Kiểm tra collision
+- GeometryCollisionChecker.check().
+
+11. Kiểm tra success
+- new_dist < goal_threshold.
+
+12. Lưu transition vào replay buffer
+- SB3 OffPolicyAlgorithm/ReplayerBuffer.
+
+13. Sample mini-batch
+- ReplayBuffer.sample(batch_size=256).
+
+14. Update Critic
+- SB3 SAC.train().
+
+15. Update Actor
+- SB3 SAC.train().
+
+16. Update entropy coefficient
+- SB3 SAC.train() nếu ent_coef auto.
+
+17. Update target networks
+- polyak_update every target_update_interval=1.
+
+18. Ghi log
+- EpisodeCallback, TerminationStatsCallback, SB3 logger stdout/csv/tensorboard.
+
+19. Save checkpoint
+- SaveCheckpointCallback every save_freq=25000 timesteps.
+
+20. Evaluate model
+- EvalBestModelCallback every eval_freq=50000 timesteps, deterministic=True, n_eval_episodes=100.
+
+Nguồn:
+- trainer.py:239-291, 329-338, 407-459
+- callbacks.py:687-879, 987-1019
+- cartesian_frame_env.py:222-565
+- stable_baselines3/sac/sac.py:199-298
+
+17. Logging, checkpoint và evaluation
+
+Logging:
+- Logger formats: stdout, csv, tensorboard nếu torch.utils.tensorboard khả dụng.
+- progress.csv có metrics:
+  rollout/ep_rew_mean, rollout/ep_len_mean, rollout/success_rate,
+  rollout/collision_rate, rollout/workspace_violation_rate,
+  reward/total, reward/distance, reward/collision, reward/success,
+  train/ent_coef, train/learning_rate, train/actor_loss, train/critic_loss,
+  train/ent_coef_loss, train/n_updates.
+
+Checkpoint/model paths:
+- Run mới nhất: Data/Training/SAC/FRAME_ONLY/run_20260611_185909
+- final_model.zip tồn tại.
+- best_model.zip tồn tại.
+- replay_buffer.pkl tồn tại.
+- best_model_info.json tồn tại.
+- Latest run có 2001 zip model/checkpoint files.
+
+Save frequency:
+- save_freq = 25000.
+- Với VecEnv 28 env, num_timesteps tăng theo batch env steps; tên checkpoint có thể không trùng chính xác bội số 25000.
+
+Evaluation:
+- eval_freq = 50000.
+- n_eval_episodes = 100.
+- EvalBestModelCallback dùng model.predict(obs, deterministic=True).
+- best_model_info.json của run_20260611_185909:
+  step = 26554248
+  eval_success_rate = 0.99
+  eval_mean_reward = 16.200707844743878
+  eval_mean_final_distance = 0.026176998354494573
+  eval_collision_rate = 0.0
+  eval_workspace_violation_rate = 0.0
+  eval_episodes = 100
+
+Inference:
+- Evaluation/predict_model_sac.py load SAC.load(model_path, env=None, device=DEVICE).
+- VecNormalize được in là disabled.
+- deterministic default = true.
+
+Nguồn:
+- trainer.py:250, 329-338, 407-459
+- callbacks.py:347-386, 687-879, 987-1019
+- Evaluation/predict_model_sac.py:118, 143, 155-167
+- Data/Training/SAC/FRAME_ONLY/run_20260611_185909/model/best_model_info.json:2-8
+
+18. Số lượng tham số mạng
+
+Actor feature network:
+- FlattenExtractor: 0 parameters.
+
+Actor latent MLP:
+- Linear(15 -> 256): 4096
+- Linear(256 -> 256): 65792
+
+Actor mean head:
+- Linear(256 -> 3): 771
+
+Actor log_std head:
+- Linear(256 -> 3): 771
+
+Actor total:
+- 71430 parameters.
+
+Q1:
+- Linear(18 -> 256): 4864
+- Linear(256 -> 256): 65792
+- Linear(256 -> 1): 257
+- Total Q1: 70913
+
+Q2:
+- Same as Q1.
+- Total Q2: 70913
+
+Critic online:
+- Q1 + Q2 = 141826
+
+Target Q1:
+- 70913
+
+Target Q2:
+- 70913
+
+Critic target:
+- 141826
+
+Entropy coefficient:
+- log_ent_coef = 1 scalar.
+
+Tổng:
+- Effective optimizer-managed trainable = Actor + Critic online + log_ent_coef = 213257.
+- Target network parameters = 141826.
+- Registered policy parameters including target = 355082.
+- Registered policy parameters + log_ent_coef = 355083.
+
+Nguồn:
+- Runtime introspection.
+- stable_baselines3/sac/policies.py:84-103
+- stable_baselines3/common/policies.py:960-977
+
+19. Shape tracing
+
+Raw observation:             (15,)
+Vectorized observation:      (28, 15) trong training hiện tại
+Replay buffer storage obs:   (35714, 28, 15)
+Replay buffer storage action:(35714, 28, 3)
+Replay buffer batch obs:     (256, 15)
+Replay buffer batch action:  (256, 3)
+
+Actor:
+Input observation:           (batch_size, 15)
+FlattenExtractor output:     (batch_size, 15)
+Actor hidden layer 1:        (batch_size, 256)
+Actor hidden layer 2:        (batch_size, 256)
+Actor mean:                  (batch_size, 3)
+Actor log_std:               (batch_size, 3)
+Sampled action:              (batch_size, 3)
+
+Critic:
+Critic observation:          (batch_size, 15)
+Critic action:               (batch_size, 3)
+Critic concatenated input:   (batch_size, 18)
+Q1 output:                   (batch_size, 1)
+Q2 output:                   (batch_size, 1)
+Target Q1 output:            (batch_size, 1)
+Target Q2 output:            (batch_size, 1)
+
+Nguồn:
+- Runtime introspection model và replay_buffer.pkl
+- spaces.py:12-15
+
+20. Phân tích một transition thực tế
+
+Chạy an toàn:
+- env = CartesianPathPlanningEnv(env_cfg=config/environment.yaml, start_mode=random)
+- reset(seed=42)
+- step(action=[0.25, -0.5, 0.75])
+- Không chạy training.
+
+Reset observation:
+- Observation shape: (15,)
+- Observation dtype: float32
+- Observation min: -0.7511211037635803
+- Observation max: 0.4434890151023865
+- Observation mean: 0.004295468330383301
+
+Reset info subset:
+- distance: 0.2013651579618454
+- current_pos: [0.4434890151023865, -0.018336469307541847, 0.2717196047306061]
+- target_pos: [0.42434200644493103, -0.12174680083990097, 0.10000000149011612]
+- target_mode: random
+- obstacle_mode: random
+- collision_margin: 0.03
+- obstacle_center: [0.34305402636528015, -0.02584039606153965, 0.06140568107366562]
+- obstacle_size: [0.08805698156356812, 0.08930321782827377, 0.06281135976314545]
+
+Action:
+- Raw action passed to env: [0.25, -0.5, 0.75]
+- Scaled physical action/delta:
+  [0.0024999999441206455, -0.004999999888241291, 0.007499999832361937] m
+
+Step observation:
+- Observation shape: (15,)
+- Observation dtype: float32
+- Observation min: -0.7779068350791931
+- Observation max: 0.4459890127182007
+- Observation mean: 0.002954202936962247
+
+Reward components:
+- success: 0.0
+- collision: 0.0
+- distance: -0.30840544402599335
+- workspace: 0.0
+- episode: 0.0
+- time: 0.0
+- shake: 0.0
+- total: -0.30840544402599335
+
+Total reward: -0.30840544402599335
+Terminated: false
+Truncated: false
+
+Step info subset:
+- distance: 0.20560362935066223
+- prev_distance: 0.2013651579618454
+- is_success: false
+- is_collision: false
+- obstacle_collision: false
+- table_collision: false
+- out_of_workspace: false
+- termination_reason: none
+- step_count: 1
+- current_pos: [0.4459890127182007, -0.023336470127105713, 0.2792195975780487]
+- prev_pos: [0.4434890151023865, -0.018336469307541847, 0.2717196047306061]
+- target_pos: [0.42434200644493103, -0.12174680083990097, 0.10000000149011612]
+
+Nguồn:
+- Runtime transition.
+- cartesian_frame_env.py:222-565
+- reward.py:47-139
+
+21. Các vấn đề và đề xuất cải thiện
+
+Vấn đề 1: Observation chỉ có obstacle tương đối và half extent, không có khoảng cách tới obstacle dạng scalar hoặc clearance.
+Hiện trạng:
+- Observation gồm current_pos, target_pos, err, rel_obs, obs_size.
+Rủi ro:
+- Policy phải tự suy luận collision risk từ AABB tương đối; chưa có signed distance hoặc distance-to-box.
+Đề xuất:
+- Thêm distance_point_to_box normalized và có thể thêm vector nearest point.
+Mức ưu tiên: Cao
+
+Vấn đề 2: Không có thông tin từng link robot vì project frame-only.
+Hiện trạng:
+- Không có robot, link, joint, TCP orientation.
+Rủi ro:
+- Nếu mục tiêu thật là robot lập kế hoạch đường đi, policy hiện chỉ học point-mass path planning, không đảm bảo toàn thân robot tránh vật cản.
+Đề xuất:
+- Nếu chuyển sang robot thật, thêm kinematics/link collision features hoặc kiểm tra toàn link.
+Mức ưu tiên: Cao
+
+Vấn đề 3: Target random z bị ép 0.10.
+Hiện trạng:
+- config target z range là [0.02,0.15], nhưng TargetProvider._sample_random() đặt candidate[2] = 0.10.
+Rủi ro:
+- Policy ít học đa dạng z-target dù config gợi ý random z.
+Đề xuất:
+- Nếu muốn target 3-D đầy đủ, bỏ hard-code z hoặc đưa vào config rõ ràng.
+Mức ưu tiên: Trung bình
+
+Vấn đề 4: Start được sample trước obstacle random của episode.
+Hiện trạng:
+- reset() gọi _sample_start() trước khi sample obstacle size/center hiện tại.
+Rủi ro:
+- Start có thể không được reject theo obstacle random mới của cùng episode.
+Đề xuất:
+- Sample obstacle trước, sau đó sample start/target hoặc resample start sau obstacle.
+Mức ưu tiên: Cao
+
+Vấn đề 5: Điều kiện truncated có khả năng lệch 1 step.
+Hiện trạng:
+- truncated = self._step_count >= max_episode_steps được tính trước khi increment.
+Rủi ro:
+- Episode max 300 có thể trả truncated ở call thứ 301.
+Đề xuất:
+- Tính truncated sau khi increment hoặc dùng self._step_count + 1 >= max_episode_steps.
+Mức ưu tiên: Cao
+
+Vấn đề 6: Table collision không thực sự terminate/reward như comment "table is always collidable".
+Hiện trạng:
+- collision checker check table, nhưng box_or_table_collision thực tế chỉ startswith("box").
+- reward is_collision nhận box_or_table_collision.
+Rủi ro:
+- Table collision có thể bị info table_collision=true nhưng không terminated/penalized.
+Đề xuất:
+- Định nghĩa rõ table_collision có phải failure không; nếu có, thêm vào collision_terminates và reward.
+Mức ưu tiên: Trung bình
+
+Vấn đề 7: Table.enabled=false nhưng env vẫn tạo table geometry cho collision checker.
+Hiện trạng:
+- Config table.enabled=false, nhưng code luôn lấy table_center/table_half_extent.
+Rủi ro:
+- Cấu hình visual và collision table không nhất quán; trong config hiện tại table ở ngoài workspace nên ít ảnh hưởng.
+Đề xuất:
+- Tôn trọng cfg.table.enabled trong GeometryCollisionChecker hoặc đổi comment/config cho rõ.
+Mức ưu tiên: Trung bình
+
+Vấn đề 8: Reward không có progress term.
+Hiện trạng:
+- R_distance chỉ dựa trên khoảng cách tuyệt đối, không dùng prev_distance - current_distance.
+Rủi ro:
+- Tín hiệu shaping có thể yếu khi target xa hoặc bị local optimum quanh obstacle.
+Đề xuất:
+- Cân nhắc thêm progress reward nhỏ, có kiểm soát.
+Mức ưu tiên: Trung bình
+
+Vấn đề 9: Collision penalty rất lớn so với distance reward.
+Hiện trạng:
+- collision_penalty = -300, distance trong workspace thường khoảng -0.0 đến -0.72 mỗi step.
+Rủi ro:
+- Replay buffer collision transition có thể chi phối critic; cũng có thể làm agent quá bảo thủ nếu collision dễ xảy ra.
+Đề xuất:
+- Theo dõi reward/collision, critic_loss; cân nhắc curriculum hoặc scale reward.
+Mức ưu tiên: Trung bình
+
+Vấn đề 10: Không có VecNormalize hoặc chuẩn hóa đầy đủ.
+Hiện trạng:
+- Chỉ obstacle feature được chia workspace_range.
+Rủi ro:
+- Khi đổi workspace/config, scale observation thay đổi.
+Đề xuất:
+- Thêm normalization thống nhất hoặc VecNormalize có save/load stats.
+Mức ưu tiên: Trung bình
+
+Vấn đề 11: Không có previous action trong observation.
+Hiện trạng:
+- Reward có action_history cho shake penalty, nhưng observation không có previous action.
+Rủi ro:
+- Môi trường không hoàn toàn Markov nếu reward phụ thuộc previous action mà observation không chứa previous action.
+Đề xuất:
+- Thêm previous_action vào observation hoặc bỏ reward phụ thuộc lịch sử.
+Mức ưu tiên: Cao
+
+Vấn đề 12: Safety callback kiểm tra action_norm từ info nhưng env không đưa action_norm.
+Hiện trạng:
+- EarlyStopSafetyCallback đọc info["action_norm"], trong env info không có key này.
+Rủi ro:
+- max_action_norm guard trong fine-tune có thể không hoạt động như kỳ vọng.
+Đề xuất:
+- Thêm action_norm vào info hoặc sửa callback dùng actions từ locals.
+Mức ưu tiên: Thấp đến Trung bình
+
+22. Sơ đồ kiến trúc SAC dạng ASCII
+
+                         +----------------------+
+Observation (15-D) ----->| FlattenExtractor     |
+                         +----------+-----------+
+                                    |
+                         +----------v-----------+
+                         | Actor MLP            |
+                         | Linear 15->256 ReLU  |
+                         | Linear 256->256 ReLU |
+                         +----------+-----------+
+                                    |
+                         +----------+-----------+
+                         |                      |
+                    Mean head              Log-Std head
+                    256 -> 3               256 -> 3
+                         |                      |
+                         +----------+-----------+
+                                    |
+                         SquashedDiagGaussian
+                         sample + tanh + log_prob correction
+                                    |
+                             Action [-1,1]^3
+                                    |
+                         clip, delta=action*0.01m
+                                    |
+                                    v
+                            Cartesian Env
+                                    |
+              +---------------------+---------------------+
+              |                                           |
+              v                                           v
+        Next Observation                              Reward/Done
+              |                                           |
+              +---------------- Replay Buffer ------------+
+                                    |
+                              Sample Batch
+                                    |
+                 +------------------+------------------+
+                 |                                     |
+                 v                                     v
+          Q1([obs,action])                      Q2([obs,action])
+          MLP 18->256->256->1                  MLP 18->256->256->1
+                 |                                     |
+                 +------------------+------------------+
+                                    |
+                               min(Q1,Q2)
+                                    |
+                    Critic loss / Actor loss / Alpha loss
+                                    |
+                         Polyak update target critics
+
+23. Phân biệt training và inference
+
+Thành phần               Training                                      Inference
+Action sampling          stochastic trong SAC train                    deterministic=true mặc định khi eval/predict
+Replay buffer            có ReplayBuffer                               không dùng
+Critic update            có                                            không
+Actor update             có                                            không
+Entropy update           có nếu ent_coef=auto                           không
+Target critic update     có Polyak update                               không
+Normalization            VecNormalize disabled                          VecNormalize disabled
+Obstacle randomization   có nếu config obstacle.mode=random              có trong env eval nếu config random
+Goal randomization       có nếu target.mode=random                       tùy mode random/static/fixed trong predict
+Logging                  stdout/csv/tensorboard/progress.csv            CSV/JSON trajectory trong Data/Prediction
+Checkpoint               save checkpoint/final/best/replay buffer        load model zip
+Device                   cuda trong run mới nhất                         cuda nếu available trong script, hoặc cpu khi phân tích
+
+Nguồn:
+- trainer.py:407-459
+- callbacks.py:774-879
+- Evaluation/predict_model_sac.py:118-167
+- Evaluation/predict_common.py:126-173, 225-261
+
+24. Nguồn truy vết quan trọng
+
+Observation/action:
+- file: src/drl_pathplanning/gymnasium/spaces.py
+- biến: ACTION_DIM, OBS_DIM, ACTION_LOW, ACTION_HIGH
+- dòng: 12-15
+- file: src/drl_pathplanning/gymnasium/cartesian_frame_env.py
+- class: CartesianPathPlanningEnv
+- function: _build_observation(), step()
+- dòng: 404-409, 578-606
+
+Reward:
+- file: src/drl_pathplanning/gymnasium/reward.py
+- class: RewardCalculator
+- function: compute()
+- biến: success_bonus, collision_penalty, workspace_penalty, timeout_penalty, distance_scale, time_penalty, shake_penalty_scale
+- dòng: 47-139
+
+Config:
+- file: config/environment.yaml
+- mục: environment, workspace, start, target, obstacle, termination, reward, training, sac
+- dòng: 26-29, 34-40, 45-76, 110-157, 188-199, 239-252
+
+SAC factory:
+- file: src/drl_pathplanning/training/sb3_factory.py
+- function: create_sb3_model()
+- biến: gamma, learning_rate, batch_size, buffer_size, tau, train_freq, gradient_steps, policy, net_arch, ent_coef
+- dòng: 81-96, 133-188
+
+Vector env:
+- file: src/drl_pathplanning/training/env_factory.py
+- function: create_training_env()
+- biến: DummyVecEnv, SubprocVecEnv, VecNormalize disabled
+- dòng: 121-137, 194, 230-237
+
+Training:
+- file: src/drl_pathplanning/training/trainer.py
+- function: train_sb3_model()
+- biến: effective_seed, effective_timesteps, effective_n_envs, device, callbacks
+- dòng: 114-180, 213-291, 329-338, 407-459
+
+SB3 Actor/Critic:
+- file: .venv/Lib/site-packages/stable_baselines3/sac/policies.py
+- class: Actor
+- dòng: 21-22, 84-103, 147-175
+- file: .venv/Lib/site-packages/stable_baselines3/common/policies.py
+- class: ContinuousCritic
+- dòng: 912-977
+
+SB3 SAC loss/update:
+- file: .venv/Lib/site-packages/stable_baselines3/sac/sac.py
+- class: SAC
+- function: train()
+- dòng: 199-298
+
+Replay buffer:
+- file: .venv/Lib/site-packages/stable_baselines3/common/buffers.py
+- class: ReplayBuffer
+- dòng: 157-227, 253-324
+- artifact: Data/Training/SAC/FRAME_ONLY/run_20260611_185909/replay_buffer.pkl
+
+Checkpoint metadata:
+- file: Data/Training/SAC/FRAME_ONLY/run_20260611_185909/run_info.json
+- dòng: 2, 4, 11-16
+- file: Data/Training/SAC/FRAME_ONLY/run_20260611_185909/config.json
+- dòng: 3-14, 22-34, 71, 91, 112-113
+- file: Data/Training/SAC/FRAME_ONLY/run_20260611_185909/model/best_model_info.json
+- dòng: 2-8
+
+Tóm tắt số liệu chính
+- observation dimension: 15
+- action dimension: 3
+- Actor hidden layers: 2 hidden Linear layers, 256 neurons mỗi layer, ReLU
+- Critic hidden layers: mỗi Q network có 2 hidden Linear layers, 256 neurons mỗi layer, ReLU
+- Critic count: Q1 và Q2 online độc lập, Q1 và Q2 target độc lập
+- Tổng optimized trainable parameters: 213257
+- Tổng parameters gồm target và log_ent_coef: 355083
+- Reward chính: -1.5 * distance_to_target, success +20, collision -300, workspace -300, timeout -50, shake -0.005
+- Normalization đang dùng: không VecNormalize; only rel_obs và obs_size chia workspace_range
+- Vấn đề kỹ thuật đáng chú ý nhất: Markov thiếu previous_action trong observation, start sample trước obstacle random, truncated có thể lệch 1 step, table collision/config chưa nhất quán, target z random bị hard-code 0.10.
