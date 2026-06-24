@@ -11,6 +11,11 @@ find_package(rclcpp_action REQUIRED)
 find_package(rosidl_default_generators REQUIRED)
 find_package(rosidl_default_runtime REQUIRED)
 find_package(geometry_msgs REQUIRED)
+find_package(std_srvs REQUIRED)
+find_package(rcl_interfaces REQUIRED)
+find_package(tf2 REQUIRED)
+find_package(tf2_ros REQUIRED)
+find_package(tf2_geometry_msgs REQUIRED)
 
 find_package(moveit_ros_planning_interface REQUIRED)
 find_package(moveit_core REQUIRED)
@@ -27,6 +32,8 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   "action/CheckerBoard.action"
   "action/MoveGripper.action"
   "action/PickPlace.action"
+  "action/DrlPickPlace.action"
+  "action/RepeatabilityTest.action"
   DEPENDENCIES geometry_msgs
 )
 
@@ -145,6 +152,31 @@ target_link_libraries(pickplace_server
 rosidl_target_interfaces(pickplace_server
   ${PROJECT_NAME} "rosidl_typesupport_cpp"
 )
+
+add_executable(drl_pickplace_server src/drl_pickplace_server.cpp)
+ament_target_dependencies(drl_pickplace_server
+  rclcpp
+  rclcpp_action
+  geometry_msgs
+  std_srvs
+  rcl_interfaces
+  tf2
+  tf2_ros
+  tf2_geometry_msgs
+)
+target_link_libraries(drl_pickplace_server
+  "${cpp_typesupport_target}"
+)
+
+add_executable(repeatability_test_server src/repeatability_test_server.cpp)
+ament_target_dependencies(repeatability_test_server
+  rclcpp
+  rclcpp_action
+  geometry_msgs
+)
+target_link_libraries(repeatability_test_server
+  "${cpp_typesupport_target}"
+)
 #_________________________________________________________________
 add_executable(task_manager_client src/task_manager_client.cpp)
 ament_target_dependencies(task_manager_client
@@ -172,9 +204,17 @@ install(TARGETS
   checker_board_server
   move_gripper_server
   pickplace_server
+  drl_pickplace_server
+  repeatability_test_server
 
   task_manager_client
 
+  DESTINATION lib/${PROJECT_NAME}
+)
+
+install(PROGRAMS
+  scripts/drl_pick_place_random_test_client.py
+  scripts/repeatability_test_client.py
   DESTINATION lib/${PROJECT_NAME}
 )
 

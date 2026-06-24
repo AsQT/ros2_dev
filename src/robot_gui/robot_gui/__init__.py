@@ -1,1 +1,1 @@
-__all__ = []
+"""Robot GUI package."""

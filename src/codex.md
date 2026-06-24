@@ -1,514 +1,340 @@
-Bạn đang làm việc trong workspace ROS 2 của robot. Hiện tại DRL/RL path planning trên `mock_hw` đã hoạt động ổn định. Hãy trực tiếp kiểm tra source code hiện tại, triển khai, build, chạy thử, sửa lỗi và tiếp tục thực hiện cho đến khi action pick-and-place dựa trên RL chạy thành công thực tế.
+Hãy kiểm tra toàn bộ package `robot_drl` để xác định các phần liên quan đến DRL planning, reward, inference runtime, path generation và path execution.
 
-Không chỉ phân tích hoặc viết báo cáo. Phải sửa source code, build workspace, chạy launch, gửi action goal, đọc log, chẩn đoán lỗi và lặp lại cho đến khi hoàn thành.
+Bối cảnh lỗi hiện tại:
 
-# 1. Mục tiêu
+* RL planner có hiện tượng sinh quỹ đạo đi xuống thấp hơn `target_pos.z` rồi mới đi lên lại.
+* Quỹ đạo có xu hướng gấp khúc / đổi hướng không mượt.
+* Cần phân biệt rõ:
 
-Tạo một ROS 2 action mới để thực hiện chu trình pick-and-place, trong đó:
+  * Reward chỉ dùng trong training/evaluation.
+  * ROS runtime/action server không nên viết lại reward để điều khiển.
+  * ROS runtime cần có path safety validator để chặn path xấu trước khi execute.
 
-* Các chuyển động dài sử dụng DRL/RL planner hiện có.
-* Các chuyển động thẳng đứng ngắn tại vị trí pick sử dụng action Cartesian hiện có.
-* Điều khiển gripper sử dụng action `MoveGripper` trong package `robot_task_manager`.
-* Có thể tham khảo cách tổ chức, gọi sub-action, feedback, result và xử lý lỗi của action `PickPlace` hiện có trong `robot_task_manager`.
+Mục tiêu kiểm tra:
 
-Ưu tiên đặt action mới trong `robot_task_manager` nếu phù hợp với kiến trúc hiện tại. Không tạo package mới nếu không cần thiết.
+1. Xác định trong `robot_drl` có phần training environment hay không.
+2. Xác định reward function hiện đang nằm ở đâu, có được dùng trong ROS runtime không.
+3. Xác định ROS action/server/service nào đang load SAC model và gọi `policy.predict()`.
+4. Xác định path/waypoint được sinh ra ở đâu.
+5. Xác định path được execute ở đâu.
+6. Kiểm tra hiện tại có safety validator cho path chưa.
+7. Kiểm tra hiện tại có kiểm tra Z thấp hơn target hoặc Z an toàn chưa.
+8. Kiểm tra hiện tại có kiểm tra gấp khúc / sharp turn / smoothness chưa.
+9. Kiểm tra có fallback/replan khi path không hợp lệ chưa.
+10. Kiểm tra log/debug hiện tại có đủ để biết path bị tụt Z hay gấp khúc chưa.
 
-# 2. Kiểm tra kiến trúc hiện có trước khi sửa
+Các file/thư mục cần rà soát:
 
-Trước khi triển khai, hãy tự đọc và xác định chính xác:
+* Toàn bộ `robot_drl`
+* Các file Python node/action/server liên quan đến DRL planner
+* Các file launch liên quan đến DRL
+* Các file config YAML liên quan đến model, workspace, planner, obstacle, reward nếu có
+* Các test hiện có trong package
+* `package.xml`, `setup.py`, `setup.cfg`, `CMakeLists.txt` nếu có
+* README hoặc tài liệu liên quan nếu có
 
-* Action `PickPlace` hiện tại.
-* Action `MoveGripper`.
-* Action `MoveToPoseCartasian` hoặc tên thực tế tương ứng trong source code.
-* Cách gọi DRL planner hiện tại.
-* Cách DRL planner trả về và thực thi trajectory.
-* Frame tọa độ đang sử dụng, ví dụ `base_link`.
-* Cách lấy pose hiện tại của end-effector.
-* Tên end-effector link.
-* Các launch file khởi động `mock_hw`, controller, MoveIt, task manager và DRL planner.
+Yêu cầu kiểm tra chi tiết:
 
-Lưu ý: tên `MoveToPoseCartasian` có thể đang bị viết khác trong source code. Phải sử dụng đúng action type và action name thực tế đang tồn tại. Không tự ý đổi tên interface cũ làm hỏng các node khác.
+## 1. Phân loại architecture hiện tại
 
-Không được tạo planner giả, không bypass DRL bằng MoveIt hoặc nội suy thẳng cho các bước được yêu cầu sử dụng RL.
-
-# 3. Action interface mới
-
-Tạo action mới với tên phù hợp quy ước hiện tại, ưu tiên:
-
-```text
-DrlPickPlace.action
-```
-
-Goal tối thiểu phải có:
+Hãy lập sơ đồ luồng xử lý hiện tại của `robot_drl`:
 
 ```text
-geometry_msgs/PoseStamped target_pick
-geometry_msgs/PoseStamped target_place
-float64 gripper_close_width_m
+ROS action/service input
+        ↓
+build observation
+        ↓
+load SAC model / policy.predict()
+        ↓
+generate action / waypoint / path
+        ↓
+validate path nếu có
+        ↓
+execute path / gọi MoveToPoseCartesian / controller / action khác
 ```
 
-Trong đó:
+Cần ghi rõ:
 
-* `target_pick` là pose của end-effector tại vị trí kẹp vật.
-* `target_place` là pose của end-effector tại vị trí nhả vật.
-* `gripper_close_width_m` là độ mở của gripper sau khi đóng, đơn vị mét.
-* Giá trị mặc định mong muốn là `0.028 m`, tương đương `28 mm`.
-* Độ mở hoàn toàn của gripper là `0.05 m`, tương đương `5 cm`.
+* File nào thực hiện từng bước.
+* Class/function nào chịu trách nhiệm.
+* Input/output chính của từng bước.
+* Có dùng reward trong runtime không.
 
-ROS action definition không hỗ trợ khai báo giá trị mặc định trực tiếp. Vì vậy:
+Kết luận rõ:
 
-* Test client/launch phải mặc định gửi `0.028`.
-* Action server phải kiểm tra giá trị đầu vào.
-* Nếu `gripper_close_width_m` không hữu hạn, nhỏ hơn hoặc bằng 0, hoặc không hợp lệ thì sử dụng `0.028 m`.
-* Giới hạn hợp lệ phải nằm trong giới hạn thực của gripper, tối đa không vượt quá `0.05 m`.
+* Reward hiện tại có nằm trong `robot_drl` không?
+* Reward có bị dùng nhầm trong ROS runtime không?
+* Nếu không có training environment trong `robot_drl`, không được thêm reward vào runtime chỉ để sửa đường đi.
 
-Result tối thiểu:
+## 2. Kiểm tra vấn đề Z target
+
+Hãy tìm toàn bộ nơi dùng:
+
+* `target_pos`
+* `current_pos`
+* `z`
+* `target_z`
+* `workspace`
+* `workspace_z_min`
+* `min_z`
+* `waypoint`
+* `path`
+* `trajectory`
+
+Cần kiểm tra:
+
+* Khi policy sinh action/path, có ràng buộc `waypoint.z >= z_min_allowed` không.
+* `z_min_allowed` hiện có được tính từ `target_pos.z`, workspace, table height, object height, hay không có.
+* Có trường hợp RL được phép sinh waypoint thấp hơn target không.
+* Có clamp Z hoặc reject path khi tụt Z không.
+* Có log `min_z_in_path` không.
+
+Đề xuất logic đúng cho runtime:
+
+```python
+z_min_allowed = target_pos[2] - z_guard_margin
+
+for i, waypoint in enumerate(path):
+    if waypoint[2] < z_min_allowed:
+        reject path
+```
+
+Không hard-code hệ số, nên đưa vào config nếu cần:
+
+```yaml
+planner:
+  safety_check_enabled: true
+  z_guard_enabled: true
+  z_guard_mode: "target"
+  z_guard_margin: 0.005
+  reject_z_violation_path: true
+```
+
+## 3. Kiểm tra vấn đề quỹ đạo gấp khúc
+
+Hãy kiểm tra path hiện tại có được làm mượt hoặc validate hình học chưa.
+
+Cần tìm:
+
+* Có kiểm tra góc giữa 2 đoạn liên tiếp không.
+* Có kiểm tra khoảng cách giữa 2 waypoint liên tiếp không.
+* Có interpolate/smoothing không.
+* Có giới hạn action delta không.
+* Có lọc waypoint bất thường không.
+
+Đề xuất runtime validator:
+
+```python
+for i in range(1, len(path) - 1):
+    v0 = path[i] - path[i - 1]
+    v1 = path[i + 1] - path[i]
+
+    if norm(v0) < eps or norm(v1) < eps:
+        continue
+
+    cos_angle = dot(v0, v1) / (norm(v0) * norm(v1))
+    angle_deg = arccos(clamp(cos_angle, -1.0, 1.0)) * 180.0 / pi
+
+    if angle_deg > max_turn_angle_deg:
+        reject path
+```
+
+Config đề xuất:
+
+```yaml
+planner:
+  sharp_turn_check_enabled: true
+  max_turn_angle_deg: 120.0
+  reject_sharp_turn_path: true
+  max_waypoint_step: 0.05
+```
+
+## 4. Kiểm tra reward/training nếu có trong package
+
+Nếu trong `robot_drl` có training environment hoặc reward function, hãy kiểm tra reward hiện tại có các component sau chưa:
 
 ```text
-bool success
-string message
-string failed_stage
+R_success
+R_collision
+R_distance
+R_workspace
+R_episode
+R_time
+R_shake
+R_z_guard
+R_smooth_action
+R_path_curvature
 ```
 
-Feedback tối thiểu:
+Nếu thiếu thì đề xuất bổ sung trong training env/reward, không đưa reward vào ROS runtime.
+
+Reward Z guard đề xuất:
+
+```python
+z_error = max(0.0, z_min_allowed - current_pos[2])
+R_z_guard = 0.0
+if z_error > 0.0:
+    R_z_guard -= z_violation_penalty
+    R_z_guard -= z_guard_scale * (z_error ** 2)
+```
+
+Smooth action reward đề xuất:
+
+```python
+action_delta = action - prev_action
+R_smooth_action = -smooth_action_scale * np.linalg.norm(action_delta) ** 2
+```
+
+Path curvature reward đề xuất nếu có position history:
+
+```python
+v1 = current_pos - prev_pos
+v0 = prev_pos - prev_prev_pos
+curvature = np.linalg.norm(v1 - v0)
+R_path_curvature = -path_curvature_scale * curvature ** 2
+```
+
+Nhưng chỉ sửa reward nếu `robot_drl` thực sự chứa training/evaluation environment. Nếu package chỉ chạy inference trong ROS thì không thêm reward vào runtime.
+
+## 5. Thêm hoặc đề xuất `PathSafetyValidator`
+
+Nếu hiện tại chưa có safety validator, hãy implement tối thiểu một module/class riêng, ví dụ:
 
 ```text
-string current_stage
-float32 progress
-geometry_msgs/PoseStamped current_pose
+robot_drl/path_safety_validator.py
 ```
 
-Có thể điều chỉnh message definition để phù hợp với convention hiện có, nhưng phải giữ đủ thông tin tương đương.
+Chức năng:
 
-Sau khi thêm action phải cập nhật đầy đủ:
+* Kiểm tra Z violation.
+* Kiểm tra workspace violation nếu có workspace config.
+* Kiểm tra sharp turn.
+* Kiểm tra max waypoint step.
+* Trả về kết quả rõ ràng gồm:
 
-* `CMakeLists.txt`
-* `package.xml`
-* ROS interface generation
-* Dependency giữa các target
-* Install Python script hoặc executable nếu server/client được viết bằng Python
+  * `is_valid`
+  * `reason`
+  * `invalid_index`
+  * `min_z_in_path`
+  * `z_min_allowed`
+  * `max_turn_angle`
+  * `max_step_distance`
 
-# 4. Chuỗi thực thi bắt buộc
+Không trộn validator trực tiếp vào logic action server nếu có thể tách riêng.
 
-Action server phải thực hiện đúng thứ tự sau.
+## 6. Tích hợp validator vào runtime
 
-## Bước 1: Kiểm tra hệ thống
-
-* Kiểm tra goal hợp lệ.
-* Transform `target_pick` và `target_place` về planning frame nếu cần.
-* Kiểm tra toàn bộ sub-action server đã sẵn sàng.
-* Lấy pose hiện tại thật của end-effector từ TF, robot state hoặc cơ chế đang được project sử dụng.
-* Không giả định robot đang ở một pose cố định.
-
-## Bước 2: Mở gripper
-
-Gọi action `MoveGripper` trong `robot_task_manager`:
+Tìm nơi path được sinh ra ngay trước khi execute. Thêm luồng:
 
 ```text
-gripper width = 0.05 m
+RL planner sinh path
+        ↓
+PathSafetyValidator.validate(path, target_pos, workspace)
+        ↓
+Nếu valid:
+    execute
+Nếu invalid:
+    không execute
+    log lỗi rõ ràng
+    trả result failed cho action/service
+    hoặc fallback/replan nếu project đã có cơ chế này
 ```
 
-Chỉ chuyển sang bước tiếp theo khi action trả về thành công.
+Không được execute path khi:
 
-## Bước 3: DRL plan đến pre-pick
+* Có waypoint thấp hơn Z target trừ margin.
+* Có góc gấp quá giới hạn.
+* Có waypoint ngoài workspace.
+* Có đoạn nhảy waypoint quá dài.
 
-Tạo pose trung gian:
+## 7. Bổ sung log/debug
+
+Khi planning xong, log các giá trị:
 
 ```text
-pre_pick.x = target_pick.x
-pre_pick.y = target_pick.y
-pre_pick.z = target_pick.z + 0.05
+number_of_waypoints
+start_pos
+target_pos
+min_z_in_path
+z_min_allowed
+z_guard_margin
+is_z_violation
+z_violation_index
+max_turn_angle
+sharp_turn_index
+max_step_distance
+path_valid
+reject_reason
 ```
 
-Orientation của `pre_pick` phải giống `target_pick`.
+Nếu có action result hoặc service response phù hợp, trả thêm reason khi path bị reject.
 
-Từ pose hiện tại, gọi DRL/RL planner hiện có để lập kế hoạch và thực thi chuyển động đến `pre_pick`.
+## 8. Test bắt buộc
 
-Phải chờ đến khi trajectory được thực thi thành công và kiểm tra pose cuối nằm trong tolerance cho phép.
+Tạo hoặc cập nhật test cho `robot_drl`:
 
-Không dùng Cartesian planner hoặc MoveIt planner để thay thế DRL ở bước này.
+### Test Z validator
 
-## Bước 4: Hạ xuống vị trí pick
+* Path hợp lệ khi mọi waypoint.z >= target.z - margin.
+* Path invalid khi có waypoint.z < target.z - margin.
+* Kết quả phải trả đúng invalid index và reason.
 
-Gọi action `MoveToPoseCartasian` trong `robot_task_manager` để dịch end-effector từ `pre_pick` xuống đúng `target_pick`.
+### Test sharp turn validator
 
-Chuyển động phải chủ yếu theo trục Z và giữ nguyên:
+* Path thẳng hoặc cong nhẹ hợp lệ.
+* Path có góc gấp lớn hơn `max_turn_angle_deg` bị reject.
 
-* X
-* Y
-* Orientation
+### Test max step distance
 
-Chỉ tiếp tục khi action Cartesian trả về thành công.
+* Path có đoạn waypoint nhảy quá dài bị reject.
 
-## Bước 5: Đóng gripper
+### Test integration
 
-Gọi action `MoveGripper` với:
+* Mock một path xấu từ planner.
+* Đảm bảo runtime không gọi execute khi validator fail.
+* Đảm bảo runtime log reason rõ ràng.
+
+## 9. Build/test
+
+Sau khi kiểm tra hoặc sửa:
+
+* Chạy test Python nếu có.
+* Chạy `colcon build` cho package liên quan.
+* Chạy launch/action test bằng mock_hw nếu project có.
+* Không phá các action/service API hiện có.
+* Không đổi observation/action space nếu không thật sự bắt buộc.
+* Không rewrite toàn bộ package.
+* Không hard-code hệ số trong code nếu có thể đưa vào YAML/config.
+
+## 10. Báo cáo kết quả
+
+Tạo file:
 
 ```text
-width = gripper_close_width_m
+robot_drl_safety_reward_audit.md
 ```
 
-Mặc định:
-
-```text
-0.028 m
-```
-
-Không nhầm đơn vị giữa mét và milimét.
-
-## Bước 6: Nâng vật lên
-
-Tạo pose nâng:
-
-```text
-lift_pose.x = target_pick.x
-lift_pose.y = target_pick.y
-lift_pose.z = target_pick.z + 0.05
-```
-
-Orientation giữ giống `target_pick`.
-
-Gọi action `MoveToPoseCartasian` để nâng end-effector thẳng lên `0.05 m`.
-
-## Bước 7: DRL plan đến target_place
-
-Từ `lift_pose`, gọi DRL planner để lập kế hoạch và thực thi đến chính xác `target_place`.
-
-`target_place` được định nghĩa là pose nhả vật của end-effector, không phải tọa độ tâm vật hoặc mặt bàn. Không tự cộng hoặc trừ offset Z ngoài yêu cầu này.
-
-Không thay DRL planner bằng planner khác.
-
-## Bước 8: Nhả vật
-
-Gọi `MoveGripper`:
-
-```text
-width = 0.05 m
-```
-
-Khi gripper mở thành công, action trả về:
-
-```text
-success = true
-current_stage = DONE
-```
-
-# 5. State machine thực thi
-
-Tổ chức action server theo state machine rõ ràng, ví dụ:
-
-```text
-VALIDATE_GOAL
-WAIT_FOR_SERVERS
-OPEN_GRIPPER
-PLAN_TO_PRE_PICK
-DESCEND_TO_PICK
-CLOSE_GRIPPER
-LIFT_FROM_PICK
-PLAN_TO_PLACE
-OPEN_GRIPPER_AT_PLACE
-DONE
-FAILED
-CANCELLED
-```
-
-Mỗi stage phải:
-
-* Publish feedback.
-* Có timeout riêng hoặc timeout cấu hình được.
-* Kiểm tra kết quả sub-action.
-* Ghi log rõ stage bắt đầu, thành công hoặc thất bại.
-* Khi lỗi phải trả về chính xác `failed_stage`.
-* Không tiếp tục chuỗi nếu bước trước thất bại.
-
-Khi client cancel action:
-
-* Cancel sub-action đang chạy.
-* Dừng trajectory hoặc chuyển robot về trạng thái an toàn theo cơ chế hiện có.
-* Không để action con tiếp tục chạy ngầm.
-* Trả về trạng thái cancelled đúng chuẩn ROS 2.
-
-Không sử dụng `time.sleep()` dài làm block executor. Dùng callback, future hoặc cơ chế async phù hợp kiến trúc hiện tại.
-
-# 6. Kiểm tra pose và điều kiện thành công
-
-Không coi action thành công chỉ vì sub-action trả `success`.
-
-Sau các bước chuyển động, kiểm tra pose end-effector thực tế:
-
-* Sai số vị trí phải nằm trong tolerance cấu hình được.
-* Sai số orientation phải nằm trong tolerance cấu hình được.
-* Log pose yêu cầu, pose thực tế và sai số.
-
-Tạo các parameter, có thể dùng giá trị mặc định:
-
-```text
-position_tolerance_m: 0.01
-orientation_tolerance_rad: 0.10
-sub_action_timeout_sec: 60.0
-drl_timeout_sec: 120.0
-gripper_open_width_m: 0.05
-gripper_default_close_width_m: 0.028
-pick_approach_height_m: 0.05
-```
-
-Phải sử dụng tolerance phù hợp với mock hardware và planner hiện tại, không đặt tolerance lớn đến mức che giấu lỗi.
-
-# 7. Launch test tự động
-
-Tạo launch test hoặc launch file kiểm thử riêng, tên gợi ý:
-
-```text
-drl_pick_place_random_test.launch.py
-```
-
-Launch file phải khởi động đầy đủ các thành phần cần thiết dựa trên launch mock hardware hiện có:
-
-* Robot description
-* `mock_hw`
-* Controller manager
-* Joint state broadcaster
-* Arm controller
-* MoveIt hoặc task manager nếu action Cartesian phụ thuộc vào chúng
-* DRL planner
-* Action server mới
-* Random obstacle spawner
-* Random test client
-
-Không copy lại toàn bộ launch hiện có nếu có thể include launch file cũ.
-
-# 8. Random test client
-
-Viết test client gọi action nhiều lần liên tiếp.
-
-Parameter mặc định:
-
-```text
-number_of_trials: 20
-random_seed: 0
-gripper_close_width_m: 0.028
-```
-
-Mỗi trial phải random:
-
-1. Vị trí start của robot.
-2. Vị trí vật cản.
-3. Kích thước vật cản.
-4. Orientation vật cản nếu mock environment hỗ trợ.
-5. `target_pick`.
-6. `target_place`.
-
-Các giá trị random phải thỏa mãn:
-
-* Nằm trong workspace robot có thể với tới.
-* Nằm trong joint limit.
-* Pose start không collision.
-* Target pick không nằm bên trong vật cản.
-* Target place không nằm bên trong vật cản.
-* Vật cản không spawn xuyên robot ở pose start.
-* Có khoảng cách tối thiểu hợp lý giữa pick và place.
-* Có tình huống vật cản nằm gần hoặc chắn đường thẳng để thực sự kiểm tra khả năng tránh vật cản của DRL.
-* Không tạo toàn bộ test case quá dễ hoặc không có tác dụng kiểm tra obstacle avoidance.
-
-Phải log đầy đủ cho mỗi trial:
-
-```text
-trial_id
-random_seed
-start joint position hoặc start pose
-obstacle pose
-obstacle dimensions
-target_pick
-target_place
-gripper_close_width
-action result
-failed_stage
-elapsed time
-final pose error
-```
-
-Seed phải được lưu để có thể chạy lại chính xác trial bị lỗi.
-
-# 9. Tiêu chí pass/fail của test
-
-Một trial chỉ được PASS khi:
-
-* Action server nhận goal thành công.
-* Mở gripper thành công.
-* DRL đến pre-pick thành công.
-* Cartesian xuống target_pick thành công.
-* Đóng gripper thành công.
-* Cartesian nâng lên thành công.
-* DRL đến target_place thành công.
-* Mở gripper tại target_place thành công.
-* Pose cuối nằm trong tolerance.
-* Không có collision được báo bởi môi trường hoặc planning scene.
-* Không có node quan trọng bị crash.
-* Action result trả `success = true`.
-
-Sau 20 trial, in bảng tổng kết:
-
-```text
-Total trials
-Passed
-Failed
-Success rate
-Average execution time
-Maximum pose error
-Failed seeds
-Failed stages
-```
-
-Yêu cầu cuối cùng:
-
-```text
-20/20 trial phải PASS.
-```
-
-Nếu có bất kỳ trial nào lỗi:
-
-* Không được kết luận hoàn thành.
-* Dùng seed của trial lỗi để tái hiện.
-* Đọc log và sửa nguyên nhân gốc.
-* Build lại.
-* Chạy lại trial lỗi.
-* Sau khi sửa phải chạy lại toàn bộ 20 trial từ đầu.
-* Tiếp tục đến khi đạt 20/20.
-
-Không được sửa test theo hướng loại bỏ các case khó chỉ để đạt PASS.
-
-# 10. Build và chạy thực tế
-
-Sau khi sửa source:
-
-1. Build đúng package và dependency:
-
-```bash
-colcon build --symlink-install --packages-up-to robot_task_manager
-```
-
-Nếu action server nằm ở package khác, thêm đúng package đó và các package DRL liên quan.
-
-2. Source workspace:
-
-```bash
-source install/setup.bash
-```
-
-3. Kiểm tra action interface:
-
-```bash
-ros2 interface show <package_name>/action/DrlPickPlace
-```
-
-4. Kiểm tra action list:
-
-```bash
-ros2 action list -t
-```
-
-5. Chạy random test launch.
-
-6. Theo dõi:
-
-```bash
-ros2 node list
-ros2 action list -t
-ros2 topic list
-ros2 control list_controllers
-```
-
-7. Kiểm tra controller ở trạng thái `active`.
-
-8. Gửi ít nhất một goal thủ công bằng `ros2 action send_goal` để xác nhận interface hoạt động độc lập với test client.
-
-Không được chỉ build thành công rồi dừng. Phải chạy action thật.
-
-# 11. Không làm hỏng chức năng hiện có
-
-* Không thay đổi logic DRL đang chạy ổn nếu không thật sự cần.
-* Không thay đổi interface của `MoveGripper`, `MoveToPoseCartasian` hoặc `PickPlace` hiện có.
-* Không đổi tên topic/action/service đang được package khác sử dụng.
-* Không xóa code cũ.
-* Không hard-code pose chỉ để test pass.
-* Không dùng obstacle data giả khác với obstacle đã spawn trong môi trường.
-* Không bỏ qua lỗi controller hoặc TF.
-* Không trả success khi trajectory chưa thực thi xong.
-* Không thực hiện thay đổi ngoài phạm vi task nếu không cần thiết.
-
-# 12. Báo cáo kết quả cuối cùng
-
-Khi đã đạt 20/20 trial, cung cấp báo cáo ngắn nhưng có bằng chứng:
-
-* Danh sách file đã tạo.
-* Danh sách file đã sửa.
-* Tên action mới.
-* Action goal/result/feedback definition.
-* Chuỗi sub-action thực tế.
-* Command build.
-* Command launch test.
-* Command gửi goal thủ công.
-* Kết quả 20 trial.
-* Các lỗi đã gặp và nguyên nhân gốc.
-* Các thay đổi quan trọng đã thực hiện.
-* `git diff --stat`.
-* Các parameter có thể cấu hình.
-
-Không chỉ nói “đã hoàn thành”; phải đưa log hoặc output chứng minh.
-
-# 13. Hẹn giờ tắt máy
-
-Sau khi:
-
-* Source code đã được lưu.
-* Build và test đã kết thúc.
-* Báo cáo và log đã được ghi ra file.
-* Không còn tiến trình build/test quan trọng đang chạy.
-
-Hãy hẹn giờ tắt máy vào đúng:
-
-```text
-03:00 sáng ngày 18/06/2026
-Timezone: Asia/Ho_Chi_Minh
-```
-
-Ưu tiên tạo systemd transient timer có thời điểm tuyệt đối:
-
-```bash
-sudo systemd-run \
-  --unit=poweroff-at-20260618-0300 \
-  --on-calendar='2026-06-18 03:00:00 Asia/Ho_Chi_Minh' \
-  /usr/bin/systemctl poweroff
-```
-
-Sau đó xác minh timer đã tồn tại:
-
-```bash
-systemctl list-timers --all | grep poweroff-at-20260618-0300
-```
-
-Có thể kiểm tra thêm:
-
-```bash
-systemctl status poweroff-at-20260618-0300.timer
-```
-
-Nếu môi trường không hỗ trợ systemd transient timer, dùng:
-
-```bash
-sudo shutdown -h 03:00
-```
-
-và xác minh:
-
-```bash
-shutdown --show
-```
-
-Không được báo đã hẹn giờ thành công nếu command bị lỗi hoặc thiếu quyền `sudo`.
-
-Nếu không có quyền sudo không tương tác:
-
-* Ghi rõ lỗi thực tế.
-* In chính xác command cần người dùng chạy.
-* Không giả lập kết quả thành công.
+Nội dung bắt buộc:
+
+1. Sơ đồ luồng xử lý hiện tại của `robot_drl`.
+2. Danh sách file/class/function liên quan.
+3. Kết luận reward nằm ở đâu và có được dùng trong ROS runtime không.
+4. Kết luận có cần sửa reward trong `robot_drl` không.
+5. Kết luận hiện có path safety validator chưa.
+6. Các lỗi/rủi ro tìm thấy:
+
+   * Z tụt dưới target.
+   * Gấp khúc path.
+   * Thiếu workspace check.
+   * Thiếu fallback/replan.
+   * Thiếu log.
+7. Các thay đổi đã thực hiện nếu có.
+8. Các config mới nếu có.
+9. Kết quả test/build.
+10. Việc còn lại nếu chưa thể xử lý hết.
+
+Kết luận kỹ thuật mong muốn:
+
+* Nếu `robot_drl` chỉ chạy inference ROS runtime: không thêm reward runtime, chỉ thêm safety validator.
+* Nếu `robot_drl` có training env: thêm reward Z/smoothness trong training env, sau đó cần train/fine-tune lại model.
+* Dù model đã train tốt, ROS runtime vẫn phải có validator để không execute path nguy hiểm.

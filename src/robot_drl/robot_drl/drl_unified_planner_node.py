@@ -244,6 +244,7 @@ class DrlUnifiedPlannerNode(DrlPlannerNodeBase):
         self.declare_parameter("moveit_ik_link_name", "tcp_link")
         self.declare_parameter("moveit_ik_timeout_sec", 0.2)
         self.declare_parameter("moveit_ik_max_samples", 80)
+        self.declare_parameter("accept_near_convergence_dist_m", 0.20)
         self.declare_parameter(
             "calibrated_start_tcp_base",
             np.asarray(calibrated_start_tcp_base, dtype=np.float32).tolist(),
@@ -359,6 +360,9 @@ class DrlUnifiedPlannerNode(DrlPlannerNodeBase):
         )
         self._moveit_ik_max_samples = int(
             self.get_parameter("moveit_ik_max_samples").value
+        )
+        self._accept_near_convergence_dist_m = float(
+            self.get_parameter("accept_near_convergence_dist_m").value
         )
         workspace_min_base = np.array(
             self.get_parameter("workspace_min_base").value,
@@ -1059,7 +1063,17 @@ class DrlUnifiedPlannerNode(DrlPlannerNodeBase):
             self.get_logger().error(f"[/drl/plan] Planning exception: {e}")
             return False
 
-        if not result.converged:
+        accept_near_convergence = (
+            result.convergence_dist <= self._accept_near_convergence_dist_m
+            and bool(result.trajectory_forward_base)
+            and np.allclose(
+                result.trajectory_forward_base[-1],
+                scene.target_base,
+                rtol=0.0,
+                atol=1e-6,
+            )
+        )
+        if not result.converged and not accept_near_convergence:
             self.get_logger().error(
                 "[/drl/plan] DRL rollout did not converge; refusing to publish "
                 f"or execute partial trajectory (dist={result.convergence_dist:.4f} m)."
@@ -1068,6 +1082,13 @@ class DrlUnifiedPlannerNode(DrlPlannerNodeBase):
                 self.log_planning_result(result, source=scene.source)
                 self.publish_planning_result(result)
             return False
+        if accept_near_convergence:
+            self.get_logger().warn(
+                "[/drl/plan] DRL rollout stopped near target "
+                f"(dist={result.convergence_dist:.4f} m <= "
+                f"{self._accept_near_convergence_dist_m:.4f} m); using appended "
+                "exact target waypoint after full collision/IK validation."
+            )
 
         validation = validate_cartesian_path_against_obstacles(
             result.trajectory_forward_base,

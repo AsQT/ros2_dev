@@ -48,6 +48,16 @@ ament_target_dependencies(tcp_client
 )
 set_target_properties(tcp_client PROPERTIES POSITION_INDEPENDENT_CODE ON)
 
+if(BUILD_TESTING)
+  include(CTest)
+  add_executable(tcp_get_all_parser_test
+    test/tcp_get_all_parser_test.cpp
+  )
+  target_link_libraries(tcp_get_all_parser_test tcp_client)
+  target_include_directories(tcp_get_all_parser_test PRIVATE include)
+  add_test(NAME tcp_get_all_parser_test COMMAND tcp_get_all_parser_test)
+endif()
+
 add_executable(robot_hw_node
   src/robot_hw_node.cpp
 )
@@ -88,6 +98,7 @@ install(TARGETS
 
 install(PROGRAMS
   scripts/hardware_gui.py
+  scripts/test_servo_all_flags.py
   DESTINATION lib/${PROJECT_NAME}
 )
 

@@ -7,6 +7,7 @@
 #include <chrono>
 #include <cmath>
 #include <cctype>
+#include <iomanip>
 #include <sstream>
 
 #include <rclcpp/rclcpp.hpp>
@@ -235,6 +236,7 @@ void RobotSystemHardware::setup_ros_api()
 
   publish_connected(false);
   publish_status_text("Robot TCP hardware plugin ready");
+  publish_status_flags(std::vector<uint32_t>(6, 0));
   RCLCPP_INFO(get_logger(), "Robot TCP plugin ROS API ready on /robot_hw/* services");
 }
 
@@ -269,9 +271,23 @@ void RobotSystemHardware::publish_status_flags(const std::vector<uint32_t> & fla
   }
 
   robot_hardware_interface::msg::FlagStatus msg;
-  const size_t n = std::min(flags.size(), msg.axes.size());
-  for (size_t axis = 0; axis < n; ++axis) {
-    const uint32_t st = flags[axis];
+  const size_t expected_axes = msg.axes.size();
+  if (flags.size() < expected_axes) {
+    if (auto clk = get_clock()) {
+      RCLCPP_WARN_THROTTLE(
+        get_logger(), *clk, 5000,
+        "/robot_hw/flags got %zu flags, expected %zu; missing axes publish status_f=0",
+        flags.size(), expected_axes);
+    } else {
+      RCLCPP_WARN(
+        get_logger(),
+        "/robot_hw/flags got %zu flags, expected %zu; missing axes publish status_f=0",
+        flags.size(), expected_axes);
+    }
+  }
+
+  for (size_t axis = 0; axis < expected_axes; ++axis) {
+    const uint32_t st = axis < flags.size() ? flags[axis] : 0u;
     auto & a = msg.axes[axis];
     a.servo_on      = (st & STATUS_SERVO_ON) != 0;
     a.error_all     = (st & STATUS_ERROR_ALL) != 0;
@@ -802,36 +818,50 @@ hardware_interface::CallbackReturn RobotSystemHardware::on_activate(const rclcpp
         robot_ip_.c_str(), robot_port_, connect_timeout_ms_);
       connected_ = client_.connect(robot_ip_, robot_port_, connect_timeout_ms_);
       if (!connected_) {
-        RCLCPP_ERROR(
+        RCLCPP_WARN(
           get_logger(),
-          "Robot TCP connect failed: %s:%d: %s",
+          "Robot TCP connect failed: %s:%d: %s. Activating offline with zero joint state.",
           robot_ip_.c_str(), robot_port_, client_.last_error().c_str());
-        return hardware_interface::CallbackReturn::ERROR;
+        publish_connected(false);
+        publish_status_text(std::string("Robot TCP connect failed; running offline: ") + client_.last_error());
+        publish_status_flags(std::vector<uint32_t>(6, 0));
       }
-      RCLCPP_INFO(get_logger(), "Robot TCP connect ok: %s:%d", robot_ip_.c_str(), robot_port_);
-      publish_connected(true);
-      publish_status_text("Robot TCP connected");
+      if (connected_) {
+        RCLCPP_INFO(get_logger(), "Robot TCP connect ok: %s:%d", robot_ip_.c_str(), robot_port_);
+        publish_connected(true);
+        publish_status_text("Robot TCP connected");
+      }
     } catch (const std::exception & e) {
-      RCLCPP_ERROR(
+      RCLCPP_WARN(
         get_logger(),
-        "Robot TCP connect failed: %s:%d: %s",
+        "Robot TCP connect failed: %s:%d: %s. Activating offline with zero joint state.",
         robot_ip_.c_str(), robot_port_, e.what());
       connected_ = false;
       publish_connected(false);
-      publish_status_text(std::string("Robot TCP connect failed: ") + e.what());
-      return hardware_interface::CallbackReturn::ERROR;
+      publish_status_text(std::string("Robot TCP connect failed; running offline: ") + e.what());
+      publish_status_flags(std::vector<uint32_t>(6, 0));
     }
   }
 
 
-  auto ret = read(rclcpp::Time(0), rclcpp::Duration(0, 0));
-  if (ret == hardware_interface::return_type::OK) {
-    cmd_pos_ = hw_pos_;           // tránh giật về 0
-    last_sent_pos_ = cmd_pos_;    // coi như đã "gửi" trạng thái hiện tại
-    state_synced_ = true;
+  if (connected_ && client_.is_connected()) {
+    auto ret = read(rclcpp::Time(0), rclcpp::Duration(0, 0));
+    if (ret == hardware_interface::return_type::OK) {
+      cmd_pos_ = hw_pos_;           // tránh giật về 0
+      last_sent_pos_ = cmd_pos_;    // coi như đã "gửi" trạng thái hiện tại
+      state_synced_ = true;
+    } else {
+      RCLCPP_WARN(get_logger(), "Initial read() failed. Holding write until a successful read.");
+      state_synced_ = false;        // sẽ chờ read() thành công sau
+    }
   } else {
-    RCLCPP_WARN(get_logger(), "Initial read() failed. Holding write until a successful read.");
-    state_synced_ = false;        // sẽ chờ read() thành công sau
+    hw_pos_.assign(hw_pos_.size(), 0.0);
+    hw_vel_.assign(hw_vel_.size(), 0.0);
+    cmd_pos_ = hw_pos_;
+    last_sent_pos_ = cmd_pos_;
+    state_synced_ = true;
+    consec_read_fail_ = 0;
+    RCLCPP_WARN(get_logger(), "Robot TCP offline mode active. Publishing zero joint state for RViz/model.");
   }
 
   warmup_cycles_ = warmup_cycles_cfg_;
@@ -922,16 +952,15 @@ hardware_interface::return_type RobotSystemHardware::read(
   if (!connected_ || !client_.is_connected()) {
     connected_ = false;
     publish_connected(false);
+    publish_status_flags(std::vector<uint32_t>(6, 0));
     if (auto clk = get_clock()) {
-      RCLCPP_ERROR_THROTTLE(
+      RCLCPP_WARN_THROTTLE(
         get_logger(), *clk, 2000,
-        "Robot TCP lost connection: %s:%d (keeping last state)",
+        "Robot TCP unavailable: %s:%d (publishing default/last state)",
         robot_ip_.c_str(), robot_port_);
     }
-    consec_read_fail_++;
-    return (consec_read_fail_ >= max_consec_read_fail_)
-      ? hardware_interface::return_type::ERROR
-      : hardware_interface::return_type::OK;
+    consec_read_fail_ = 0;
+    return hardware_interface::return_type::OK;
   }
 
   const size_t n = hw_pos_.size();
@@ -941,7 +970,31 @@ hardware_interface::return_type RobotSystemHardware::read(
     publish_connected(true);
     publish_status_flags(flag);
 
+    if (!first_state_frame_logged_) {
+      first_state_frame_logged_ = true;
+      std::ostringstream raw_state;
+      for (size_t i = 0; i < std::min<size_t>(ROBOT_STATUS_FRAME_AXIS_COUNT, flag.size()); ++i) {
+        if (i > 0) {
+          raw_state << "; ";
+        }
+        raw_state << "axis[" << i << "]: pos=" << static_cast<int>(std::llround(pos_raw[i] * 1000.0))
+                  << " vel=" << static_cast<unsigned>(std::llround(std::fabs(vel_raw[i]) * 1000.0))
+                  << " flag=0x" << std::hex << std::uppercase << std::setw(8)
+                  << std::setfill('0') << flag[i] << std::dec << std::setfill(' ');
+      }
+      RCLCPP_INFO(
+        get_logger(),
+        "CMD_GET_ALL OK: payload_len=%zu status=0x%02X axis_offset=%zu axis_count=%zu axis_bytes=%zu %s",
+        client_.last_state_payload_length(),
+        static_cast<unsigned>(ROBOT_CMD_OK),
+        client_.last_state_payload_offset(),
+        flag.size(),
+        client_.last_state_axis_bytes(),
+        raw_state.str().c_str());
+    }
+
     if (pos_raw.empty() || vel_raw.empty()) {
+      publish_status_flags(std::vector<uint32_t>(6, 0));
       if (auto clk = get_clock()) {
         RCLCPP_WARN_THROTTLE(
           get_logger(), *clk, 2000,
@@ -955,9 +1008,7 @@ hardware_interface::return_type RobotSystemHardware::read(
       }
 
       consec_read_fail_++;
-      return (consec_read_fail_ >= max_consec_read_fail_)
-        ? hardware_interface::return_type::ERROR
-        : hardware_interface::return_type::OK;
+      return hardware_interface::return_type::OK;
     }
     // OK -> reset fail counter
     consec_read_fail_ = 0;
@@ -1009,22 +1060,21 @@ hardware_interface::return_type RobotSystemHardware::read(
       connected_ = false;
       publish_connected(false);
     }
+    publish_status_flags(std::vector<uint32_t>(6, 0));
     if (auto clk = get_clock()) {
       RCLCPP_WARN_THROTTLE(
         get_logger(), *clk, 2000,
-        "Robot TCP read failed: %s:%d: %s (keeping last state)",
+        "get_all_state failed: %s:%d: %s (keeping last state, publishing default flags)",
         robot_ip_.c_str(), robot_port_, e.what());
     } else {
       RCLCPP_WARN(
         get_logger(),
-        "Robot TCP read failed: %s:%d: %s (keeping last state)",
+        "get_all_state failed: %s:%d: %s (keeping last state, publishing default flags)",
         robot_ip_.c_str(), robot_port_, e.what());
     }
 
     consec_read_fail_++;
-    return (consec_read_fail_ >= max_consec_read_fail_)
-      ? hardware_interface::return_type::ERROR
-      : hardware_interface::return_type::OK;
+    return hardware_interface::return_type::OK;
   }
 }
  
@@ -1035,12 +1085,12 @@ hardware_interface::return_type RobotSystemHardware::write(
     connected_ = false;
     publish_connected(false);
     if (auto clk = get_clock()) {
-      RCLCPP_ERROR_THROTTLE(
+      RCLCPP_WARN_THROTTLE(
         get_logger(), *clk, 2000,
         "Robot TCP write skipped: not connected to %s:%d",
         robot_ip_.c_str(), robot_port_);
     }
-    return hardware_interface::return_type::ERROR;
+    return hardware_interface::return_type::OK;
   }
 
   constexpr size_t AXES = 8;
@@ -1130,7 +1180,7 @@ hardware_interface::return_type RobotSystemHardware::write(
         "Robot TCP send failed: %s:%d: %s",
         robot_ip_.c_str(), robot_port_, e.what());
     }
-    return hardware_interface::return_type::ERROR;
+    return hardware_interface::return_type::OK;
   }
 }
 

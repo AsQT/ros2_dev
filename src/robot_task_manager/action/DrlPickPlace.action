@@ -1,0 +1,11 @@
+geometry_msgs/PoseStamped target_pick
+geometry_msgs/PoseStamped target_place
+float64 gripper_close_width_m
+---
+bool success
+string message
+string failed_stage
+---
+string current_stage
+float32 progress
+geometry_msgs/PoseStamped current_pose

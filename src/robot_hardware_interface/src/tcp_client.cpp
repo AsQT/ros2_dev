@@ -520,14 +520,6 @@ uint32_t RobotTcpClient::unpack_u32_le(const uint8_t * p)
   return v;
 }
 
-uint16_t RobotTcpClient::unpack_u16_le(const uint8_t * p)
-{
-  uint16_t v = 0;
-  v |= static_cast<uint16_t>(p[0]);
-  v |= static_cast<uint16_t>(p[1]) << 8;
-  return v;
-}
-
 double RobotTcpClient::clamp(double v, double lo, double hi)
 {
   if (v < lo) {
@@ -657,72 +649,60 @@ std::pair<std::vector<double>, std::vector<double>> RobotTcpClient::get_pos_all(
 std::tuple<std::vector<double>, std::vector<double>, std::vector<uint32_t>> RobotTcpClient::get_all_state(
   int timeout_ms)
 {
-  constexpr size_t kBytesPerAxisStatus16 = 10;
-  constexpr size_t kBytesPerAxisStatus32 = 12;
-
+  // STATUS_ALL / CMD_GET_ALL response format:
+  // [CMD_OK][int32 pos_mdeg][uint32 vel_mdeg_s][uint32 flag] * 8 axes.
   const auto rx = exchange(cmd::STATUS_ALL, {}, true, cmd::STATUS_ALL, timeout_ms);
   if (!rx.has_value()) {
     throw std::runtime_error("No reply for STATUS_ALL");
   }
 
-  size_t offset = 0;
-  size_t axes = 0;
-  size_t bytes_per_axis = 0;
-  for (const size_t candidate_bytes : {kBytesPerAxisStatus32, kBytesPerAxisStatus16}) {
-    for (const size_t candidate_offset : {0u, 1u, 2u}) {
-      if (rx->size() >= candidate_offset &&
-        ((rx->size() - candidate_offset) % candidate_bytes) == 0)
-      {
-        const size_t candidate_axes = (rx->size() - candidate_offset) / candidate_bytes;
-        if (candidate_axes >= 6) {
-          offset = candidate_offset;
-          axes = candidate_axes;
-          bytes_per_axis = candidate_bytes;
-          break;
-        }
-      }
-    }
-    if (bytes_per_axis != 0) {
-      break;
-    }
-  }
-
-  if (bytes_per_axis == 0) {
-    std::ostringstream oss;
-    oss << "STATUS_ALL parse fail: payload_length=" << rx->size()
-        << " expected status16/status32 axis records with optional 1-2 byte prefix";
-    throw std::runtime_error(oss.str());
-  }
-
-  if (axes < 6) {
-    std::ostringstream oss;
-    oss << "STATUS_ALL payload too short: payload_length=" << rx->size()
-        << " parsed_axes=" << axes << " expected_axes>=6";
-    throw std::runtime_error(oss.str());
-  }
-
-  std::vector<double> pos_deg(axes, 0.0);
-  std::vector<double> vel_deg_s(axes, 0.0);
-  std::vector<uint32_t> flags(axes, 0);
-
-  for (size_t i = 0; i < axes; ++i) {
-    const uint8_t * base = rx->data() + offset + i * bytes_per_axis;
-    const int32_t pos_i32 = unpack_i32_le(base + 0);
-    const uint32_t vel_u32 = unpack_u32_le(base + 4);
-    const uint32_t flag = bytes_per_axis == kBytesPerAxisStatus32
-      ? unpack_u32_le(base + 8)
-      : static_cast<uint32_t>(unpack_u16_le(base + 8));
-
-    pos_deg[i] = static_cast<double>(pos_i32) / 1000.0;
-    vel_deg_s[i] = static_cast<double>(vel_u32) / 1000.0;
-    flags[i] = flag;
-  }
+  auto parsed = parse_status_all_payload(*rx);
 
   {
     std::lock_guard<std::mutex> lock(io_mtx_);
     last_state_payload_length_ = rx->size();
-    last_state_payload_offset_ = offset;
-    last_state_axis_bytes_ = bytes_per_axis;
+    last_state_payload_offset_ = ROBOT_STATUS_ALL_STATUS_BYTES;
+    last_state_axis_bytes_ = ROBOT_STATUS_ALL_AXIS_BYTES;
+  }
+
+  return parsed;
+}
+
+std::tuple<std::vector<double>, std::vector<double>, std::vector<uint32_t>>
+RobotTcpClient::parse_status_all_payload(const std::vector<uint8_t> & payload)
+{
+  if (payload.size() != ROBOT_STATUS_ALL_PAYLOAD_SIZE) {
+    std::ostringstream oss;
+    oss << "CMD_GET_ALL payload length mismatch: expected "
+        << ROBOT_STATUS_ALL_PAYLOAD_SIZE
+        << " bytes (1 CMD_OK + " << ROBOT_STATUS_FRAME_AXIS_COUNT
+        << " axes * " << ROBOT_STATUS_ALL_AXIS_BYTES
+        << " bytes), got " << payload.size();
+    throw std::runtime_error(oss.str());
+  }
+
+  if (payload[0] != ROBOT_CMD_OK) {
+    std::ostringstream oss;
+    oss << "CMD_GET_ALL response status not OK: payload[0]=0x"
+        << std::hex << std::uppercase << std::setw(2) << std::setfill('0')
+        << static_cast<unsigned>(payload[0]);
+    throw std::runtime_error(oss.str());
+  }
+
+  constexpr size_t axis_offset = ROBOT_STATUS_ALL_STATUS_BYTES;
+  std::vector<double> pos_deg(ROBOT_STATUS_FRAME_AXIS_COUNT, 0.0);
+  std::vector<double> vel_deg_s(ROBOT_STATUS_FRAME_AXIS_COUNT, 0.0);
+  std::vector<uint32_t> flags(ROBOT_STATUS_FRAME_AXIS_COUNT, 0);
+
+  for (size_t i = 0; i < ROBOT_STATUS_FRAME_AXIS_COUNT; ++i) {
+    const uint8_t * base = payload.data() + axis_offset + i * ROBOT_STATUS_ALL_AXIS_BYTES;
+    const int32_t pos_i32 = unpack_i32_le(base + 0);
+    const uint32_t vel_u32 = unpack_u32_le(base + 4);
+    const uint32_t flag_u32 = unpack_u32_le(base + 8);
+
+    pos_deg[i] = static_cast<double>(pos_i32) / 1000.0;
+    vel_deg_s[i] = static_cast<double>(vel_u32) / 1000.0;
+    flags[i] = flag_u32;
   }
 
   return {pos_deg, vel_deg_s, flags};

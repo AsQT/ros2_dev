@@ -263,6 +263,8 @@ private:
       res->message = e.what();
     }
   }
+// Legacy RS485 publisher for /hardware/flags only. The TCP /robot_hw/flags
+// path publishes uint32 status_f from CMD_GET_ALL in tcp_system_hardware.cpp.
 void publish_status(const std::vector<uint16_t> & flag_s)
 {
   robot_hardware_interface::msg::FlagStatus msg;

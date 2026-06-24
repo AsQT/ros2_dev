@@ -1,0 +1,17 @@
+uint8 AXIS_X=0
+uint8 AXIS_Y=1
+
+geometry_msgs/PoseStamped retract_pose
+geometry_msgs/PoseStamped disturb_pose_1
+geometry_msgs/PoseStamped disturb_pose_2
+uint8 axis
+float64 meas_offset
+int32 repeat_count
+float64 velocity_scale
+---
+bool success
+string message
+int32 completed_count
+---
+int32 current_index
+string current_step

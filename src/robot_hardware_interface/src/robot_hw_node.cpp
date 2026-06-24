@@ -26,6 +26,7 @@
 #include <sstream>
 #include <algorithm>
 #include <chrono>
+#include <iomanip>
 #include <tuple>
 
 using robot_hardware_interface::RobotTcpClient;
@@ -202,6 +203,7 @@ public:
       });
     publish_connected(false);
     publish_status_text("Robot TCP hardware node ready");
+    publish_status(std::vector<uint32_t>(6, 0));
     if (get_parameter("auto_connect").as_bool()) {
       timer_auto_connect_ = create_wall_timer(
         std::chrono::milliseconds(300),
@@ -354,9 +356,23 @@ private:
 void publish_status(const std::vector<uint32_t> & flag_s)
 {
   robot_hardware_interface::msg::FlagStatus msg;
-  const size_t n = std::min(flag_s.size(), msg.axes.size());
-  for (size_t axis = 0; axis < n; ++axis) {
-    const uint32_t st = flag_s[axis];
+  const size_t expected_axes = msg.axes.size();
+  if (flag_s.size() < expected_axes) {
+    if (auto clk = get_clock()) {
+      RCLCPP_WARN_THROTTLE(
+        get_logger(), *clk, 5000,
+        "/robot_hw/flags got %zu flags, expected %zu; missing axes publish status_f=0",
+        flag_s.size(), expected_axes);
+    } else {
+      RCLCPP_WARN(
+        get_logger(),
+        "/robot_hw/flags got %zu flags, expected %zu; missing axes publish status_f=0",
+        flag_s.size(), expected_axes);
+    }
+  }
+
+  for (size_t axis = 0; axis < expected_axes; ++axis) {
+    const uint32_t st = axis < flag_s.size() ? flag_s[axis] : 0u;
     auto & a = msg.axes[axis];
 
     a.servo_on      = (st & STATUS_SERVO_ON) != 0;
@@ -513,6 +529,7 @@ void publish_status(const std::vector<uint32_t> & flag_s)
     if (!connected()) 
     {
       //RCLCPP_INFO(get_logger(), "Polling fail, because TCP is not connected");
+      publish_status(std::vector<uint32_t>(6, 0));
       return;
     }
 
@@ -520,6 +537,7 @@ void publish_status(const std::vector<uint32_t> & flag_s)
     if (n_cfg == 0)
     {
       RCLCPP_INFO(get_logger(), "Polling fail, because erro lenght");
+      publish_status(std::vector<uint32_t>(6, 0));
       return;
     }
 
@@ -544,14 +562,28 @@ void publish_status(const std::vector<uint32_t> & flag_s)
         publish_status_text("Robot TCP disconnected while polling state");
       }
       if (auto clk = get_clock()) {
-        RCLCPP_WARN_THROTTLE(get_logger(), *clk, 2000, "TCP poll get_all_state failed: %s", e.what());
+        RCLCPP_WARN_THROTTLE(
+          get_logger(), *clk, 2000,
+          "get_all_state failed while polling: %s (publishing default flags)", e.what());
       } else {
-        RCLCPP_WARN(get_logger(), "TCP poll get_all_state failed: %s", e.what());
+        RCLCPP_WARN(
+          get_logger(),
+          "get_all_state failed while polling: %s (publishing default flags)", e.what());
       }
+      publish_status(std::vector<uint32_t>(6, 0));
       return;
     }
     const size_t avail = std::min(pos_deg.size(), vel_deg_s.size());
-    if (avail == 0) return;
+    if (avail == 0) {
+      if (auto clk = get_clock()) {
+        RCLCPP_WARN_THROTTLE(
+          get_logger(), *clk, 2000,
+          "get_all_state returned empty state: pos=%zu vel=%zu (publishing default flags)",
+          pos_deg.size(), vel_deg_s.size());
+      }
+      publish_status(std::vector<uint32_t>(6, 0));
+      return;
+    }
 
     sensor_msgs::msg::JointState js;
     js.header.stamp = now();
@@ -585,20 +617,30 @@ void publish_status(const std::vector<uint32_t> & flag_s)
     if (!first_state_logged_) {
       first_state_logged_ = true;
       publish_status_text("Robot TCP received first valid state frame");
-      std::ostringstream raw_pos;
-      for (size_t i = 0; i < std::min<size_t>(6, pos_deg.size()); ++i) {
-        if (i > 0) raw_pos << ", ";
-        raw_pos << static_cast<int>(std::llround(pos_deg[i] * 1000.0));
+      std::ostringstream raw_state;
+      for (size_t i = 0; i < std::min<size_t>(
+          robot_hardware_interface::ROBOT_STATUS_FRAME_AXIS_COUNT, pos_deg.size()); ++i)
+      {
+        if (i > 0) {
+          raw_state << "; ";
+        }
+        const uint32_t flag = i < flag_s.size() ? flag_s[i] : 0u;
+        const double vel = i < vel_deg_s.size() ? vel_deg_s[i] : 0.0;
+        raw_state << "axis[" << i << "]: pos=" << static_cast<int>(std::llround(pos_deg[i] * 1000.0))
+                  << " vel=" << static_cast<unsigned>(std::llround(std::fabs(vel) * 1000.0))
+                  << " flag=0x" << std::hex << std::uppercase << std::setw(8)
+                  << std::setfill('0') << flag << std::dec << std::setfill(' ');
       }
       RCLCPP_INFO(
         get_logger(),
-        "Robot TCP first valid state frame: payload_length=%zu offset=%zu axis_bytes=%zu axes=%zu configured_joints=%zu pos_mdeg[0..5]=[%s]",
+        "CMD_GET_ALL OK: payload_len=%zu status=0x%02X axis_offset=%zu axis_count=%zu axis_bytes=%zu configured_joints=%zu %s",
         client_.last_state_payload_length(),
+        static_cast<unsigned>(robot_hardware_interface::ROBOT_CMD_OK),
         client_.last_state_payload_offset(),
+        flag_s.size(),
         client_.last_state_axis_bytes(),
-        avail,
         n_cfg,
-        raw_pos.str().c_str());
+        raw_state.str().c_str());
     }
     pub_joint_states_->publish(js);
     if (!first_joint_states_logged_) {

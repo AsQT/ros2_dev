@@ -27,6 +27,15 @@ inline constexpr uint8_t GET_POS_ALL = 0xF4;
 
 inline constexpr uint16_t ROBOT_TCP_MAGIC = 0x55AA;
 inline constexpr size_t ROBOT_TCP_HEADER_SIZE = 7;
+inline constexpr uint8_t ROBOT_CMD_OK = 0x00;
+inline constexpr size_t ROBOT_FLAGS_PUBLISH_AXIS_COUNT = 6;
+inline constexpr size_t ROBOT_STATUS_FRAME_AXIS_COUNT = 8;
+inline constexpr size_t ROBOT_STATUS_ALL_STATUS_BYTES = 1;
+inline constexpr size_t ROBOT_STATUS_ALL_AXIS_BYTES = 12;
+inline constexpr size_t ROBOT_STATUS_ALL_AXIS_PAYLOAD_SIZE =
+  ROBOT_STATUS_FRAME_AXIS_COUNT * ROBOT_STATUS_ALL_AXIS_BYTES;
+inline constexpr size_t ROBOT_STATUS_ALL_PAYLOAD_SIZE =
+  ROBOT_STATUS_ALL_STATUS_BYTES + ROBOT_STATUS_ALL_AXIS_PAYLOAD_SIZE;
 
 struct Frame
 {
@@ -74,6 +83,8 @@ public:
 
   std::tuple<std::vector<double>, std::vector<double>, std::vector<uint32_t>> get_all_state(
     int timeout_ms = -1);
+  static std::tuple<std::vector<double>, std::vector<double>, std::vector<uint32_t>>
+  parse_status_all_payload(const std::vector<uint8_t> & payload);
   size_t last_state_payload_length() const;
   size_t last_state_payload_offset() const;
   size_t last_state_axis_bytes() const;
@@ -93,7 +104,6 @@ private:
   static std::vector<uint8_t> pack_u32_le(uint32_t v);
   static int32_t unpack_i32_le(const uint8_t * p);
   static uint32_t unpack_u32_le(const uint8_t * p);
-  static uint16_t unpack_u16_le(const uint8_t * p);
   static double clamp(double v, double lo, double hi);
   static int sanitize_timeout_ms(int timeout_ms);
 

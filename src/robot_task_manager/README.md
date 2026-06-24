@@ -16,6 +16,7 @@ robot_task_manager/
 │   ├── MoveToPose.action
 │   ├── MoveGripper.action
 │   ├── PickPlace.action
+│   ├── RepeatabilityTest.action
 │   └── (other actions)
 ├── launch/
 │   ├── task_servers.launch.py   # Real hardware
@@ -87,6 +88,52 @@ Scan a grid of positions on the table (useful for calibration / workspace mappin
 ```bash
 ros2 action send_goal /move_checker_board robot_task_manager/action/CheckerBoard \
   "{step: 0.1, velocity_scale: 0.1}" --feedback
+```
+
+### RepeatabilityTest
+
+Run a GT10 repeatability measurement sequence without reading GT10 data in ROS. The action name is `/repeatability_test` and the server executable is `repeatability_test_server`.
+
+Sequence:
+
+1. `MoveToPose` to `retract_pose`
+2. For each loop: Cartesian move to `meas_pose`, wait 2 seconds, Cartesian back to `retract_pose`, move to `disturb_pose_1`, move to `disturb_pose_2`, move back to `retract_pose`
+
+`meas_pose` is computed from `retract_pose`; `axis=0` adds `meas_offset` to `x`, and `axis=1` adds it to `y`. Orientation is always copied from `retract_pose`. `velocity_scale` is passed to both `MoveToPose` and `MoveToPoseCartesian`.
+
+Build:
+
+```bash
+cd ~/ros2_dev
+colcon build --packages-select robot_task_manager
+source install/setup.bash
+```
+
+Run servers with mock hardware:
+
+```bash
+ros2 launch robot_task_manager task_servers.launch.py
+```
+
+Quick X-axis test, 3 loops:
+
+```bash
+ros2 launch robot_task_manager repeatability_test_client.launch.py \
+  axis:=0 repeat_count:=3 meas_offset:=0.02 velocity_scale:=0.25
+```
+
+Quick Y-axis test:
+
+```bash
+ros2 launch robot_task_manager repeatability_test_client.launch.py \
+  axis:=1 repeat_count:=3 meas_offset:=0.02 velocity_scale:=0.25
+```
+
+Direct action command:
+
+```bash
+ros2 action send_goal /repeatability_test robot_task_manager/action/RepeatabilityTest \
+  "{retract_pose: {header: {frame_id: 'world'}, pose: {position: {x: 0.40, y: 0.00, z: 0.18}, orientation: {x: 0.7071068, y: 0.7071068, z: 0.0, w: 0.0}}}, disturb_pose_1: {header: {frame_id: 'world'}, pose: {position: {x: 0.35, y: -0.08, z: 0.18}, orientation: {x: 0.7071068, y: 0.7071068, z: 0.0, w: 0.0}}}, disturb_pose_2: {header: {frame_id: 'world'}, pose: {position: {x: 0.45, y: 0.08, z: 0.18}, orientation: {x: 0.7071068, y: 0.7071068, z: 0.0, w: 0.0}}}, axis: 0, meas_offset: 0.02, repeat_count: 3, velocity_scale: 0.25}" --feedback
 ```
 
 ## Robot Workspace Limits (approximate)

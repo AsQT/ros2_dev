@@ -39,6 +39,53 @@ AA 55 | cmd:u8 | seq:u16_le | length:u16_le | payload
 
 Magic is `0x55AA` stored little-endian on the wire as `AA 55`. There is no CRC16, byte stuffing, or UART-style tail parser. TCP connect and read operations use separate timeouts so state polling does not block ROS execution.
 
+### `STATUS_ALL` / `CMD_GET_ALL` State Payload
+
+The STM32 `CMD_GET_ALL` response is parsed by the ROS side as the `STATUS_ALL`
+command. The payload format is fixed:
+
+```text
+payload[0] = CMD_OK = 0x00
+payload[1..96] = [pos:i32][vel:u32][flag:u32] * 8 axes
+```
+
+For the current STM32 frame:
+
+```text
+payload_len = 97 bytes
+axis_count_in_frame = 8
+12 bytes / axis
+96 bytes axis payload
+axis data offset = 1
+```
+
+Fields are little-endian:
+
+```text
+pos_mdeg:   int32
+vel_mdeg_s: uint32
+flag:       uint32
+```
+
+The TCP parser requires the 97-byte payload and rejects frames without the
+`CMD_OK` status byte. The old `[pos:i32][vel:u32][flag:u16]` 10-byte-per-axis
+payload and the previous 72-byte 6-axis payload are deprecated and reported as
+protocol mismatches.
+
+The `/robot_hw/flags` topic publishes:
+
+```text
+robot_hardware_interface/msg/FlagStatus
+axes[i].status_f = uint32 flag from STM32 axis i
+```
+
+The STM32 frame carries 8 axes. The current ROS GUI/interface publishes the
+first 6 axes to `/robot_hw/flags` because `FlagStatus.msg` is still
+`AxisFlag[6]`.
+
+Boolean fields such as `servo_on`, `motionning`, `org_ok`, and fault LEDs are
+derived from that same 32-bit `status_f`.
+
 ## Build
 
 ```bash

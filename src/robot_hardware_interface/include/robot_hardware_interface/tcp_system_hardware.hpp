@@ -153,6 +153,7 @@ private:
   rclcpp::Subscription<trajectory_msgs::msg::JointTrajectory>::SharedPtr sub_joint_trajectory_;
   rclcpp::TimerBase::SharedPtr timer_health_;
   std::string status_text_;
+  bool first_state_frame_logged_{false};
 };
 
 }  // namespace robot_hardware_interface

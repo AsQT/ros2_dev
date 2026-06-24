@@ -427,6 +427,8 @@ Rs485Client::get_all_state(double timeout_s)
   const size_t need_bytes = AXES * BYTES_PER_AXIS; // 64
   std::vector<double> pos_deg(AXES, 0.0);
   std::vector<double> vel_deg_s(AXES, 0.0);
+  // Legacy RS485-only STATUS_ALL parser. The TCP /robot_hw/flags path uses
+  // CMD_GET_ALL [pos:i32][vel:u32][flag:u32] and does not use this uint16 flag.
   std::vector<uint16_t> flags(AXES, 0);
 
   auto rx = exchange(cmd::STATUS_ALL, {}, true, cmd::STATUS_ALL, timeout_s);

@@ -727,6 +727,18 @@ class DrlPlannerNodeBase(Node):
         This must run from a worker thread while the ROS executor is spinning,
         because it waits on the task executor service response.
         """
+        self._preposition_before_plan = bool(
+            self.get_parameter("preposition_before_plan").value
+        )
+        self._update_start_tcp_from_tf_before_plan = bool(
+            self.get_parameter("update_start_tcp_from_tf_before_plan").value
+        )
+        self._preposition_clamp_to_workspace = bool(
+            self.get_parameter("preposition_clamp_to_workspace").value
+        )
+        self._preposition_verify_timeout_sec = float(
+            self.get_parameter("preposition_verify_timeout_sec").value
+        )
         if not self._preposition_before_plan:
             if self._update_start_tcp_from_tf_before_plan:
                 current, got = self._current_tcp_base()

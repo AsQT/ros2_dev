@@ -1,13 +1,20 @@
+import os
+
+from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
 from launch_ros.actions import Node
 from moveit_configs_utils import MoveItConfigsBuilder
 
 def generate_launch_description():
+    robot_description_pkg = get_package_share_directory("robot_description")
     moveit_config = (
         MoveItConfigsBuilder(robot_name="robot", package_name="robot_moveit")
         .robot_description(
-            file_path="config/robot.urdf.xacro",
-            mappings={"is_ignition": "true"}
+            file_path=os.path.join(robot_description_pkg, "urdf", "robot.urdf.xacro"),
+            mappings={
+                "use_sim": "true",
+                "use_mock_hardware": "false",
+            }
         )
         .robot_description_semantic(file_path="config/robot.srdf")
         .trajectory_execution(file_path="config/moveit_controllers.yaml")
@@ -82,6 +89,25 @@ def generate_launch_description():
         parameters=common_moveit_params,
     )
 
+    drl_pickplace = Node(
+        package="robot_task_manager",
+        executable="drl_pickplace_server",
+        name="drl_pickplace_action_server",
+        output="screen",
+        parameters=common_moveit_params + [{
+            "planning_frame": "base_link",
+            "ee_link": "tcp_link",
+        }],
+    )
+
+    repeatability_test = Node(
+        package="robot_task_manager",
+        executable="repeatability_test_server",
+        name="repeatability_test_action_server",
+        output="screen",
+        parameters=common_moveit_params,
+    )
+
     return LaunchDescription([
         gohome_server,
         move_to_pose_server,
@@ -89,4 +115,6 @@ def generate_launch_description():
         checker_board,
         move_gripper,
         pickplace,
+        drl_pickplace,
+        repeatability_test,
     ])
