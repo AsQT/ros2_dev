@@ -65,6 +65,31 @@ Panels:
         - /MotionPlanning1/Planning Metrics1
         - /MotionPlanning1/Planned Path1
       Splitter Ratio: 0.5
+    Tree Height: 369
+  - Class: rviz_common/Displays
+    Help Height: 70
+    Name: Displays
+    Property Tree Widget:
+      Expanded:
+        - /MotionPlanning1
+        - /MotionPlanning1/Scene Robot1
+      Splitter Ratio: 0.5
+    Tree Height: 369
+  - Class: rviz_common/Displays
+    Help Height: 70
+    Name: Displays
+    Property Tree Widget:
+      Expanded:
+        - /Global Options1
+      Splitter Ratio: 0.5
+    Tree Height: 369
+  - Class: rviz_common/Displays
+    Help Height: 70
+    Name: Displays
+    Property Tree Widget:
+      Expanded:
+        - /Global Options1
+      Splitter Ratio: 0.5
     Tree Height: 783
 Visualization Manager:
   Class: ""
@@ -87,6 +112,23 @@ Visualization Manager:
       Plane Cell Count: 10
       Reference Frame: <Fixed Frame>
       Value: true
+    - Alpha: 1
+      Class: rviz_default_plugins/RobotModel
+      Collision Enabled: false
+      Description File: ""
+      Description Source: Topic
+      Description Topic:
+        Depth: 5
+        Durability Policy: Volatile
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /robot_description
+      Enabled: true
+      Name: RobotModel
+      TF Prefix: ""
+      Update Interval: 0
+      Value: true
+      Visual Enabled: true
     - Acceleration_Scaling_Factor: 0.1
       Class: moveit_rviz_plugin/MotionPlanning
       Enabled: true
@@ -288,7 +330,7 @@ Visualization Manager:
             Alpha: 1
             Show Axes: false
             Show Trail: false
-        Robot Alpha: 0.8999999761581421
+        Robot Alpha: 1
         Show Robot Collision: false
         Show Robot Visual: true
       Value: true
@@ -312,10 +354,7 @@ Visualization Manager:
       Enabled: true
       Name: DRL Forward Trajectory
       Namespaces:
-        drl_forward_end: true
-        drl_forward_obstacle: true
-        drl_forward_path: true
-        drl_forward_start: true
+        {}
       Topic:
         Depth: 5
         Durability Policy: Transient Local
@@ -323,23 +362,9 @@ Visualization Manager:
         Reliability Policy: Reliable
         Value: /drl/forward_trajectory_marker
       Value: true
-    - Class: rviz_default_plugins/MarkerArray
-      Enabled: true
-      Name: DRL Backward Trajectory
-      Namespaces:
-        drl_backward_end: true
-        drl_backward_path: true
-        drl_backward_start: true
-      Topic:
-        Depth: 5
-        Durability Policy: Transient Local
-        History Policy: Keep Last
-        Reliability Policy: Reliable
-        Value: /drl/backward_trajectory_marker
-      Value: true
   Enabled: true
   Global Options:
-    Background Color: 48; 48; 48
+    Background Color: 222; 221; 218
     Fixed Frame: world
     Frame Rate: 30
   Name: root
@@ -355,25 +380,25 @@ Visualization Manager:
   Views:
     Current:
       Class: rviz_default_plugins/Orbit
-      Distance: 1.2940821647644043
+      Distance: 1.7165027856826782
       Enable Stereo Rendering:
         Stereo Eye Separation: 0.05999999865889549
         Stereo Focal Distance: 1
         Swap Stereo Eyes: false
         Value: false
       Focal Point:
-        X: 0.3233148753643036
-        Y: 0.10442746430635452
-        Z: 0.3319796621799469
+        X: 0.3971717953681946
+        Y: 0.33859941363334656
+        Z: 0.29739052057266235
       Focal Shape Fixed Size: true
       Focal Shape Size: 0.05000000074505806
       Invert Z Axis: false
       Name: Current View
       Near Clip Distance: 0.009999999776482582
-      Pitch: 0.1850006878376007
+      Pitch: 0.2550005316734314
       Target Frame: world
       Value: Orbit (rviz_default_plugins)
-      Yaw: 5.360218048095703
+      Yaw: 5.465219020843506
     Saved: ~
 Window Geometry:
   Displays:
@@ -387,7 +412,7 @@ Window Geometry:
     collapsed: false
   MotionPlanning - Trajectory Slider:
     collapsed: false
-  QMainWindow State: 000000ff00000000fd0000000100000000000002b400000395fc020000000efb00000044004d006f00740069006f006e0050006c0061006e006e0069006e00670020002d0020005400720061006a006500630074006f0072007900200053006c00690064006500720000000000ffffffff0000004400fffffffb0000001c004d006f00740069006f006e0050006c0061006e006e0069006e006700000001e9000001a10000019600fffffffb0000000800480065006c0070000000029a0000006e0000006f00fffffffb0000000a00560069006500770073000000031f000000b5000000a900fffffffb00000024005200760069007a00560069007300750061006c0054006f006f006c0073004700750069000000003f000003950000004400fffffffb000000100044006900730070006c006100790073000000003f00000395000000cc00fffffffb000000100044006900730070006c006100790073000000003f00000395000000cc00fffffffb000000100044006900730070006c006100790073000000003f00000395000000cc00fffffffb000000280020002d0020005400720061006a006500630074006f0072007900200053006c00690064006500720000000000ffffffff0000000000000000fb00000044004d006f00740069006f006e0050006c0061006e006e0069006e00670020002d0020005400720061006a006500630074006f0072007900200053006c00690064006500720000000000ffffffff0000000000000000fb0000001c004d006f00740069006f006e0050006c0061006e006e0069006e006700000001f2000001e20000000000000000fb000000100044006900730070006c006100790073000000003f00000395000000cc00fffffffb000000100044006900730070006c006100790073000000003f00000395000000cc00fffffffb000000100044006900730070006c006100790073000000003f00000395000000cc00ffffff0000073e0000039500000004000000040000000800000008fc0000000100000002000000010000000a0054006f006f006c00730100000000ffffffff0000000000000000
+  QMainWindow State: 000000ff00000000fd0000000100000000000002b400000395fc0200000011fb00000044004d006f00740069006f006e0050006c0061006e006e0069006e00670020002d0020005400720061006a006500630074006f0072007900200053006c00690064006500720000000000ffffffff0000004400fffffffb0000001c004d006f00740069006f006e0050006c0061006e006e0069006e006700000001e9000001a10000019600fffffffb0000000800480065006c0070000000029a0000006e0000006f00fffffffb0000000a00560069006500770073000000031f000000b5000000a900fffffffb00000024005200760069007a00560069007300750061006c0054006f006f006c0073004700750069000000003f000003950000004400fffffffb000000100044006900730070006c006100790073000000003f00000395000000cc00fffffffb000000100044006900730070006c006100790073000000003f00000395000000cc00fffffffb000000100044006900730070006c006100790073000000003f00000395000000cc00fffffffb000000280020002d0020005400720061006a006500630074006f0072007900200053006c00690064006500720000000000ffffffff0000000000000000fb00000044004d006f00740069006f006e0050006c0061006e006e0069006e00670020002d0020005400720061006a006500630074006f0072007900200053006c00690064006500720000000000ffffffff0000000000000000fb0000001c004d006f00740069006f006e0050006c0061006e006e0069006e006700000001f2000001e20000000000000000fb000000100044006900730070006c006100790073000000003f00000395000000cc00fffffffb000000100044006900730070006c006100790073000000003f00000395000000cc00fffffffb000000100044006900730070006c006100790073000000003f00000395000000cc00fffffffb000000100044006900730070006c006100790073000000003f00000395000000cc00fffffffb000000100044006900730070006c006100790073000000003f00000395000000cc00fffffffb000000100044006900730070006c006100790073000000003f00000395000000cc00ffffff0000073e0000039500000004000000040000000800000008fc0000000100000002000000010000000a0054006f006f006c00730100000000ffffffff0000000000000000
   RvizVisualToolsGui:
     collapsed: false
   Views:

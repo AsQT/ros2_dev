@@ -1,0 +1,9 @@
+#!/usr/bin/env python3
+"""Entry point for ``ros2 run robot_vision_pipeline yolo_depth_xyz_from_intrinsic``."""
+
+import sys
+
+from robot_vision_pipeline.calib.yolo_depth_xyz_from_intrinsic import main
+
+if __name__ == "__main__":
+    sys.exit(main() or 0)

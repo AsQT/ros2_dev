@@ -21,7 +21,7 @@ class ArucoDistanceToId0Node(Node):
         self.declare_parameter("image_topic", "/camera/camera/color/image_raw")
         self.declare_parameter("camera_info_topic", "/camera/camera/color/camera_info")
         self.declare_parameter("dictionary", "DICT_4X4_50")
-        self.declare_parameter("marker_size", 0.028)
+        self.declare_parameter("marker_size", 0.05)
         self.declare_parameter("reference_id", 0)
         self.declare_parameter("target_id", -1)
         self.declare_parameter("draw_debug", True)

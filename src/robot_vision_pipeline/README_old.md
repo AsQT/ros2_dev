@@ -60,7 +60,7 @@ source install/setup.bash
 Nếu dùng virtualenv cho YOLO/ArUco:
 
 ```bash
-source ~/venvs/ros_env/bin/activate
+source ~/venvs/ros_yolo/bin/activate
 ```
 
 YOLO launch hiện dùng Python:

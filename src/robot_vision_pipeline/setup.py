@@ -29,7 +29,17 @@ setup(
     entry_points={
         "console_scripts": [
             "yolo_detect_node = robot_vision_pipeline.yolo.yolo_detect_node:main",
+            "yolo_json_to_object_detection_node = robot_vision_pipeline.yolo_json_to_object_detection_node:main",
+            "pixel_to_base_mapper_node = robot_vision_pipeline.pose_estimation.pixel_to_base_mapper_node:main",
+            "yolo_hough_yaw_estimator_node = robot_vision_pipeline.pose_estimation.yolo_hough_yaw_estimator_node:main",
+            "vision_detection_marker_node = robot_vision_pipeline.pose_estimation.vision_detection_marker_node:main",
+            "static_image_camera_node = robot_vision_pipeline.static_image_camera_node:main",
             "aruco_detect_node = robot_vision_pipeline.aruco.aruco_detect_node:main",
+            "aruco_extrinsic_calibrator_node = robot_vision_pipeline.calib.aruco_extrinsic_calibrator_node:main",
+            "calib_camera_to_world_aruco_5points = robot_vision_pipeline.calib.calib_camera_to_world_aruco_5points:main",
+            "yolo_depth_to_camera = robot_vision_pipeline.calib.yolo_depth_to_camera:main",
+            "yolo_depth_xyz_from_intrinsic = robot_vision_pipeline.calib.yolo_depth_xyz_from_intrinsic:main",
+            "yolo_wood_center_to_world = robot_vision_pipeline.calib.yolo_wood_center_to_world:main",
             "vision_gui = robot_vision_pipeline.vision_gui.vision_gui_main:main",
             "vision_gui_astra = robot_vision_pipeline.vision_gui.vision_gui_astra:main",
         ],

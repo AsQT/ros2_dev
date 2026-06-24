@@ -1,0 +1,136 @@
+camera_frame: camera_color_optical_frame
+world_frame: world
+image_topic: /camera/camera/color/image_raw
+camera_info_topic: /camera/camera/color/camera_info
+aruco_dictionary: DICT_4X4_50
+marker_size_m: 0.05
+marker_distance_x_m: 0.345
+marker_distance_y_m: 0.345
+world_definition:
+  origin: Tam vung mau trang o giua workspace
+  x_axis: Huong tu tam workspace sang phai anh
+  y_axis: Huong tu tam workspace len hang marker phia tren
+  z_axis: Vuong goc mat ban, huong len khoi mat ban
+  handedness: right-handed
+  plane: Mat ban va cac marker ArUco nam tren mat phang Z_world = 0
+marker_world_centers:
+  0: [-0.1725, -0.1725, 0.0]
+  1: [-0.1725, 0.1725, 0.0]
+  2: [0.1725, -0.1725, 0.0]
+  3: [0.1725, 0.1725, 0.0]
+used_marker_ids:
+- 0
+- 1
+- 2
+- 3
+used_points_count: 20
+camera_matrix:
+- [616.0648193359375, 0.0, 321.31298828125]
+- [0.0, 616.4051513671875, 235.18838500976562]
+- [0.0, 0.0, 1.0]
+distortion_coefficients: [0.0, 0.0, 0.0, 0.0, 0.0]
+rvec_world_to_camera: [3.1234247538046964, -0.019823620290825815, 0.020760419448568712]
+tvec_world_to_camera: [-0.02824536055745829, 0.07830628998219566, 0.8679650634333578]
+R_world_to_camera:
+- [0.9998311084989537, -0.012811279389324248, 0.013176706650857874]
+- [-0.012571543292400802, -0.9997568064344615, -0.018118617144082014]
+- [0.013405624826966434, 0.017949905525523134, -0.9997490135602152]
+t_world_to_camera: [-0.02824536055745829, 0.07830628998219566, 0.8679650634333578]
+T_world_to_camera:
+- [0.9998311084989537, -0.012811279389324248, 0.013176706650857874, -0.02824536055745829]
+- [-0.012571543292400802, -0.9997568064344615, -0.018118617144082014, 0.07830628998219566]
+- [0.013405624826966434, 0.017949905525523134, -0.9997490135602152, 0.8679650634333578]
+- [0.0, 0.0, 0.0, 1.0]
+R_camera_to_world:
+- [0.9998311084989531, -0.012571543292400799, 0.01340562482696643]
+- [-0.012811279389324245, -0.9997568064344616, 0.017949905525523138]
+- [0.013176706650857873, -0.018118617144082017, -0.9997490135602154]
+t_camera_to_world: [0.017589407067392877, 0.06234549630269353, 0.8695381984907034]
+T_camera_to_world:
+- [0.9998311084989531, -0.012571543292400799, 0.01340562482696643, 0.017589407067392877]
+- [-0.012811279389324245, -0.9997568064344616, 0.017949905525523138, 0.06234549630269353]
+- [0.013176706650857873, -0.018118617144082017, -0.9997490135602154, 0.8695381984907034]
+- [0.0, 0.0, 0.0, 1.0]
+camera_z_axis_in_world: [0.01340562482696643, 0.017949905525523138, -0.9997490135602154]
+reprojection_error_px: 28.65934022905541
+calibration_points:
+- marker_id: 2
+  point_name: top_left
+  world: [0.1475, -0.1475, 0.0]
+  pixel: [408.0, 428.0]
+- marker_id: 2
+  point_name: top_right
+  world: [0.19749999999999998, -0.1475, 0.0]
+  pixel: [408.0, 400.0]
+- marker_id: 2
+  point_name: bottom_right
+  world: [0.19749999999999998, -0.19749999999999998, 0.0]
+  pixel: [443.0, 400.0]
+- marker_id: 2
+  point_name: bottom_left
+  world: [0.1475, -0.19749999999999998, 0.0]
+  pixel: [444.0, 436.0]
+- marker_id: 2
+  point_name: center
+  world: [0.1725, -0.1725, 0.0]
+  pixel: [425.75, 416.0]
+- marker_id: 0
+  point_name: top_left
+  world: [-0.19749999999999998, -0.1475, 0.0]
+  pixel: [158.0, 433.0]
+- marker_id: 0
+  point_name: top_right
+  world: [-0.1475, -0.1475, 0.0]
+  pixel: [158.0, 398.0]
+- marker_id: 0
+  point_name: bottom_right
+  world: [-0.1475, -0.19749999999999998, 0.0]
+  pixel: [194.0, 398.0]
+- marker_id: 0
+  point_name: bottom_left
+  world: [-0.19749999999999998, -0.19749999999999998, 0.0]
+  pixel: [193.0, 434.0]
+- marker_id: 0
+  point_name: center
+  world: [-0.1725, -0.1725, 0.0]
+  pixel: [175.75, 415.75]
+- marker_id: 3
+  point_name: top_left
+  world: [0.1475, 0.19749999999999998, 0.0]
+  pixel: [408.0, 185.0]
+- marker_id: 3
+  point_name: top_right
+  world: [0.19749999999999998, 0.19749999999999998, 0.0]
+  pixel: [407.0, 151.0]
+- marker_id: 3
+  point_name: bottom_right
+  world: [0.19749999999999998, 0.1475, 0.0]
+  pixel: [443.0, 150.0]
+- marker_id: 3
+  point_name: bottom_left
+  world: [0.1475, 0.1475, 0.0]
+  pixel: [443.0, 185.0]
+- marker_id: 3
+  point_name: center
+  world: [0.1725, 0.1725, 0.0]
+  pixel: [425.25, 167.75]
+- marker_id: 1
+  point_name: top_left
+  world: [-0.19749999999999998, 0.19749999999999998, 0.0]
+  pixel: [159.0, 183.0]
+- marker_id: 1
+  point_name: top_right
+  world: [-0.1475, 0.19749999999999998, 0.0]
+  pixel: [160.0, 147.0]
+- marker_id: 1
+  point_name: bottom_right
+  world: [-0.1475, 0.1475, 0.0]
+  pixel: [195.0, 148.0]
+- marker_id: 1
+  point_name: bottom_left
+  world: [-0.19749999999999998, 0.1475, 0.0]
+  pixel: [194.0, 184.0]
+- marker_id: 1
+  point_name: center
+  world: [-0.1725, 0.1725, 0.0]
+  pixel: [177.0, 165.5]

@@ -1,25 +1,43 @@
 <?xml version="1.0"?>
 <package format="3">
   <name>robot_gui</name>
-  <version>0.1.0</version>
-  <description>Qt based GUI for the 6DOF robot using the Designer .ui layout.</description>
+  <version>0.2.0</version>
+  <description>C++ Qt GUI for the 6DOF robot with native embedded RViz.</description>
   <maintainer email="tranminhquang617@gmail.com">Minh Quang Tran</maintainer>
   <license>MIT</license>
 
-  <buildtool_depend>ament_python</buildtool_depend>
+  <buildtool_depend>ament_cmake</buildtool_depend>
 
-  <exec_depend>rclpy</exec_depend>
-  <exec_depend>sensor_msgs</exec_depend>
-  <exec_depend>std_srvs</exec_depend>
-  <exec_depend>trajectory_msgs</exec_depend>
-  <exec_depend>robot_hardware_interface</exec_depend>
-  <exec_depend>ament_index_python</exec_depend>
-  <exec_depend>python3-pyqt5</exec_depend>
+  <depend>rclcpp</depend>
+  <depend>std_srvs</depend>
+  <depend>std_msgs</depend>
+  <depend>sensor_msgs</depend>
+  <depend>geometry_msgs</depend>
+  <depend>trajectory_msgs</depend>
+  <depend>robot_hardware_interface</depend>
+  <depend>ament_index_cpp</depend>
+  <depend>rviz_common</depend>
+  <depend>rviz_rendering</depend>
+  <depend>pluginlib</depend>
+  <depend>qtbase5-dev</depend>
+
+  <exec_depend>launch</exec_depend>
+  <exec_depend>launch_ros</exec_depend>
+  <exec_depend>libqt5widgets5</exec_depend>
+  <exec_depend>joint_state_publisher</exec_depend>
+  <exec_depend>moveit_configs_utils</exec_depend>
+  <exec_depend>moveit_ros_move_group</exec_depend>
+  <exec_depend>robot_description</exec_depend>
+  <exec_depend>robot_moveit</exec_depend>
+  <exec_depend>robot_state_publisher</exec_depend>
+  <exec_depend>rviz_default_plugins</exec_depend>
+  <exec_depend>tf2_ros</exec_depend>
+  <exec_depend>xacro</exec_depend>
 
   <test_depend>ament_lint_auto</test_depend>
   <test_depend>ament_lint_common</test_depend>
 
   <export>
-    <build_type>ament_python</build_type>
+    <build_type>ament_cmake</build_type>
   </export>
 </package>

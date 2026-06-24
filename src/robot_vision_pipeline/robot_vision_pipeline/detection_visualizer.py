@@ -7,7 +7,7 @@ from typing import Dict, List, Optional, Tuple
 import cv2
 import numpy as np
 
-from robot_vision_pipeline.msg import BoxDetection
+from robot_vision_pipeline_msgs.msg import BoxDetection
 
 
 def _measure_text_block(

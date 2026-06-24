@@ -16,16 +16,11 @@ find_package(rosidl_default_generators REQUIRED)
 rosidl_generate_interfaces(${PROJECT_NAME}
   "msg/ArucoPose.msg"
   "msg/ArucoPoseArray.msg"
-  "msg/BoxDetection.msg"
-  "msg/Box.msg"
   DEPENDENCIES std_msgs geometry_msgs
 )
 
 ament_export_dependencies(rosidl_default_runtime)
 
-# Do not use ament_python_install_package() here: it conflicts with
-# rosidl_generate_interfaces() for the same project name. Install Python
-# modules next to the generated msg package, same style as gp7_vision_pipeline.
 ament_get_python_install_dir(python_install_dir)
 install(
   DIRECTORY robot_vision_pipeline/
@@ -35,22 +30,35 @@ install(
 
 install(
   PROGRAMS
+  scripts/aruco_distance_from_intrinsic
   scripts/yolo_detect_node
   scripts/yolo_detect_node_v1
+  scripts/yolo_depth_to_camera
+  scripts/yolo_depth_xyz_from_intrinsic
+  scripts/yolo_wood_center_to_world
+  scripts/yolo_json_to_object_detection_node
   scripts/yolo_json_to_box_detection_node
   scripts/pixel_to_base_mapper_node
+  scripts/yolo_hough_yaw_estimator_node
   scripts/vision_detection_marker_node
   scripts/realsense_depth_debug
-  scripts/tools/compute_pixel_to_base_homography
-  scripts/tools/test_pixel_to_base_homography
   scripts/aruco_detect_node
+  scripts/aruco_extrinsic_calibrator_node
+  scripts/calib_camera_to_world_aruco_5points
   scripts/vision_gui
   scripts/vision_gui_astra
+  scripts/static_image_camera_node
   DESTINATION lib/${PROJECT_NAME}
 )
 
 install(DIRECTORY launch config models
   DESTINATION share/${PROJECT_NAME}
+)
+
+install(
+  DIRECTORY robot_vision_pipeline/calib/
+  DESTINATION share/${PROJECT_NAME}/calib
+  FILES_MATCHING PATTERN "*.yaml"
 )
 
 if(BUILD_TESTING)

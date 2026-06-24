@@ -1,0 +1,116 @@
+{
+    "env_config_file": null,
+    "obstacle_enabled": true,
+    "collision_enabled": true,
+    "algorithm": "SAC",
+    "total_timesteps": 30000000,
+    "seed": 42,
+    "run_id": null,
+    "device": "cuda",
+    "hyperparameters": {
+        "gamma": 0.99,
+        "learning_rate": 0.0003,
+        "batch_size": 256,
+        "net_arch": [
+            256,
+            256
+        ],
+        "action_noise": null,
+        "total_timesteps": null,
+        "log_interval": 50
+    },
+    "reward_settings": {
+        "success_bonus": 20.0,
+        "collision_penalty": 300.0,
+        "workspace_penalty": 300.0,
+        "timeout_penalty": 50.0,
+        "distance_scale": 1.5,
+        "time_penalty": 0.0,
+        "shake_penalty_scale": 0.005,
+        "shake_window": 10,
+        "shake_dot_threshold": 0.0
+    },
+    "max_steps": 300,
+    "goal_threshold": 0.03,
+    "workspace": {
+        "x_min": 0.25,
+        "x_max": 0.5,
+        "y_min": -0.15,
+        "y_max": 0.15,
+        "z_min": 0.02,
+        "z_max": 0.3
+    },
+    "table": {
+        "center": [
+            0.03,
+            -0.55,
+            -0.15
+        ],
+        "size": [
+            0.33,
+            0.33,
+            0.36
+        ]
+    },
+    "obstacle": {
+        "enabled": true,
+        "center": [
+            0.0,
+            0.0,
+            0.08
+        ],
+        "size": [
+            0.1,
+            0.1,
+            0.1
+        ]
+    },
+    "collision": {
+        "enabled": true
+    },
+    "start": {
+        "mode": "random",
+        "fixed_position": [
+            0.3,
+            0.0,
+            0.3
+        ],
+        "random_bounds": {
+            "min": [
+                0.25,
+                -0.15,
+                0.1
+            ],
+            "max": [
+                0.5,
+                0.15,
+                0.3
+            ]
+        }
+    },
+    "target_region": {
+        "enabled": true,
+        "mode": "random",
+        "fixed_position": [
+            0.3,
+            0.0,
+            0.1
+        ],
+        "random_bounds": {
+            "min": [
+                0.25,
+                -0.15,
+                0.02
+            ],
+            "max": [
+                0.5,
+                0.15,
+                0.15
+            ]
+        }
+    },
+    "training.total_timesteps": 30000000,
+    "training.n_envs": 28,
+    "training.vec_env_type": "auto",
+    "training.progress_bar": false
+}

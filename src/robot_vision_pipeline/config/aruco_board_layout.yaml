@@ -1,0 +1,35 @@
+marker_size: 0.021
+square_size: 0.029
+squares_x: 8
+squares_y: 6
+aruco_dictionary: DICT_4X4_50
+
+world_frame: aruco_world
+camera_frame: camera_color_optical_frame
+
+origin_convention: center
+x_axis: right
+y_axis: up
+z_axis: out_of_board
+
+# World frame:
+#   origin: geometric center of the 8x6 ChArUco board
+#   X+: right along increasing col
+#   Y+: up along increasing row
+#   Z+: out of the board plane
+#
+use_board_roi: false
+
+# Layout convention:
+#   row = 0 is the bottom row of the board
+#   col = 0 is the left column of the board
+#
+# ChArUco corners are used first. This marker layout is only for ArUco fallback.
+# Edit it to match the physical board if fallback is needed.
+marker_layout:
+  0: {row: 0, col: 0}
+  1: {row: 0, col: 1}
+  2: {row: 0, col: 2}
+  3: {row: 1, col: 0}
+  4: {row: 1, col: 1}
+  5: {row: 1, col: 2}

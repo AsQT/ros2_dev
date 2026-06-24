@@ -1,0 +1,18 @@
+{
+    "algorithm": "SAC",
+    "mode": "from_scratch",
+    "config_path": "C:\\Users\\MinhQuang\\DRL\\DRL_Pathplanning_trainning\\config\\environment.yaml",
+    "config_yaml_snapshot": "C:\\Users\\MinhQuang\\DRL\\DRL_Pathplanning_trainning\\Data\\Training\\SAC\\FRAME_ONLY\\run_20260623_233454\\config.yaml",
+    "checkpoint_path": null,
+    "load_replay_buffer": false,
+    "replay_buffer_source": null,
+    "reset_num_timesteps": true,
+    "continue_timesteps": null,
+    "seed": 42,
+    "device": "cuda",
+    "created_at": "2026-06-23T22:20:01.186274+00:00",
+    "training.total_timesteps": 30000000,
+    "training.n_envs": 28,
+    "training.vec_env_type": "auto",
+    "training.progress_bar": false
+}

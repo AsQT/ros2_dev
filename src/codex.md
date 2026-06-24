@@ -1,485 +1,432 @@
-Hãy kiểm tra package `robot_drl` và đối chiếu với file `struc.txt` mà tôi đã cung cấp. Nhiệm vụ hiện tại chỉ là **kiểm tra/audit và tạo báo cáo**, tuyệt đối **không chỉnh sửa code**, **không thêm reward mới**, **không đổi observation**, **không đổi action space**, **không đổi API/action/service**, **không rewrite package**.
+Yêu cầu Codex sửa package `robot_gui` C++ hiện tại: phần joint state chưa được hiển thị trên GUI. Cần tham khảo `robot_gui_old` để port lại đúng logic.
 
-Bối cảnh:
+## 1. Vấn đề hiện tại
 
-* Khi chạy thử model trong môi trường test/training thì không thấy hiện tượng Z đi xuống thấp hơn target rồi mới đi lên.
-* Nhưng khi chạy qua ROS runtime/planning trong `robot_drl`, path có hiện tượng đi xuống thấp hơn `target_pos.z` rồi mới đi lên lại.
-* Hiện chưa áp dụng reward mới. Việc thêm `R_z_guard`, `R_smooth_action`, `R_path_curvature` để sau.
-* File `struc.txt` mô tả toàn bộ cấu trúc lúc train:
-
-  * Training project là `FRAME_ONLY`, không phải robot joint/MoveIt/Gazebo.
-  * Observation shape = 15.
-  * Action shape = 3.
-  * Action là delta Cartesian chuẩn hóa trong `[-1, 1]`.
-  * Physical delta = `action * 0.01 m`.
-  * `next_pos = current_pos + delta`.
-  * Observation gồm:
-
-    * index 0-2: `current_pos`
-    * index 3-5: `target_pos`
-    * index 6-8: `err = target_pos - current_pos`
-    * index 9-11: `rel_obs`
-    * index 12-14: `obs_size`
-  * Không dùng `VecNormalize`.
-  * Một phần observation là mét raw, obstacle feature được normalize theo workspace range.
-  * Reward training hiện tại chưa có Z guard và chưa có path curvature reward.
-  * Evaluation/predict dùng `deterministic=True` mặc định.
-  * Target random Z trong training có ghi chú bị hard-code về `0.10`.
-
-Mục tiêu kiểm tra:
-Tìm nguyên nhân vì sao test model không tụt Z nhưng ROS runtime/planning lại có hiện tượng tụt Z. Cần xác định lỗi có khả năng nằm ở:
-
-1. ROS runtime build observation sai thứ tự.
-2. Sai đơn vị m/mm.
-3. Sai frame tọa độ.
-4. Sai `target_z`, ví dụ ROS dùng target pick thật thay vì pre-pick/pre-place.
-5. Sai action scale so với training `0.01 m/step`.
-6. Đảo dấu trục Z khi cộng action.
-7. ROS runtime dùng `deterministic=False`.
-8. ROS runtime load sai model.
-9. ROS runtime xử lý normalization khác training.
-10. Path sau policy đúng nhưng sau interpolation/smoothing/execution lại bị tụt Z.
-11. Thiếu path safety validator trong runtime.
-
-Yêu cầu quan trọng:
-
-* Chỉ kiểm tra và báo cáo.
-* Không sửa file code.
-* Không thêm reward mới.
-* Không thêm validator trong task này.
-* Không thay đổi config.
-* Nếu cần thêm log để kiểm tra, chỉ đề xuất vị trí cần log trong báo cáo, không tự sửa.
-* Nếu muốn chạy lệnh build/test thì được, nhưng không thay đổi source.
-* Không xóa, rename, format lại file.
-* Không commit thay đổi.
-
-## 1. Đọc và tóm tắt `struc.txt`
-
-Trước tiên hãy đọc kỹ file `struc.txt` và rút ra các thông tin training quan trọng để đối chiếu với `robot_drl`:
+Trong GUI C++ mới:
 
 ```text
-observation_dim
-observation order
-action_dim
-action scale
-next_pos update rule
-deterministic mode khi evaluation
-normalization/VecNormalize
-target_z behavior
-reward hiện tại
-workspace range
-model/checkpoint path nếu có
+robot_gui
 ```
 
-Trong báo cáo phải có mục:
+tab Robot/Hardware hiện chưa hiển thị được trạng thái joint hiện tại.
+
+Yêu cầu:
 
 ```text
-Training reference from struc.txt
+- Tham khảo robot_gui_old.
+- Port lại logic hiển thị joint state sang C++.
+- Dùng layout từ robot_gui/ui/robot_gui.ui.
+- Không tự tạo layout/widget mới.
+- Không sửa robot_gui.ui nếu không thật sự cần.
 ```
 
-Ghi rõ các điểm dùng để so sánh với ROS runtime.
-
-## 2. Audit luồng ROS runtime trong `robot_drl`
-
-Hãy kiểm tra toàn bộ package `robot_drl` và xác định luồng xử lý thực tế:
+Package cũ cần tham khảo:
 
 ```text
-ROS action/service input
-        ↓
-parse start/target/obstacle
-        ↓
-build observation
-        ↓
-load SAC model
-        ↓
-model.predict()
-        ↓
-scale action
-        ↓
-update current_pos / generate waypoint
-        ↓
-create policy path
-        ↓
-interpolate/smooth/resample nếu có
-        ↓
-execute / publish / gọi action khác
+robot_gui_old
 ```
 
-Trong báo cáo cần ghi rõ:
-
-* File nào xử lý từng bước.
-* Class/function nào xử lý từng bước.
-* Input/output của từng bước.
-* Có dùng reward trong ROS runtime không.
-* Có gọi `model.predict(..., deterministic=True)` không.
-* Có path validator không.
-* Có interpolation/smoothing không.
-* Có clamp Z/workspace không.
-
-## 3. Kiểm tra model và inference mode
-
-Kiểm tra:
-
-* ROS runtime đang load model `.zip` nào.
-* Test/evaluation model trong training dùng model nào.
-* Có nguy cơ ROS load nhầm model cũ không.
-* Có dùng `VecNormalize`/normalization file nào không.
-* Vì `struc.txt` ghi training không dùng VecNormalize, kiểm tra ROS có đang normalize sai hoặc thiếu/nhầm normalize không.
-* `model.predict()` trong ROS dùng `deterministic=True` hay `False`.
-
-Báo cáo cần có bảng:
+Package mới cần sửa:
 
 ```text
-Item | Training/Test reference | robot_drl runtime | Match? | Note
-model path | ... | ... | yes/no | ...
-VecNormalize | disabled | ... | yes/no | ...
-deterministic | true | ... | yes/no | ...
+robot_gui
 ```
 
-Nếu ROS dùng `deterministic=False`, đánh dấu là rủi ro cao.
+---
 
-## 4. Kiểm tra observation build
+## 2. File cần đọc kỹ
 
-Dựa theo `struc.txt`, observation đúng lúc training là:
+Đọc logic cũ trong:
 
 ```text
-obs[0:3]   = current_pos
-obs[3:6]   = target_pos
-obs[6:9]   = target_pos - current_pos
-obs[9:12]  = rel_obs = (obstacle_center - current_pos) / workspace_range
-obs[12:15] = obs_size = obstacle_half_extent / workspace_range
+robot_gui_old/robot_gui/main_window.py
+robot_gui_old/robot_gui/gui_win.md
+robot_gui_old/ui/robot_gui.ui
 ```
 
-Hãy kiểm tra trong `robot_drl`:
-
-* Observation có đúng shape 15 không.
-* Thứ tự index có giống training không.
-* `current_pos`, `target_pos`, `err`, `rel_obs`, `obs_size` có đúng không.
-* `obs_size` đang dùng full size hay half extent.
-* Workspace range có giống training không.
-* Đơn vị có phải mét không.
-* Obstacle position có đúng frame không.
-* Có nhầm index Z không.
-* Có đưa target pick thật thay vì target approach không.
-
-Báo cáo cần có bảng:
+Đọc GUI C++ hiện tại:
 
 ```text
-Observation index | Training meaning | robot_drl runtime meaning | Match? | Risk
-0-2 | current_pos | ... | yes/no | ...
-3-5 | target_pos | ... | yes/no | ...
-6-8 | target-current | ... | yes/no | ...
-9-11 | rel_obs | ... | yes/no | ...
-12-14 | obs_size half extent normalized | ... | yes/no | ...
+robot_gui/ui/robot_gui.ui
+robot_gui/src/main_window.cpp
+robot_gui/include/robot_gui/main_window.hpp
+robot_gui/src/robot_gui_node.cpp
+robot_gui/include/robot_gui/robot_gui_node.hpp
 ```
 
-Nếu không xác định được bằng code, ghi rõ “chưa xác định được” và chỉ ra file/function cần log thêm.
-
-## 5. Kiểm tra action scale và update rule
-
-Theo `struc.txt`, training dùng:
-
-```python
-delta = action * 0.01
-next_pos = current_pos + delta
-```
-
-Hãy kiểm tra trong `robot_drl`:
-
-* Có clip action về `[-1, 1]` không.
-* Action scale có đúng `0.01 m/step` không.
-* Scale theo Z có khác X/Y không.
-* Có dùng đơn vị mm không.
-* Có đảo dấu Z không.
-* Có công thức sai kiểu:
-
-```python
-next_z = current_z - action_z * scale
-```
-
-thay vì:
-
-```python
-next_z = current_z + action_z * scale
-```
-
-Báo cáo cần kết luận rõ:
-
-* Nếu `raw_action_z` đúng nhưng `next_z` sai: lỗi nằm ở scale/dấu/frame/update rule.
-* Nếu `raw_action_z` đã khác test: lỗi nằm ở observation/model/target/deterministic.
-
-## 6. Kiểm tra target Z
-
-Hãy kiểm tra target truyền vào DRL planner trong `robot_drl` là:
-
-* target pick/place thật, hay
-* pre-pick/pre-place approach target.
-
-Với pick-place, DRL runtime nên plan tới pose an toàn:
+Mục tiêu là xác định:
 
 ```text
-pre_pick.z  = target_pick.z  + approach_height
-pre_place.z = target_place.z + approach_height
+- robot_gui_old subscribe topic nào để lấy joint state
+- message type gì
+- map joint nào vào ô hiển thị nào
+- đơn vị hiển thị là rad hay deg
+- objectName của các QLabel/QLineEdit/LCDNumber trong .ui
 ```
 
-Sau đó mới Cartesian đi thẳng xuống điểm pick/place thật.
+Không được đoán objectName.
 
-Cần kiểm tra:
+---
 
-* Trong test model, target_z thường là bao nhiêu.
-* Trong ROS runtime, target_z là bao nhiêu.
-* Có offset approach height không.
-* Có nhầm giữa target thật và target approach không.
-* Có trường hợp ROS target_z thấp hơn đáng kể so với test không.
-* Training từng có target_z hard-code 0.10, ROS có dùng target_z khác phân phối này không.
+## 3. Topic joint state cần subscribe
 
-Báo cáo cần ghi rõ rủi ro nếu ROS runtime đưa target_z ngoài phân phối training.
-
-## 7. Kiểm tra path policy, processed path và executed path
-
-Phải phân biệt 3 loại path:
+Cần subscribe topic chuẩn:
 
 ```text
-policy_path:
-    waypoint trực tiếp từ policy/action loop
-
-processed_path:
-    path sau interpolate/smooth/resample
-
-executed_path:
-    path cuối cùng gửi cho controller/action khác
+/joint_states
 ```
 
-Hãy kiểm tra:
-
-* Policy path có tụt Z không.
-* Nếu policy path không tụt Z, processed/executed path có tụt Z không.
-* Có dùng spline/cubic/polynomial smoothing gây overshoot không.
-* Có nội suy làm tạo waypoint dưới target_z không.
-* Có convert frame gây đổi Z không.
-
-Báo cáo cần có mục:
+Message:
 
 ```text
-Path stage comparison
+sensor_msgs/msg/JointState
 ```
 
-với các metric cần tìm hoặc đề xuất log:
+C++ include:
+
+```cpp
+#include <sensor_msgs/msg/joint_state.hpp>
+```
+
+Logic callback:
+
+```cpp
+void onJointState(const sensor_msgs::msg::JointState::SharedPtr msg);
+```
+
+---
+
+## 4. Mapping joint name
+
+Cần map theo tên joint trong message, không chỉ dựa vào index nếu có thể.
+
+Các joint cần hiển thị tối thiểu:
 
 ```text
-policy_path_min_z
-processed_path_min_z
-executed_path_min_z
-target_z
-z_min_allowed = target_z - margin
-min_z_index
+joint_1
+joint_2
+joint_3
+joint_4
+joint_5
+joint_6
+joint_gl
+joint_gr
 ```
 
-Nếu hiện chưa có log để tính, ghi rõ cần thêm log ở file/function nào.
+Nếu GUI chỉ hiển thị 6 trục chính thì:
 
-## 8. Kiểm tra sharp turn/gấp khúc
-
-Chỉ kiểm tra, không sửa.
-
-Hãy kiểm tra path hiện tại có thể tính được:
-
-* `max_turn_angle_deg`
-* `sharp_turn_index`
-* `max_step_distance`
-* `max_step_index`
-* waypoint duplicate hoặc segment quá ngắn
-
-Công thức góc:
-
-```python
-v0 = path[i] - path[i - 1]
-v1 = path[i + 1] - path[i]
-
-if norm(v0) > eps and norm(v1) > eps:
-    cos_angle = dot(v0, v1) / (norm(v0) * norm(v1))
-    angle_deg = arccos(clamp(cos_angle, -1.0, 1.0)) * 180.0 / pi
+```text
+joint_1 -> Axis 1
+joint_2 -> Axis 2
+joint_3 -> Axis 3
+joint_4 -> Axis 4
+joint_5 -> Axis 5
+joint_6 -> Axis 6
 ```
 
-Nếu path không được lưu/log, báo cáo phải đề xuất vị trí cần log để tính các metric này.
+Không phụ thuộc thứ tự mảng nếu message có name khác thứ tự.
 
-## 9. Kiểm tra runtime safety validator hiện có hay chưa
+Pseudo logic:
 
-Chỉ kiểm tra, không thêm.
+```cpp
+for (size_t i = 0; i < msg->name.size(); ++i) {
+    const auto &name = msg->name[i];
+    if (name == "joint_1") axis = 0;
+    ...
+}
+```
 
-Tìm xem `robot_drl` hiện có kiểm tra trước khi execute không:
+---
 
-* waypoint.z >= target_z - margin
-* waypoint nằm trong workspace
-* max step distance
-* sharp turn angle
-* obstacle collision
-* fallback/replan khi path invalid
+## 5. Đơn vị hiển thị
 
-Báo cáo cần kết luận:
+Codex phải kiểm tra `robot_gui_old` đang hiển thị đơn vị gì.
 
-* Có validator chưa.
-* Validator nằm ở file/function nào.
-* Validator kiểm tra những gì.
-* Thiếu kiểm tra gì.
-* Nếu không có validator, ghi rõ đây là rủi ro runtime.
+Nếu `/joint_states.position` là radian theo chuẩn ROS, nhưng GUI cũ hiển thị độ, thì phải convert:
 
-## 10. Kiểm tra reward trong ROS runtime
+```cpp
+deg = rad * 180.0 / M_PI;
+```
 
-Yêu cầu xác định:
+Nếu old GUI đã hiển thị rad thì giữ rad.
 
-* ROS runtime có dùng reward không.
-* Nếu có, reward dùng để làm gì.
-* Có dùng reward để sửa action/path không.
-* Có reward training copy sang runtime không.
+Yêu cầu trong report ghi rõ:
 
-Kết luận mong muốn:
+```text
+- Input /joint_states.position unit:
+- GUI display unit:
+- Conversion used:
+```
 
-* Nếu ROS chỉ inference thì không nên dùng reward để điều khiển runtime.
-* Reward mới để sau, thuộc training/evaluation, không áp dụng trong task này.
+Không tự ý đổi đơn vị.
 
-## 11. Chạy kiểm tra nếu có thể
+---
 
-Có thể chạy các lệnh không làm thay đổi source:
+## 6. Giá trị cần hiển thị
+
+Tối thiểu hiển thị:
+
+```text
+- actual position từng joint
+```
+
+Nếu trong `.ui` có ô velocity thì hiển thị thêm:
+
+```text
+- velocity từng joint nếu msg.velocity có dữ liệu
+```
+
+Nếu trong `.ui` có effort thì hiển thị thêm:
+
+```text
+- effort nếu msg.effort có dữ liệu
+```
+
+Nếu msg không có velocity/effort hoặc size không đủ:
+
+```text
+- không crash
+- hiển thị "--" hoặc giữ giá trị cũ
+- log debug/throttle warning nếu cần
+```
+
+---
+
+## 7. Dùng widget có sẵn trong robot_gui.ui
+
+Không được tạo widget mới.
+
+Phải tìm đúng objectName trong:
+
+```text
+robot_gui/ui/robot_gui.ui
+```
+
+Ví dụ cần tìm các ô kiểu:
+
+```text
+Axis1Actual
+Axis1Current
+txtAxis1Actual
+lineEditAxis1Actual
+labelAxis1Actual
+lcdAxis1Pos
+```
+
+Nhưng không được đoán. Phải đọc file `.ui`.
+
+Nếu không tìm thấy widget tương ứng:
+
+```cpp
+RCLCPP_WARN(logger, "Joint state widget not found: <objectName>");
+```
+
+Không tự tạo widget thay thế.
+
+---
+
+## 8. Thread-safe GUI update
+
+Nếu ROS executor chạy thread riêng, không update Qt widget trực tiếp trong callback.
+
+Dùng Qt signal-slot:
+
+```text
+ROS callback /joint_states
+    -> emit jointStateUpdated(...)
+    -> Qt slot updateJointStateDisplay(...) trên main thread
+```
+
+Nếu hiện tại GUI dùng QTimer `spin_some()` trên Qt main thread thì có thể update trực tiếp, nhưng vẫn phải đảm bảo không block GUI.
+
+---
+
+## 9. Format hiển thị
+
+Format đề xuất:
+
+```text
+position: 3 chữ số thập phân
+velocity: 3 chữ số thập phân nếu có
+```
+
+Ví dụ:
+
+```cpp
+QString::number(value, 'f', 3)
+```
+
+Nếu hiển thị degree:
+
+```text
+deg
+```
+
+Nếu hiển thị rad:
+
+```text
+rad
+```
+
+Không làm thay đổi field input setpoint của người dùng, chỉ cập nhật field actual/current.
+
+---
+
+## 10. Không nhầm với flags
+
+Phần `/robot_hw/flags` chỉ dùng cho LED trạng thái.
+
+Phần `/joint_states` dùng cho vị trí/velocity thực tế.
+
+Không dùng `status_f` để hiển thị joint position.
+
+Không dùng `/robot_hw/flags` thay cho `/joint_states`.
+
+---
+
+## 11. Test bắt buộc
+
+Build:
 
 ```bash
-colcon build --packages-select robot_drl
+cd ~/ros2_dev
+colcon build --packages-select robot_gui --event-handlers console_direct+
+source /opt/ros/jazzy/setup.bash
+source install/setup.bash
 ```
 
-Nếu có test sẵn:
+Chạy GUI standalone:
 
 ```bash
-colcon test --packages-select robot_drl
-colcon test-result --verbose
+ros2 launch robot_gui robot_gui.launch.py embed_rviz:=false
 ```
 
-Nếu có script inference/test không ghi đè file, có thể chạy để lấy log. Nhưng không được train lại, không được ghi đè model.
+Trong terminal khác, publish thử joint state mock:
 
-Nếu chạy được case runtime/mock_hw, hãy ghi lệnh và kết quả. Nếu không chạy được, ghi rõ lý do.
+```bash
+ros2 topic pub /joint_states sensor_msgs/msg/JointState "{
+  header: {stamp: {sec: 0, nanosec: 0}, frame_id: ''},
+  name: ['joint_1','joint_2','joint_3','joint_4','joint_5','joint_6','joint_gl','joint_gr'],
+  position: [0.1,0.2,0.3,0.4,0.5,0.6,0.01,0.01],
+  velocity: [0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0],
+  effort: []
+}" -r 5
+```
 
-## 12. Tạo báo cáo
-
-Tạo file:
+Kỳ vọng:
 
 ```text
-robot_drl_runtime_z_audit_report.md
+- GUI không crash.
+- Axis 1..6 actual/current position cập nhật.
+- Nếu GUI dùng degree thì 0.1 rad hiển thị khoảng 5.730 deg.
+- Nếu GUI dùng rad thì hiển thị 0.100.
+```
+
+Test với launch MoveIt:
+
+```bash
+ros2 launch robot_moveit moveit_gui.launch.py
+```
+
+Kỳ vọng:
+
+```text
+- /joint_states có dữ liệu.
+- GUI hiển thị joint state.
+- RViz nếu bật vẫn hoạt động.
+```
+
+---
+
+## 12. Test objectName mapping
+
+Thêm log runtime hoặc report:
+
+```text
+Joint state display widgets:
+Axis1 position widget: found yes/no
+Axis2 position widget: found yes/no
+Axis3 position widget: found yes/no
+Axis4 position widget: found yes/no
+Axis5 position widget: found yes/no
+Axis6 position widget: found yes/no
+```
+
+Nếu widget missing, ghi rõ objectName thiếu.
+
+---
+
+## 13. Không phá phần khác
+
+Không làm hỏng:
+
+```text
+- layout từ robot_gui.ui
+- ảnh Logo.png
+- embedded RViz native
+- moveit_gui.launch.py
+- /robot_hw/flags LED
+- /robot_hw/servo_all
+- tab Robot button mapping
+```
+
+Không sửa `.ui` nếu chưa cần.
+
+---
+
+## 14. Report
+
+Tạo/cập nhật:
+
+```text
+robot_gui/joint_state_display_report.md
 ```
 
 Nội dung bắt buộc:
 
-### 1. Scope
+```markdown
+# Joint State Display Report
 
-* Chỉ audit/kiểm tra.
-* Không sửa code.
-* Không thêm reward.
-* Không đổi observation/action.
+## 1. Source reference
+- robot_gui_old files checked:
 
-### 2. Training reference from `struc.txt`
+## 2. Topic
+- Topic:
+- Message:
+- Callback file:
 
-Tóm tắt các thông tin training dùng để đối chiếu:
+## 3. Joint mapping
+| Joint name | Axis | Widget objectName | Found | Unit | Test value |
+|---|---|---|---|---|---|
 
-* observation order
-* action scale
-* update rule
-* deterministic inference
-* no VecNormalize
-* target_z behavior
-* reward hiện tại
+## 4. Unit conversion
+- Input unit:
+- Display unit:
+- Conversion:
 
-### 3. robot_drl runtime flow
+## 5. Threading
+- ROS spin method:
+- GUI update method:
 
-Sơ đồ:
-
-```text
-input → observation → model.predict → action scale → waypoint/path → post-process → execute
+## 6. Test result
+- Build:
+- Mock /joint_states publish:
+- MoveIt launch:
+- Remaining issues:
 ```
 
-Ghi file/function tương ứng.
+---
 
-### 4. Test/training vs ROS runtime comparison
+## 15. Output cuối cùng
 
-Bảng:
-
-```text
-Item | Training/Test | robot_drl runtime | Match? | Risk/Note
-```
-
-Tối thiểu gồm:
-
-* model path
-* deterministic mode
-* VecNormalize
-* observation_dim
-* observation order
-* unit
-* frame
-* target_z
-* action_scale
-* Z sign
-* policy_path
-* processed_path
-* executed_path
-* runtime validator
-
-### 5. Z issue analysis
-
-Kết luận theo logic:
+Output ngắn gọn:
 
 ```text
-Nếu raw_action_z test và ROS khác nhau:
-    nghi observation/normalization/target/deterministic/model.
-
-Nếu raw_action_z giống nhưng next_z khác:
-    nghi action scale/dấu Z/frame/update rule.
-
-Nếu policy path không tụt nhưng processed/executed path tụt:
-    nghi interpolation/smoothing/path conversion.
-
-Nếu mọi thứ khớp nhưng vẫn tụt:
-    lúc đó mới xem reward/training.
+Đã port hiển thị joint state từ robot_gui_old sang robot_gui C++.
+Topic: /joint_states
+Message: sensor_msgs/msg/JointState
+Axis 1..6 display: OK/FAIL
+Unit: rad/deg
+Mock publish test: OK/FAIL
+Report: robot_gui/joint_state_display_report.md
 ```
-
-### 6. Sharp turn/path smoothness audit
-
-* Có tính được max turn angle không.
-* Có tính được max step distance không.
-* Có path log không.
-* Nếu chưa có, cần log ở đâu.
-
-### 7. Runtime safety audit
-
-* Có validator chưa.
-* Thiếu check nào.
-* Rủi ro nếu execute path không validate.
-
-### 8. Findings
-
-Liệt kê theo mức độ:
-
-* High risk
-* Medium risk
-* Low risk
-
-### 9. Recommendations for next step
-
-Chỉ đề xuất, không sửa:
-
-* Log thêm gì.
-* Chỗ nào cần đối chiếu raw_action/next_pos.
-* Có nên thêm validator không.
-* Có cần chỉnh reward/training không.
-* Có cần train/fine-tune lại không.
-
-### 10. Commands run
-
-* Lệnh đã chạy.
-* Kết quả pass/fail.
-* Lỗi nếu có.
-
-Ràng buộc cuối:
-
-* Không chỉnh sửa source trong task này.
-* File duy nhất được phép tạo là `robot_drl_runtime_z_audit_report.md`.
-* Nếu cần ghi chú thêm, ghi trong file báo cáo.
-* Không train lại model.
-* Không ghi đè checkpoint/model.
-* Không thay đổi config.

@@ -1,0 +1,7 @@
+#!/usr/bin/env python3
+
+from robot_vision_pipeline.calib.calib_camera_to_world_aruco_5points import main
+
+
+if __name__ == "__main__":
+    main()

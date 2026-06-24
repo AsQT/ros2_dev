@@ -1,31 +1,44 @@
-# pixel_to_base_mapper_node — default parameters
-# Homography calibration, table model, box geometry, robust depth estimation.
 pixel_to_base_mapper_node:
   ros__parameters:
-    homography_yaml: "config/pixel_to_base_homography.yaml"
+    output_frame_id: "camera_color_optical_frame"
 
-    # Target (calibration sticker) geometry — FIXED values from calibration
-    target_height_mm: 10.0
-    target_center_z_base_mm: 55.0
-    target_top_depth_raw_mm: 556.0
+    camera_info_topic: "/camera/camera/color/camera_info"
+    color_image_topic: "/camera/camera/color/image_raw"
+    depth_image_topic: "/camera/camera/aligned_depth_to_color/image_raw"
 
-    # Table surface model (derived from calibration)
-    table_z_base_mm: 50.0
-    table_depth_raw_mm: 566.0
+    wood_detection_topic: "/vision/wood_detection"
+    box_detection_topic: "/vision/box_detection"
 
-    # Box detection defaults
-    default_box_height_mm: 10.0
-    min_valid_height_mm: 1.0
-    max_valid_height_mm: 300.0
+    wood_objects_topic: "/vision/wood_objects"
+    box_objects_topic: "/vision/box_objects"
 
-    # Box size scale factors (tune if intrinsics-based size is biased)
-    box_width_scale: 1.0
-    box_length_scale: 1.0
+    default_box_size_x_m: 0.08
+    default_box_size_y_m: 0.08
+    default_box_size_z_m: 0.05
+    box_obstacle_margin_m: 0.02
 
-    # Robust depth estimation (5×5 window, outlier filtering)
-    # See README §7 "Robust depth estimation" for algorithm details.
-    box_center_depth_window_radius: 2
-    box_min_valid_depth_m: 0.1
-    box_max_valid_depth_m: 2.0
-    box_depth_outlier_threshold_m: 0.02
-    box_min_valid_depth_samples: 5
+    fake_depth_m: 0.55
+    use_fake_depth_if_missing: false
+
+    overlay_timeout_sec: 1.0
+    stale_timeout_sec: 2.0
+
+    enable_yaw_estimation: true
+    yaw_class_name: "wood"
+    mask_shrink: 0.92
+    morph_kernel_size: 5
+    min_hsv_area_ratio: 0.80
+
+    h_min: 5
+    h_max: 35
+    s_min: 40
+    s_max: 255
+    v_min: 40
+    v_max: 255
+
+    enable_yaw_smoothing: true
+    yaw_avg_frames: 5
+    show_debug_text: false
+    yaw_arrow_length_px: 50
+    default_grasp_yaw_deg: 0.0
+    verbose_yaw_log: true

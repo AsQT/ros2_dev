@@ -37,8 +37,12 @@ def generate_launch_description():
 
     model_path_arg = DeclareLaunchArgument(
         "model_path",
-        default_value="",
-        description="Override YOLO model path. Empty means use YAML config.",
+        default_value=PathJoinSubstitution([
+            pkg_share,
+            "models",
+            "yolov8.pt",
+        ]),
+        description="Path to YOLO model.",
     )
 
     image_topic_arg = DeclareLaunchArgument(

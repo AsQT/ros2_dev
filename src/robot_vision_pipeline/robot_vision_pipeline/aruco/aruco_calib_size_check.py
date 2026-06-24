@@ -53,7 +53,7 @@ class ArucoCalibSizeCheckNode(Node):
         self.declare_parameter("image_topic", "/camera/camera/color/image_raw")
         self.declare_parameter("camera_info_topic", "/camera/camera/color/camera_info")
         self.declare_parameter("dictionary", "DICT_4X4_50")
-        self.declare_parameter("marker_size_mm", 28.0)
+        self.declare_parameter("marker_size_mm", 50.0)
         self.declare_parameter("known_distance_mm", 0.0)
         self.declare_parameter("draw_debug", True)
         self.declare_parameter("log_every_n_frames", 15)

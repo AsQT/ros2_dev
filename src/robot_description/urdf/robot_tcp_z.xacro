@@ -1,0 +1,358 @@
+<?xml version="1.0"?>
+<robot name="robot" xmlns:xacro="http://www.ros.org/wiki/xacro">
+
+  <!-- ________________ DEFINE LINK ________________________________________________________________________ -->
+  <!-- World Frame -->
+  <link name  ="world"/>
+  <link name  ="tcp_link"/> 
+  <!-- Link 0 - Base -->
+  <link name  ="base_link">
+    <inertial>
+      <origin xyz ="-0.00544954615598158 0.000157418519134474 0.00564099250157026" rpy="0 0 0" />
+      <mass value ="1.78696933370067" />
+      <inertia
+              ixx ="0.00334289861376234"   
+              ixy ="-2.39019225970563E-07"
+              ixz ="7.11788112309683E-06"  
+              iyy ="0.0031863560397784"
+              iyz ="-2.78684112590384E-06" 
+              izz ="0.00645191220467659" />
+    </inertial>
+    <visual>
+      <origin xyz ="0 0 0" rpy  ="0 0 0" />
+      <geometry>
+        <mesh filename  ="package://robot_description/meshes/base_link.stl" />
+      </geometry>
+      <material   name  ="black"></material>
+    </visual>
+    <collision>
+      <origin xyz ="0 0 0" rpy ="0 0 0" />
+      <geometry>
+        <mesh filename  ="package://robot_description/meshes/dae/base_link.dae" />
+      </geometry>
+    </collision>
+  </link>
+  <!-- Link 1 -->
+  <link name  ="link_1">
+    <inertial>
+      <origin   xyz  ="0.0193443558112907 0.0109921802765565 0.0924758072620357" rpy="0 0 0" />
+      <mass   value  ="5.50396042361908" />
+      <inertia
+                ixx ="0.0130037829993516"    
+                ixy ="3.49214734799824E-09"
+                ixz ="-0.00313572650782407"  
+                iyy ="0.0174211851360363"
+                iyz ="-2.33013746145458E-06" 
+                izz ="0.0140359346087906" />
+    </inertial>
+    <visual>
+      <origin xyz ="0 0 0" rpy  ="0 0 0" />
+      <geometry>
+        <mesh filename  ="package://robot_description/meshes/link_1.stl" />
+      </geometry>
+      <material   name  ="blue"></material>
+    </visual>
+    <collision>
+      <origin xyz ="0 0 0" rpy ="0 0 0" />
+      <geometry>
+        <mesh filename  ="package://robot_description/meshes/dae/link_1.dae" />
+      </geometry>
+    </collision>
+  </link>
+    <!-- Link 2 -->
+  <link name="link_2">
+    <inertial>
+      <origin xyz ="0.095965941991434 0.000112006139674839 -0.0319594915411429"  rpy="0 0 0" />
+      <mass value ="2.68614147040981" />
+      <inertia
+              ixx ="0.00216208190226954" 
+              ixy ="7.03906699411074E-07"
+              ixz ="1.9470092472916E-06" 
+              iyy ="0.0110452906557092"
+              iyz ="-1.43932327786374E-06" 
+              izz ="0.0125902837214324" />
+    </inertial>
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0" />
+      <geometry>
+        <mesh   filename ="package://robot_description/meshes/link_2.stl" />
+      </geometry>
+      <material     name  ="grey"></material>
+    </visual>
+    <collision>
+      <origin xyz ="0 0 0" rpy ="0 0 0" />
+      <geometry>
+        <mesh filename  ="package://robot_description/meshes/dae/link_2.dae" />
+      </geometry>
+    </collision>
+  </link>
+    <!-- Link 3 -->
+  <link  name="link_3">
+    <inertial>
+      <origin xyz ="0.0315400667409967 -0.0522316930638639 -0.0372996788949479" rpy="0 0 0" />
+      <mass value ="2.69379315969066" />
+      <inertia
+              ixx ="0.00297065150537785" 
+              ixy ="0.000173737882412212"
+              ixz ="1.08004336423003E-07" 
+              iyy ="0.0019143128411473"
+              iyz ="4.2036787275891E-06" 
+              izz ="0.0039181139326064" />
+    </inertial>
+    <visual>
+      <origin  xyz="0 0 0" rpy="0 0 0" />
+      <geometry>
+        <mesh  filename="package://robot_description/meshes/link_3.stl" />
+      </geometry>
+      <material name="blue"></material>
+    </visual>
+    <collision>
+      <origin xyz ="0 0 0" rpy ="0 0 0" />
+      <geometry>
+        <mesh filename  ="package://robot_description/meshes/dae/link_3.dae" />
+      </geometry>
+    </collision>
+  </link>
+    <!-- Link 4 -->
+  <link  name="link_4">
+    <inertial>
+      <origin xyz ="0.00868566509472264 -0.000351062944789704 0.0358084533663054" rpy="0 0 0" />
+      <mass value ="1.80796623919651" />
+      <inertia
+              ixx ="0.00163140667717977"   
+              ixy ="-1.5364988555156E-06"
+              ixz ="-1.21111109518308E-05" 
+              iyy ="0.00126669781876782"
+              iyz ="-8.97475562349671E-07" 
+              izz ="0.0010711724867268" />
+    </inertial>
+    <visual>
+      <origin xyz="0 0 0"  rpy="0 0 0" />
+      <geometry>
+        <mesh filename="package://robot_description/meshes/link_4.stl" />
+      </geometry>
+      <material name="grey"></material>
+    </visual>
+    <collision>
+      <origin xyz ="0 0 0" rpy ="0 0 0" />
+      <geometry>
+        <mesh filename  ="package://robot_description/meshes/dae/link_4.dae" />
+      </geometry>
+    </collision>
+  </link>
+    <!-- Link 5 -->
+  <link  name="link_5">
+    <inertial>
+      <origin xyz ="0.0674634334441427 5.73631023903509E-05 0.00771105147453628" rpy="0 0 0" />
+      <mass value ="0.367372399298886" />
+      <inertia
+              ixx ="0.000203467788892474"   
+              ixy ="-4.31988988741858E-07"
+              ixz ="-2.92876701433074E-05"  
+              iyy ="0.000404007801086554"
+              iyz ="-9.06114097030996E-09"  
+              izz ="0.000453819777422173" />
+    </inertial>
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0" />
+      <geometry>
+        <mesh filename  ="package://robot_description/meshes/link_5.stl" />
+      </geometry>
+      <material   name  ="blue"></material>
+    </visual>
+    <collision>
+      <origin xyz ="0 0 0" rpy ="0 0 0" />
+      <geometry>
+        <mesh filename  ="package://robot_description/meshes/dae/link_5.dae" />
+      </geometry>
+    </collision>
+  </link>
+    <!-- Link 6 -->
+  <link  name="link_6">
+    <inertial>
+      <origin xyz ="-3.2560015697054E-06 -3.69429945190625E-07 -0.000227999228200271" rpy="0 0 0" />
+      <mass value ="0.0760881236172958" />
+      <inertia
+              ixx ="1.0689375645495E-05"   
+              ixy ="1.29742190426518E-07"
+              ixz ="-4.13087402822219E-09" 
+              iyy ="6.01775641263719E-05"
+              iyz ="-8.47409888919864E-11" 
+              izz ="6.20472722814015E-05" />
+    </inertial>
+    <visual>
+      <origin xyz ="0 0 0" rpy  ="0 0 0" />
+      <geometry>
+        <mesh filename  ="package://robot_description/meshes/tcp_z.stl" />
+      </geometry>
+      <material   name  ="grey"></material>
+    </visual>
+    <collision>
+      <origin xyz ="0 0 0" rpy ="0 0 0" />
+      <geometry>
+        <mesh filename  ="package://robot_description/meshes/tcp_z.stl" />
+      </geometry>
+    </collision>
+  </link>
+      <!-- gripper_l -->
+  <link
+    name="gripper_l">
+    <inertial>
+      <origin xyz ="0.00529765879587146 -3.88578058618805E-15 0.0107662645329267"  rpy="0 0 0" />
+      <mass value ="0.00341226263656414" />
+      <inertia
+              ixx ="2.87010460865535E-07" 
+              ixy ="-2.57160585374973E-20"
+              ixz ="5.98935002113914E-08" 
+              iyy ="2.9830566445971E-07"
+              iyz ="3.31197444456193E-19" 
+              izz ="1.33685846407215E-07" />
+    </inertial>
+    <visual>
+      <origin xyz ="0 0 0" rpy  ="0 0 0" />
+      <geometry>
+        <mesh filename  ="package://robot_description/meshes/gripper_l.stl" />
+      </geometry>
+      <material   name  ="grey"></material>
+    </visual>
+    <collision>
+      <origin xyz ="0 0 0" rpy ="0 0 0" />
+      <geometry>
+        <mesh filename  ="package://robot_description/meshes/dae/gripper_l.dae" />
+      </geometry>
+    </collision>
+  </link>
+    <!-- gripper_r -->
+  <link name="gripper_r">
+    <inertial>
+      <origin xyz ="0.00529765879587152 -3.88578058618805E-15 0.0107662645329266" rpy="0 0 0" />
+      <mass value ="0.00341226263656414" />
+      <inertia
+              ixx ="2.87010460865533E-07" 
+              ixy ="-2.59872111438333E-20"
+              ixz ="5.98935002113914E-08" 
+              iyy ="2.98305664459708E-07"
+              iyz ="3.31020394390284E-19" 
+              izz ="1.33685846407216E-07" />
+    </inertial>
+    <visual>
+      <origin xyz ="0 0 0" rpy  ="0 0 0" />
+      <geometry>
+        <mesh filename  ="package://robot_description/meshes/gripper_r.stl" />
+      </geometry>
+      <material   name  ="grey"></material>
+    </visual>
+    <collision>
+      <origin xyz ="0 0 0" rpy ="0 0 0" />
+      <geometry>
+        <mesh filename  ="package://robot_description/meshes/dae/gripper_r.dae" />
+      </geometry>
+    </collision>
+  </link>
+  <!-- ________________ DEFINE JOINT ________________________________________________________________________ -->
+  <!-- World-Base Joint -->
+  <joint    name  ="virtual_joint"         type      ="fixed">
+    <origin xyz   ="0 0 0"                 rpy       ="0 0 0"/>
+    <parent link  ="world"/>
+    <child  link  ="base_link"/>
+  </joint>
+  <joint    name  ="tcp_joint"             type      ="fixed">
+    <origin xyz   ="0 0.045 0.04"              rpy       ="0 0 0"/> 
+    <parent link  ="link_6"/>
+    <child  link  ="tcp_link"/>
+  </joint>
+  <!-- JOINT 1 -->
+  <joint    name  ="joint_1"               type      ="revolute">
+    <origin xyz   ="0 0 0.05"              rpy       ="0 0 0" />
+    <parent link  ="base_link" />
+    <child  link  ="link_1" />
+    <axis   xyz   ="0 0 1" />
+    <limit  lower ="-2.0943"               upper     ="2.0943"
+            effort="1000"                  velocity  ="5.0" />
+  </joint>
+  <!-- JOINT 2 -->
+  <joint    name  ="joint_2"               type      ="revolute">
+    <origin xyz   ="0.1 0.04 0.24313"      rpy       ="${-pi/2} ${-pi/2} 0" />
+    <parent link  ="link_1" />
+    <child  link  ="link_2" />
+    <axis   xyz   ="0 0 1" />
+    <limit  lower ="-1.5707"               upper     ="2.6179"
+            effort="1000"                  velocity  ="5.0" />
+  </joint>
+  <!-- JOINT 3 -->
+  <joint    name  ="joint_3"               type      ="revolute">
+    <origin xyz   ="0.25 0 0.0"          rpy       ="0 0 ${pi/2}" />
+    <parent link  ="link_2" />
+    <child  link  ="link_3" />
+    <axis   xyz   ="0 0 1" />
+    <limit  lower ="-1.5707"               upper     ="1.5707"
+            effort="1000"                  velocity  ="5.0" />
+  </joint>
+  <!-- JOINT 4 -->
+  <joint    name  ="joint_4"               type    ="revolute">
+    <origin xyz   ="0.103 -0.09 -0.04"     rpy     ="0 ${pi/2} 0" />
+    <parent link  ="link_3" />
+    <child  link  ="link_4" />
+    <axis   xyz   ="0 0 1" />
+    <limit  lower ="-1.5707"               upper     ="1.5707"
+            effort="1000"                  velocity  ="5.0" />
+  </joint>
+  <!-- JOINT 5 -->
+  <joint    name  ="joint_5"               type    ="revolute">
+    <origin xyz   ="-0.05 0 0.12"        rpy     ="${pi} ${-pi/2} ${pi}" />
+    <parent link  ="link_4" />
+    <child  link  ="link_5" />
+    <axis   xyz   ="0 0 1" />
+    <limit  lower ="-1.5707"               upper    ="1.5707"
+            effort="1000"                  velocity ="5.0" />
+  </joint>
+  <!-- JOINT 6 -->
+  <joint    name  ="joint_6"               type    ="revolute">
+    <origin xyz   ="0.132 0 -0.05"      rpy     ="0 ${-pi/2} ${pi}" />
+    <parent link  ="link_5" />
+    <child  link  ="link_6" />
+    <axis   xyz   ="0 0 1" />
+    <limit  lower ="-1.5707"               upper     ="1.5707"
+            effort="1000"                  velocity  ="5.0" />
+  </joint>
+  <!-- joint_gl -->
+  <joint    name  ="joint_gl"              type      ="prismatic">
+    <origin xyz   ="0.0021 0 -0.0668"       rpy       ="0 0 0" />
+    <parent link  ="link_6" />
+    <child  link  ="gripper_l" />
+    <axis   xyz   ="1 0 0" />
+    <limit  lower ="-0.001"                upper     ="0.02"
+            effort="50"                    velocity  ="0.05" />
+  </joint>
+  <!-- joint_gr -->
+  <joint    name  ="joint_gr"              type      ="prismatic">
+    <origin xyz   ="-0.0021 0 -0.0668"      rpy       ="0 0 ${pi}" />
+    <parent link  ="link_6" />
+    <child  link  ="gripper_r" />
+    <axis   xyz   ="1 0 0" />
+    <limit  lower ="-0.001"                upper     ="0.02"
+            effort="50"                    velocity  ="0.05" />
+  </joint>
+
+  <gazebo reference="gripper_l">
+    <mu1>         1000.0</mu1> 
+    <mu2>         1000.0</mu2> 
+    <kp>          1000000.0</kp> 
+    <kd>          1.0</kd>       
+    <minDepth>    0.001</minDepth> 
+    <maxVel>      0.1</maxVel>       
+    <selfCollide> false</selfCollide>
+    <material>    Gazebo/Grey</material>
+  </gazebo>
+
+  <gazebo reference="gripper_r">
+    <mu1>         1000.0</mu1>
+    <mu2>         1000.0</mu2>
+    <kp>          1000000.0</kp>
+    <kd>          1.0</kd>
+    <minDepth>    0.001</minDepth>
+    <maxVel>      0.1</maxVel>
+    <selfCollide> false</selfCollide>
+    <material>    Gazebo/Grey</material>
+  </gazebo>
+</robot>
