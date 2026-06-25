@@ -42,6 +42,9 @@ RobotGuiNode::RobotGuiNode(const rclcpp::NodeOptions & options)
     has_parameter("rviz_config_relative_path") ?
     get_parameter("rviz_config_relative_path").as_string() :
     declare_parameter<std::string>("rviz_config_relative_path", "config/moveit.rviz");
+  raw_image_topic_ = get_string_parameter("image_topics.raw", "");
+  detection_image_topic_ = get_string_parameter("image_topics.detection", "");
+  yolo_image_topic_ = get_string_parameter("image_topics.yolo", "");
 
   flags_sub_ = create_subscription<robot_hardware_interface::msg::FlagStatus>(
     "/robot_hw/flags", rclcpp::SensorDataQoS(),
@@ -63,6 +66,7 @@ RobotGuiNode::RobotGuiNode(const rclcpp::NodeOptions & options)
         joint_state_callback_(msg->name, msg->position, msg->velocity);
       }
     });
+  create_image_subscriptions();
 
   servo_all_client_ = create_client<std_srvs::srv::SetBool>("/robot_hw/servo_all");
   home_client_ = create_client<robot_hardware_interface::srv::Home>("/robot_hw/home");
@@ -91,12 +95,30 @@ void RobotGuiNode::set_log_callback(LogCallback callback)
   log_callback_ = std::move(callback);
 }
 
+void RobotGuiNode::set_raw_image_callback(ImageCallback callback)
+{
+  raw_image_callback_ = std::move(callback);
+}
+
+void RobotGuiNode::set_detection_image_callback(ImageCallback callback)
+{
+  detection_image_callback_ = std::move(callback);
+}
+
+void RobotGuiNode::set_yolo_image_callback(ImageCallback callback)
+{
+  yolo_image_callback_ = std::move(callback);
+}
+
 bool RobotGuiNode::embed_rviz() const {return embed_rviz_;}
 int RobotGuiNode::initial_page() const {return initial_page_;}
 std::string RobotGuiNode::rviz_config_package() const {return rviz_config_package_;}
 std::string RobotGuiNode::rviz_config_relative_path() const {return rviz_config_relative_path_;}
 const std::vector<std::string> & RobotGuiNode::joint_names() const {return joint_names_;}
 const std::vector<int64_t> & RobotGuiNode::axis_ids() const {return axis_ids_;}
+const std::string & RobotGuiNode::raw_image_topic() const {return raw_image_topic_;}
+const std::string & RobotGuiNode::detection_image_topic() const {return detection_image_topic_;}
+const std::string & RobotGuiNode::yolo_image_topic() const {return yolo_image_topic_;}
 
 bool RobotGuiNode::has_robot_description_provider() const
 {
@@ -252,6 +274,58 @@ int RobotGuiNode::hardware_id_from_axis(int axis_ui) const
     return static_cast<int>(axis_ids_[index]);
   }
   return index;
+}
+
+std::string RobotGuiNode::get_string_parameter(
+  const std::string & name,
+  const std::string & default_value)
+{
+  if (has_parameter(name)) {
+    return get_parameter(name).as_string();
+  }
+  return declare_parameter<std::string>(name, default_value);
+}
+
+void RobotGuiNode::create_image_subscriptions()
+{
+  if (!raw_image_topic_.empty()) {
+    raw_image_sub_ = create_subscription<sensor_msgs::msg::Image>(
+      raw_image_topic_, rclcpp::SensorDataQoS(),
+      [this](const sensor_msgs::msg::Image::SharedPtr msg) {
+        if (raw_image_callback_) {
+          raw_image_callback_(msg);
+        }
+      });
+    RCLCPP_INFO(get_logger(), "Raw image topic: %s", raw_image_topic_.c_str());
+  } else {
+    RCLCPP_WARN(get_logger(), "Raw image topic is not configured");
+  }
+
+  if (!detection_image_topic_.empty()) {
+    detection_image_sub_ = create_subscription<sensor_msgs::msg::Image>(
+      detection_image_topic_, rclcpp::SensorDataQoS(),
+      [this](const sensor_msgs::msg::Image::SharedPtr msg) {
+        if (detection_image_callback_) {
+          detection_image_callback_(msg);
+        }
+      });
+    RCLCPP_INFO(get_logger(), "Detection image topic: %s", detection_image_topic_.c_str());
+  } else {
+    RCLCPP_WARN(get_logger(), "Detection image topic is not configured");
+  }
+
+  if (!yolo_image_topic_.empty()) {
+    yolo_image_sub_ = create_subscription<sensor_msgs::msg::Image>(
+      yolo_image_topic_, rclcpp::SensorDataQoS(),
+      [this](const sensor_msgs::msg::Image::SharedPtr msg) {
+        if (yolo_image_callback_) {
+          yolo_image_callback_(msg);
+        }
+      });
+    RCLCPP_INFO(get_logger(), "YOLO image topic: %s", yolo_image_topic_.c_str());
+  } else {
+    RCLCPP_WARN(get_logger(), "YOLO image topic is not configured");
+  }
 }
 
 void RobotGuiNode::log(const std::string & message) const

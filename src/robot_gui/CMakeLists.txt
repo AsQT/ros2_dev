@@ -58,8 +58,12 @@ install(TARGETS robot_gui_node
   DESTINATION lib/${PROJECT_NAME}
 )
 
-install(DIRECTORY launch ui config
+install(DIRECTORY launch ui
   DESTINATION share/${PROJECT_NAME}
+)
+
+install(DIRECTORY config/
+  DESTINATION share/${PROJECT_NAME}/config
 )
 
 ament_package()

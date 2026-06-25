@@ -5,9 +5,10 @@ from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription, TimerAction
 from launch.conditions import IfCondition
 from launch.launch_description_sources import PythonLaunchDescriptionSource
-from launch.substitutions import LaunchConfiguration
+from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
 from launch_ros.actions import Node
 from launch_ros.parameter_descriptions import ParameterValue
+from launch_ros.substitutions import FindPackageShare
 from moveit_configs_utils import MoveItConfigsBuilder
 
 
@@ -17,6 +18,9 @@ def generate_launch_description():
     start_controller_manager = LaunchConfiguration("start_controller_manager")
     gui_delay = LaunchConfiguration("gui_delay")
     initial_page = LaunchConfiguration("initial_page")
+    robot_gui_config = PathJoinSubstitution(
+        [FindPackageShare("robot_gui"), "config", "config.yaml"]
+    )
 
     use_sim_time            = LaunchConfiguration("use_sim_time")
     use_mock                = LaunchConfiguration("use_mock")
@@ -79,6 +83,7 @@ def generate_launch_description():
                 executable="robot_gui_node",
                 output="screen",
                 parameters=[
+                    robot_gui_config,
                     moveit_config.to_dict(),
                     {
                         "embed_rviz": True,

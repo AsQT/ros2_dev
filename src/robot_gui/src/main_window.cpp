@@ -6,10 +6,14 @@
 #include <utility>
 
 #include <QApplication>
+#include <QComboBox>
 #include <QDir>
 #include <QFrame>
+#include <QFont>
+#include <QImage>
 #include <QLabel>
 #include <QLineEdit>
+#include <QPixmap>
 #include <QPushButton>
 #include <QStackedWidget>
 #include <QTextEdit>
@@ -48,6 +52,45 @@ QString timestamp()
   std::strftime(buffer, sizeof(buffer), "%H:%M:%S", std::localtime(&now));
   return QString::fromLatin1(buffer);
 }
+
+bool ros_image_to_qimage(const sensor_msgs::msg::Image & msg, QImage * image)
+{
+  if (image == nullptr || msg.width == 0 || msg.height == 0 || msg.step == 0) {
+    return false;
+  }
+
+  const auto required_size = static_cast<size_t>(msg.step) * static_cast<size_t>(msg.height);
+  if (msg.data.size() < required_size) {
+    return false;
+  }
+
+  const auto width = static_cast<int>(msg.width);
+  const auto height = static_cast<int>(msg.height);
+  const auto step = static_cast<int>(msg.step);
+  const auto * data = msg.data.data();
+
+  if (msg.encoding == "rgb8") {
+    *image = QImage(data, width, height, step, QImage::Format_RGB888).copy();
+    return true;
+  }
+  if (msg.encoding == "bgr8") {
+    *image = QImage(data, width, height, step, QImage::Format_RGB888).rgbSwapped();
+    return true;
+  }
+  if (msg.encoding == "mono8") {
+    *image = QImage(data, width, height, step, QImage::Format_Grayscale8).copy();
+    return true;
+  }
+  if (msg.encoding == "rgba8") {
+    *image = QImage(data, width, height, step, QImage::Format_RGBA8888).copy();
+    return true;
+  }
+  if (msg.encoding == "bgra8") {
+    *image = QImage(data, width, height, step, QImage::Format_ARGB32).copy();
+    return true;
+  }
+  return false;
+}
 }  // namespace
 
 MainWindow::MainWindow(
@@ -66,9 +109,13 @@ MainWindow::MainWindow(
   qRegisterMetaType<std::vector<uint32_t>>("std::vector<uint32_t>");
   qRegisterMetaType<QStringList>("QStringList");
   qRegisterMetaType<QVector<double>>("QVector<double>");
+  qRegisterMetaType<QImage>("QImage");
   connect(this, &MainWindow::flags_received, this, &MainWindow::update_axis_flags);
   connect(this, &MainWindow::joint_state_received, this, &MainWindow::update_joint_state_display);
   connect(this, &MainWindow::ros_log_received, this, &MainWindow::append_ros_log);
+  connect(this, &MainWindow::raw_image_received, this, &MainWindow::update_raw_image);
+  connect(this, &MainWindow::detection_image_received, this, &MainWindow::update_detection_image);
+  connect(this, &MainWindow::yolo_image_received, this, &MainWindow::update_yolo_image);
 
   node_->set_flag_callback([this](const std::vector<uint32_t> & flags) {
     Q_EMIT flags_received(flags);
@@ -98,8 +145,18 @@ MainWindow::MainWindow(
   node_->set_log_callback([this](const std::string & message) {
     Q_EMIT ros_log_received(QString::fromStdString(message));
   });
+  node_->set_raw_image_callback([this](const sensor_msgs::msg::Image::SharedPtr & msg) {
+    emit_image(msg, "raw");
+  });
+  node_->set_detection_image_callback([this](const sensor_msgs::msg::Image::SharedPtr & msg) {
+    emit_image(msg, "detection");
+  });
+  node_->set_yolo_image_callback([this](const sensor_msgs::msg::Image::SharedPtr & msg) {
+    emit_image(msg, "yolo");
+  });
 
   setup_defaults();
+  setup_image_display();
   setup_navigation();
   setup_robot_controls();
   setup_axis_controls();
@@ -148,6 +205,38 @@ void MainWindow::setup_defaults()
     set_axis_leds(axis, 0);
   }
   update_robot_enable_button();
+}
+
+void MainWindow::setup_image_display()
+{
+  set_status_led(label("ledCameraStatus"), false);
+
+  set_image_placeholder(label("rawImageView"), "Raw Image", node_->raw_image_topic());
+  set_image_placeholder(label("detectionImageView"), "Detection Image", node_->detection_image_topic());
+  set_image_placeholder(label("yoloPreviewWidget"), "YOLO Image", node_->yolo_image_topic());
+
+  if (auto * combo = findChild<QComboBox *>("cbImageTopic")) {
+    combo->clear();
+    const std::array<std::string, 3> topics = {
+      node_->raw_image_topic(), node_->detection_image_topic(), node_->yolo_image_topic()};
+    for (const auto & topic : topics) {
+      if (!topic.empty()) {
+        combo->addItem(QString::fromStdString(topic));
+      }
+    }
+    if (combo->count() == 0) {
+      combo->addItem("No topic configured");
+    }
+  }
+
+  append_ros_log(
+    QString("Image topics: raw=%1, detection=%2, yolo=%3")
+      .arg(node_->raw_image_topic().empty() ? "No topic configured" :
+        QString::fromStdString(node_->raw_image_topic()))
+      .arg(node_->detection_image_topic().empty() ? "No topic configured" :
+        QString::fromStdString(node_->detection_image_topic()))
+      .arg(node_->yolo_image_topic().empty() ? "No topic configured" :
+        QString::fromStdString(node_->yolo_image_topic())));
 }
 
 void MainWindow::setup_navigation()
@@ -486,6 +575,51 @@ void MainWindow::update_joint_state_display(
   }
 }
 
+void MainWindow::update_raw_image(QImage image)
+{
+  set_image_pixmap(label("rawImageView"), image);
+  set_status_led(label("ledCameraStatus"), true);
+  if (!raw_image_seen_) {
+    raw_image_seen_ = true;
+    const QString message = QString("Raw Image received: %1x%2 from %3")
+      .arg(image.width())
+      .arg(image.height())
+      .arg(QString::fromStdString(node_->raw_image_topic()));
+    RCLCPP_INFO(node_->get_logger(), "%s", message.toStdString().c_str());
+    append_ros_log(message);
+  }
+}
+
+void MainWindow::update_detection_image(QImage image)
+{
+  set_image_pixmap(label("detectionImageView"), image);
+  set_status_led(label("ledCameraStatus"), true);
+  if (!detection_image_seen_) {
+    detection_image_seen_ = true;
+    const QString message = QString("Detection Image received: %1x%2 from %3")
+      .arg(image.width())
+      .arg(image.height())
+      .arg(QString::fromStdString(node_->detection_image_topic()));
+    RCLCPP_INFO(node_->get_logger(), "%s", message.toStdString().c_str());
+    append_ros_log(message);
+  }
+}
+
+void MainWindow::update_yolo_image(QImage image)
+{
+  set_image_pixmap(label("yoloPreviewWidget"), image);
+  set_status_led(label("ledCameraStatus"), true);
+  if (!yolo_image_seen_) {
+    yolo_image_seen_ = true;
+    const QString message = QString("YOLO Image received: %1x%2 from %3")
+      .arg(image.width())
+      .arg(image.height())
+      .arg(QString::fromStdString(node_->yolo_image_topic()));
+    RCLCPP_INFO(node_->get_logger(), "%s", message.toStdString().c_str());
+    append_ros_log(message);
+  }
+}
+
 void MainWindow::set_axis_leds(int axis, uint32_t status)
 {
   set_led(label(QString("ledAxis%1ServoOn").arg(axis)), status & SERVO_ON, kNormalInactive, kNormalActive);
@@ -503,6 +637,74 @@ void MainWindow::set_label_text(const QString & object_name, const QString & tex
   if (auto * object = findChild<QLabel *>(object_name)) {
     object->setText(text);
   }
+}
+
+void MainWindow::set_image_placeholder(QLabel * label, const QString & title, const std::string & topic)
+{
+  if (label == nullptr) {
+    return;
+  }
+  QFont font = label->font();
+  font.setPointSize(12);
+  label->setFont(font);
+  label->setWordWrap(true);
+  label->setAlignment(Qt::AlignCenter);
+  label->setScaledContents(false);
+  label->clear();
+  if (topic.empty()) {
+    label->setText(QString("%1\nNo topic configured").arg(title));
+  } else {
+    label->setText(
+      QString("%1\n%2\nWaiting for image...")
+        .arg(title)
+        .arg(QString::fromStdString(topic)));
+  }
+}
+
+void MainWindow::set_image_pixmap(QLabel * label, const QImage & image)
+{
+  if (label == nullptr || image.isNull()) {
+    return;
+  }
+  label->setText(QString());
+  label->setAlignment(Qt::AlignCenter);
+  label->setScaledContents(false);
+  const QPixmap pixmap = QPixmap::fromImage(image);
+  const QSize target_size = label->size();
+  label->setPixmap(
+    target_size.isEmpty() ? pixmap :
+    pixmap.scaled(target_size, Qt::KeepAspectRatio, Qt::SmoothTransformation));
+}
+
+bool MainWindow::emit_image(const sensor_msgs::msg::Image::SharedPtr & msg, const char * panel_name)
+{
+  if (!msg) {
+    return false;
+  }
+
+  QImage image;
+  if (!ros_image_to_qimage(*msg, &image)) {
+    const QString message =
+      QString("Unsupported or invalid %1 image: encoding=%2, size=%3x%4, step=%5")
+        .arg(panel_name)
+        .arg(QString::fromStdString(msg->encoding))
+        .arg(msg->width)
+        .arg(msg->height)
+        .arg(msg->step);
+    RCLCPP_WARN(node_->get_logger(), "%s", message.toStdString().c_str());
+    Q_EMIT ros_log_received(message);
+    return false;
+  }
+
+  const QString panel = QString::fromLatin1(panel_name);
+  if (panel == "raw") {
+    Q_EMIT raw_image_received(image);
+  } else if (panel == "detection") {
+    Q_EMIT detection_image_received(image);
+  } else if (panel == "yolo") {
+    Q_EMIT yolo_image_received(image);
+  }
+  return true;
 }
 
 QString MainWindow::line_text(const QString & object_name, const QString & fallback) const

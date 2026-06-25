@@ -1,432 +1,397 @@
-Yêu cầu Codex sửa package `robot_gui` C++ hiện tại: phần joint state chưa được hiển thị trên GUI. Cần tham khảo `robot_gui_old` để port lại đúng logic.
+Bạn hãy thực hiện nhiệm vụ sau trong workspace ROS 2 hiện tại. Mục tiêu là tạo **demo pick_place bằng RL trong Gazebo**, chưa dùng YOLO/xử lý ảnh, mà dùng **Gazebo ground truth / spawn info làm perception tạm thời**.
 
-## 1. Vấn đề hiện tại
+# 1. Bối cảnh
 
-Trong GUI C++ mới:
+Hiện tại chưa build kịp phần xử lý ảnh / YOLO trong mô phỏng, nhưng cần chạy được demo:
 
 ```text
-robot_gui
+Gazebo + robot + box 3cm + RL pick_place
 ```
 
-tab Robot/Hardware hiện chưa hiển thị được trạng thái joint hiện tại.
+Thông tin vật cần gắp sẽ lấy từ:
+
+```text
+Gazebo ground truth
+hoặc
+thông tin spawn object
+```
+
+Không cần dùng camera, không cần YOLO, không cần image topic.
+
+Các package liên quan hiện có:
+
+```text
+robot_description
+robot_drl
+robot_task_manager
+robot_bringup
+```
+
+Hiện trong repo đã có file tham khảo:
+
+```text
+robot_description/gazebo/random_wood_block.py
+```
+
+và có launch Gazebo hiện có, ví dụ:
+
+```text
+gazebo.launch.py
+sim.launch.py
+```
+
+Hãy tự tìm đúng vị trí file trong repo.
+
+Hiện có model box tương tự model wood, nằm trong:
+
+```text
+robot_description/worlds/box
+```
+
+hoặc vị trí tương tự trong `robot_description/worlds/`.
+
+# 2. Yêu cầu quan trọng
+
+## 2.1. Không phá code cũ
+
+Ưu tiên **tạo file mới**, không sửa các file đang chạy ổn.
+
+Chỉ được sửa file cũ khi thật sự bắt buộc, ví dụ:
+
+```text
+- CMakeLists.txt để install file launch/script mới
+- package.xml nếu thiếu dependency bắt buộc
+- setup.py/setup.cfg nếu package Python cần install entry point mới
+```
+
+Nếu phải sửa file cũ, phải sửa tối thiểu và ghi rõ trong báo cáo:
+
+```text
+- đã sửa file nào
+- lý do sửa
+- nội dung sửa có ảnh hưởng gì không
+```
+
+Không được thay đổi logic hiện có của các action/task đang chạy ổn nếu không cần thiết.
+
+# 3. Nhiệm vụ 1 — Đưa box vào Gazebo
+
+Hiện tại box chưa spawn được vào Gazebo. Bạn phải làm cho box xuất hiện được trong Gazebo.
+
+Hãy dựa trên logic của:
+
+```text
+robot_description/gazebo/random_wood_block.py
+```
+
+để tạo file mới, ví dụ:
+
+```text
+robot_description/gazebo/spawn_pick_box.py
+```
+
+hoặc tên hợp lý hơn.
 
 Yêu cầu:
 
 ```text
-- Tham khảo robot_gui_old.
-- Port lại logic hiển thị joint state sang C++.
-- Dùng layout từ robot_gui/ui/robot_gui.ui.
-- Không tự tạo layout/widget mới.
-- Không sửa robot_gui.ui nếu không thật sự cần.
+- Spawn được box vào Gazebo.
+- Box là khối lập phương kích thước 3 cm.
+- Kích thước: 0.03 x 0.03 x 0.03 m.
+- Có thể dùng model có sẵn trong robot_description/worlds/box nếu đúng.
+- Nếu model có sẵn chưa đúng hoặc không spawn được, tạo model SDF tối thiểu mới để spawn được box 3 cm.
+- Không xóa model wood hoặc các model cũ.
 ```
 
-Package cũ cần tham khảo:
+Vì robot đang đặt trên bàn trong Gazebo, tọa độ Z của box phải tính thêm chiều cao bàn.
+
+Yêu cầu xử lý Z:
 
 ```text
-robot_gui_old
+box_center_z = table_height + box_size_z / 2
 ```
 
-Package mới cần sửa:
+Trong đó:
 
 ```text
-robot_gui
+box_size_z = 0.03 m
 ```
 
----
-
-## 2. File cần đọc kỹ
-
-Đọc logic cũ trong:
+Nếu có thể đọc được `table_height` từ world/model hiện có thì dùng giá trị đó. Nếu không đọc tự động được, hãy tạo launch parameter:
 
 ```text
-robot_gui_old/robot_gui/main_window.py
-robot_gui_old/robot_gui/gui_win.md
-robot_gui_old/ui/robot_gui.ui
+table_height
 ```
 
-Đọc GUI C++ hiện tại:
+và đặt default hợp lý theo world hiện tại. Không hard-code tùy tiện nếu có thể tránh.
+
+# 4. Nhiệm vụ 2 — Publish ground truth / spawn info làm perception tạm
+
+Sau khi spawn box, cần publish thông tin vật thể cho pipeline pick_place đọc.
+
+Tạo node/topic mới, ví dụ:
 
 ```text
-robot_gui/ui/robot_gui.ui
-robot_gui/src/main_window.cpp
-robot_gui/include/robot_gui/main_window.hpp
-robot_gui/src/robot_gui_node.cpp
-robot_gui/include/robot_gui/robot_gui_node.hpp
+/sim/pick_box_info
 ```
 
-Mục tiêu là xác định:
+hoặc:
 
 ```text
-- robot_gui_old subscribe topic nào để lấy joint state
-- message type gì
-- map joint nào vào ô hiển thị nào
-- đơn vị hiển thị là rad hay deg
-- objectName của các QLabel/QLineEdit/LCDNumber trong .ui
+/sim/object_info
 ```
 
-Không được đoán objectName.
-
----
-
-## 3. Topic joint state cần subscribe
-
-Cần subscribe topic chuẩn:
+Nội dung tối thiểu phải có:
 
 ```text
-/joint_states
+- object name
+- pose của box trong frame dùng cho robot/Gazebo
+- size_x = 0.03
+- size_y = 0.03
+- size_z = 0.03
 ```
 
-Message:
+Nếu không muốn tạo custom msg mới, có thể dùng các message chuẩn có sẵn, ví dụ:
 
 ```text
-sensor_msgs/msg/JointState
+geometry_msgs/PoseStamped
+visualization_msgs/Marker
 ```
 
-C++ include:
-
-```cpp
-#include <sensor_msgs/msg/joint_state.hpp>
-```
-
-Logic callback:
-
-```cpp
-void onJointState(const sensor_msgs::msg::JointState::SharedPtr msg);
-```
-
----
-
-## 4. Mapping joint name
-
-Cần map theo tên joint trong message, không chỉ dựa vào index nếu có thể.
-
-Các joint cần hiển thị tối thiểu:
+Nhưng phải đảm bảo task/action đọc được cả pose và size. Nếu dùng nhiều topic thì đặt tên rõ ràng, ví dụ:
 
 ```text
-joint_1
-joint_2
-joint_3
-joint_4
-joint_5
-joint_6
-joint_gl
-joint_gr
+/sim/pick_box_pose
+/sim/pick_box_size
 ```
 
-Nếu GUI chỉ hiển thị 6 trục chính thì:
+Yêu cầu quan trọng:
 
 ```text
-joint_1 -> Axis 1
-joint_2 -> Axis 2
-joint_3 -> Axis 3
-joint_4 -> Axis 4
-joint_5 -> Axis 5
-joint_6 -> Axis 6
+- Không dùng YOLO.
+- Không dùng camera.
+- Không cần xử lý ảnh.
+- Đây là mock/sim perception lấy từ Gazebo ground truth hoặc spawn info.
 ```
 
-Không phụ thuộc thứ tự mảng nếu message có name khác thứ tự.
+# 5. Nhiệm vụ 3 — Tạo launch Gazebo demo mới
 
-Pseudo logic:
+Tạo launch file mới, không sửa launch cũ nếu không bắt buộc.
 
-```cpp
-for (size_t i = 0; i < msg->name.size(); ++i) {
-    const auto &name = msg->name[i];
-    if (name == "joint_1") axis = 0;
-    ...
-}
-```
-
----
-
-## 5. Đơn vị hiển thị
-
-Codex phải kiểm tra `robot_gui_old` đang hiển thị đơn vị gì.
-
-Nếu `/joint_states.position` là radian theo chuẩn ROS, nhưng GUI cũ hiển thị độ, thì phải convert:
-
-```cpp
-deg = rad * 180.0 / M_PI;
-```
-
-Nếu old GUI đã hiển thị rad thì giữ rad.
-
-Yêu cầu trong report ghi rõ:
+Tên đề xuất:
 
 ```text
-- Input /joint_states.position unit:
-- GUI display unit:
-- Conversion used:
+robot_bringup/launch/rl_pick_place_box_gazebo_demo.launch.py
 ```
 
-Không tự ý đổi đơn vị.
+hoặc vị trí phù hợp hơn nếu repo đang tổ chức khác.
 
----
-
-## 6. Giá trị cần hiển thị
-
-Tối thiểu hiển thị:
+Launch mới phải dựa trên launch Gazebo hiện có, ví dụ:
 
 ```text
-- actual position từng joint
+gazebo.launch.py
+sim.launch.py
 ```
 
-Nếu trong `.ui` có ô velocity thì hiển thị thêm:
+Yêu cầu launch mới:
 
 ```text
-- velocity từng joint nếu msg.velocity có dữ liệu
+- Khởi động Gazebo với robot như pipeline hiện tại.
+- Spawn bàn/world giống cấu hình đang dùng.
+- Spawn box 3 cm lên bàn.
+- Publish box info làm perception tạm.
+- Khởi động các node/action cần thiết từ robot_drl và robot_task_manager để chạy demo pick_place RL.
+- Có parameter để bật/tắt random vị trí box nếu cần.
+- Có parameter table_height.
+- Có parameter box_size mặc định 0.03.
+- Có parameter gripper_close_width mặc định 0.025.
 ```
 
-Nếu trong `.ui` có effort thì hiển thị thêm:
+Không được làm hỏng các launch hiện có.
+
+# 6. Nhiệm vụ 4 — Dùng RL hiện có để chạy pick_place trong Gazebo
+
+Hãy kiểm tra các package:
 
 ```text
-- effort nếu msg.effort có dữ liệu
+robot_drl
+robot_task_manager
 ```
 
-Nếu msg không có velocity/effort hoặc size không đủ:
+và dùng những gì đã có để thực hiện demo pick_place.
+
+Yêu cầu luồng demo:
 
 ```text
-- không crash
-- hiển thị "--" hoặc giữ giá trị cũ
-- log debug/throttle warning nếu cần
+1. Launch Gazebo.
+2. Spawn box 3 cm trên bàn.
+3. Lấy pose box từ /sim/pick_box_info hoặc ground truth provider.
+4. Tính target_pick từ pose box.
+5. Tính pre_pick = target_pick + offset Z.
+6. Dùng RL planner để đi tới pre_pick.
+7. Dùng MoveToPoseCartesian để hạ xuống vị trí gắp.
+8. Đóng gripper.
+9. Gripper close width dùng 0.025 m vì box 3 cm, để đảm bảo gắp được.
+10. Nâng lên theo Z.
+11. Dùng RL planner đi tới pre_place.
+12. Hạ xuống vị trí đặt.
+13. Mở gripper.
+14. Kết thúc demo.
 ```
 
----
-
-## 7. Dùng widget có sẵn trong robot_gui.ui
-
-Không được tạo widget mới.
-
-Phải tìm đúng objectName trong:
+Thông số mặc định:
 
 ```text
-robot_gui/ui/robot_gui.ui
+box_size = 0.03 m
+gripper_close_width = 0.025 m
+pre_pick_z_offset = 0.05 m
+pre_place_z_offset = 0.05 m
 ```
 
-Ví dụ cần tìm các ô kiểu:
-
-```text
-Axis1Actual
-Axis1Current
-txtAxis1Actual
-lineEditAxis1Actual
-labelAxis1Actual
-lcdAxis1Pos
-```
-
-Nhưng không được đoán. Phải đọc file `.ui`.
-
-Nếu không tìm thấy widget tương ứng:
-
-```cpp
-RCLCPP_WARN(logger, "Joint state widget not found: <objectName>");
-```
-
-Không tự tạo widget thay thế.
-
----
-
-## 8. Thread-safe GUI update
-
-Nếu ROS executor chạy thread riêng, không update Qt widget trực tiếp trong callback.
-
-Dùng Qt signal-slot:
-
-```text
-ROS callback /joint_states
-    -> emit jointStateUpdated(...)
-    -> Qt slot updateJointStateDisplay(...) trên main thread
-```
-
-Nếu hiện tại GUI dùng QTimer `spin_some()` trên Qt main thread thì có thể update trực tiếp, nhưng vẫn phải đảm bảo không block GUI.
-
----
-
-## 9. Format hiển thị
-
-Format đề xuất:
-
-```text
-position: 3 chữ số thập phân
-velocity: 3 chữ số thập phân nếu có
-```
+Vì robot đặt trên bàn, mọi tọa độ Z liên quan đến pick/place phải cộng đúng chiều cao bàn/world.
 
 Ví dụ:
 
-```cpp
-QString::number(value, 'f', 3)
+```text
+box_center_z = table_height + 0.015
+target_pick_z = table_height + 0.03 hoặc giá trị phù hợp với TCP/gripper
+pre_pick_z = target_pick_z + 0.05
 ```
 
-Nếu hiển thị degree:
+Phải kiểm tra thực tế frame robot đang dùng là `world`, `base_link`, hay frame khác. Không được đoán sai frame. Nếu cần transform thì dùng TF2.
+
+# 7. Nếu gripper trong Gazebo không gắp vật ổn
+
+Nếu gripper physics trong Gazebo chưa đủ ổn để giữ box 3 cm, hãy xử lý theo thứ tự ưu tiên:
 
 ```text
-deg
+1. Ưu tiên dùng gripper/physics hiện có nếu gắp được.
+2. Nếu vật bị rơi/trượt và demo không ổn, tạo thêm node helper mới cho mô phỏng, ví dụ:
+   robot_task_manager/sim/sim_grasp_helper_node.py
 ```
 
-Nếu hiển thị rad:
+Node helper này chỉ dùng cho Gazebo demo, không ảnh hưởng robot thật.
+
+Logic helper nếu cần:
 
 ```text
-rad
+- Khi gripper đóng và TCP gần box trong ngưỡng cho phép, coi như attach box vào end-effector.
+- Trong lúc attach, cập nhật pose box theo end-effector hoặc dùng cơ chế attach phù hợp của Gazebo nếu có.
+- Khi gripper mở tại vị trí đặt, detach box.
 ```
 
-Không làm thay đổi field input setpoint của người dùng, chỉ cập nhật field actual/current.
+Yêu cầu:
 
----
+```text
+- Helper chỉ dùng trong launch demo mới.
+- Không ảnh hưởng các action thật.
+- Phải ghi rõ trong báo cáo nếu có dùng helper.
+```
 
-## 10. Không nhầm với flags
+# 8. Ép chạy được demo
 
-Phần `/robot_hw/flags` chỉ dùng cho LED trạng thái.
+Bạn không chỉ tạo file. Bạn phải build và test đến khi chạy được demo.
 
-Phần `/joint_states` dùng cho vị trí/velocity thực tế.
-
-Không dùng `status_f` để hiển thị joint position.
-
-Không dùng `/robot_hw/flags` thay cho `/joint_states`.
-
----
-
-## 11. Test bắt buộc
-
-Build:
+Bắt buộc thực hiện:
 
 ```bash
 cd ~/ros2_dev
-colcon build --packages-select robot_gui --event-handlers console_direct+
-source /opt/ros/jazzy/setup.bash
+colcon build --symlink-install
 source install/setup.bash
 ```
 
-Chạy GUI standalone:
+Sau đó chạy launch demo mới, ví dụ:
 
 ```bash
-ros2 launch robot_gui robot_gui.launch.py embed_rviz:=false
+ros2 launch robot_bringup rl_pick_place_box_gazebo_demo.launch.py
 ```
 
-Trong terminal khác, publish thử joint state mock:
+Nếu launch command thực tế khác, hãy ghi đúng command trong báo cáo.
 
-```bash
-ros2 topic pub /joint_states sensor_msgs/msg/JointState "{
-  header: {stamp: {sec: 0, nanosec: 0}, frame_id: ''},
-  name: ['joint_1','joint_2','joint_3','joint_4','joint_5','joint_6','joint_gl','joint_gr'],
-  position: [0.1,0.2,0.3,0.4,0.5,0.6,0.01,0.01],
-  velocity: [0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0],
-  effort: []
-}" -r 5
-```
-
-Kỳ vọng:
+Bạn phải kiểm tra:
 
 ```text
-- GUI không crash.
-- Axis 1..6 actual/current position cập nhật.
-- Nếu GUI dùng degree thì 0.1 rad hiển thị khoảng 5.730 deg.
-- Nếu GUI dùng rad thì hiển thị 0.100.
+- Gazebo mở được.
+- Robot xuất hiện đúng.
+- Box 3 cm xuất hiện trên bàn.
+- Topic perception tạm publish được pose/size box.
+- RL/action pick_place được gọi.
+- Robot di chuyển tới vị trí gắp.
+- Gripper đóng 0.025 m.
+- Robot nâng box hoặc ít nhất thực hiện đầy đủ chuỗi pick_place trong sim.
+- Robot đi tới vị trí đặt.
+- Gripper mở.
+- Action trả về success hoặc log hoàn thành rõ ràng.
 ```
 
-Test với launch MoveIt:
+Nếu demo không chạy ngay, phải tự debug cho đến khi chạy được. Không được dừng ở mức “đã viết code”.
 
-```bash
-ros2 launch robot_moveit moveit_gui.launch.py
-```
+# 9. Không được dùng YOLO/camera cho demo này
 
-Kỳ vọng:
+Demo này không phụ thuộc perception thật.
+
+Không thêm yêu cầu:
 
 ```text
-- /joint_states có dữ liệu.
-- GUI hiển thị joint state.
-- RViz nếu bật vẫn hoạt động.
+- camera plugin
+- image topic
+- YOLO node
+- depth image
+- point cloud
+- camera calibration
 ```
 
----
+Trừ khi repo hiện có tự launch sẵn camera, nhưng demo này không được phụ thuộc vào nó.
 
-## 12. Test objectName mapping
+# 10. Báo cáo bắt buộc
 
-Thêm log runtime hoặc report:
+Sau khi làm xong, tạo file báo cáo mới, ví dụ:
 
 ```text
-Joint state display widgets:
-Axis1 position widget: found yes/no
-Axis2 position widget: found yes/no
-Axis3 position widget: found yes/no
-Axis4 position widget: found yes/no
-Axis5 position widget: found yes/no
-Axis6 position widget: found yes/no
+rl_pick_place_box_gazebo_demo_report.md
 ```
 
-Nếu widget missing, ghi rõ objectName thiếu.
-
----
-
-## 13. Không phá phần khác
-
-Không làm hỏng:
+Nội dung báo cáo phải có:
 
 ```text
-- layout từ robot_gui.ui
-- ảnh Logo.png
-- embedded RViz native
-- moveit_gui.launch.py
-- /robot_hw/flags LED
-- /robot_hw/servo_all
-- tab Robot button mapping
+1. Mục tiêu demo.
+2. Các file mới đã tạo.
+3. Các file cũ đã sửa nếu có, kèm lý do.
+4. Cách spawn box 3 cm vào Gazebo.
+5. Cách tính Z khi robot/box nằm trên bàn.
+6. Topic dùng làm mock perception / ground truth perception.
+7. Luồng pick_place RL trong Gazebo.
+8. Action/node/launch nào được dùng từ robot_drl và robot_task_manager.
+9. Lệnh build.
+10. Lệnh chạy demo.
+11. Lệnh kiểm tra topic box pose/size.
+12. Lệnh gọi action nếu cần gọi thủ công.
+13. Kết quả test thực tế.
+14. Các lỗi đã gặp và cách đã sửa.
+15. Giới hạn hiện tại: chưa dùng YOLO/xử lý ảnh, đang dùng Gazebo ground truth.
+16. Hướng thay thế sau này: thay mock perception bằng YOLO/depth perception.
 ```
 
-Không sửa `.ui` nếu chưa cần.
+# 11. Tiêu chí nghiệm thu
 
----
-
-## 14. Report
-
-Tạo/cập nhật:
+Chỉ coi là hoàn thành khi đạt các tiêu chí sau:
 
 ```text
-robot_gui/joint_state_display_report.md
+- colcon build thành công.
+- Launch demo mới chạy được.
+- Box 3 cm xuất hiện trong Gazebo trên bàn.
+- Pose/size box được publish qua topic hoặc provider rõ ràng.
+- Robot dùng pipeline RL/task_manager hiện có để chạy chuỗi pick_place.
+- Không phá các launch/action/package hiện có.
+- Có báo cáo hướng dẫn chạy đầy đủ.
 ```
 
-Nội dung bắt buộc:
+# 12. Lưu ý cuối
 
-```markdown
-# Joint State Display Report
-
-## 1. Source reference
-- robot_gui_old files checked:
-
-## 2. Topic
-- Topic:
-- Message:
-- Callback file:
-
-## 3. Joint mapping
-| Joint name | Axis | Widget objectName | Found | Unit | Test value |
-|---|---|---|---|---|---|
-
-## 4. Unit conversion
-- Input unit:
-- Display unit:
-- Conversion:
-
-## 5. Threading
-- ROS spin method:
-- GUI update method:
-
-## 6. Test result
-- Build:
-- Mock /joint_states publish:
-- MoveIt launch:
-- Remaining issues:
-```
-
----
-
-## 15. Output cuối cùng
-
-Output ngắn gọn:
+Mục tiêu không phải làm perception thật. Mục tiêu là chạy được demo:
 
 ```text
-Đã port hiển thị joint state từ robot_gui_old sang robot_gui C++.
-Topic: /joint_states
-Message: sensor_msgs/msg/JointState
-Axis 1..6 display: OK/FAIL
-Unit: rad/deg
-Mock publish test: OK/FAIL
-Report: robot_gui/joint_state_display_report.md
+RL pick_place trong Gazebo bằng Gazebo ground truth / spawn info.
 ```
+
+Hãy ưu tiên giải pháp đơn giản, ổn định, dễ chạy demo, không làm phức tạp hệ thống bằng YOLO/camera ở giai đoạn này.

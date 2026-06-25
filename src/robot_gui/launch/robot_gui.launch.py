@@ -1,8 +1,9 @@
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument
-from launch.substitutions import LaunchConfiguration
+from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
 from launch_ros.actions import Node
 from launch_ros.parameter_descriptions import ParameterValue
+from launch_ros.substitutions import FindPackageShare
 
 
 def generate_launch_description():
@@ -10,6 +11,9 @@ def generate_launch_description():
     initial_page = LaunchConfiguration("initial_page")
     rviz_config_package = LaunchConfiguration("rviz_config_package")
     rviz_config_relative_path = LaunchConfiguration("rviz_config_relative_path")
+    config_file = PathJoinSubstitution(
+        [FindPackageShare("robot_gui"), "config", "config.yaml"]
+    )
 
     return LaunchDescription(
         [
@@ -38,6 +42,7 @@ def generate_launch_description():
                 executable="robot_gui_node",
                 output="screen",
                 parameters=[
+                    config_file,
                     {
                         "embed_rviz": ParameterValue(embed_rviz, value_type=bool),
                         "initial_page": ParameterValue(initial_page, value_type=int),

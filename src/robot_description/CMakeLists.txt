@@ -28,6 +28,7 @@ install(PROGRAMS
   gazebo/random_wood_blocks.py
   gazebo/wood_blocks_3.py
   gazebo/checker_board.py
+  gazebo/spawn_pick_box.py
   DESTINATION lib/${PROJECT_NAME}
 )
 

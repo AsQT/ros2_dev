@@ -213,6 +213,7 @@ install(TARGETS
 )
 
 install(PROGRAMS
+  scripts/drl_pick_place_box_demo_client.py
   scripts/drl_pick_place_random_test_client.py
   scripts/repeatability_test_client.py
   DESTINATION lib/${PROJECT_NAME}

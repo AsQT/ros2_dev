@@ -1,0 +1,6 @@
+robot_gui:
+  ros__parameters:
+    image_topics:
+      raw: "/camera/color/image_raw"
+      detection: "/yolo/detection_image"
+      yolo: "/yolo/image"
