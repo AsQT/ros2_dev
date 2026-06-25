@@ -27,9 +27,7 @@ ros2 action send_goal /move_to_pose robot_task_manager/action/MoveToPose "{targe
 ```bash
 ros2 action send_goal /move_to_pose robot_task_manager/action/MoveToPose "{target_pose: {position: {x: 0.3, y: 0.0, z: 0.35}, orientation: {x: 1, y: 1, z: 0, w: 0}}, velocity_scale: 0.1}" --feedback
 ```
-```bash
-ros2 action send_goal /move_to_pose_cartesian robot_task_manager/action/MoveToPoseCartesian "{target_pose: {position: {x: 0.3, y: 0.1, z: 0.35}, orientation: {x: 1.0, y: 0.0, z: 0.0, w: 0.0}}, velocity_scale: 0.1}" --feedback
-```
+
 
 ```bash
 ros2 action send_goal /move_to_pose_cartesian robot_task_manager/action/MoveToPoseCartesian "{target_pose: {position: {x: 0.4, y: 0.0, z: 0.15}, orientation: {x: 1.0, y: 1.0, z: 0.0, w: 0.0}}, velocity_scale: 0.1}" --feedback
@@ -116,3 +114,10 @@ projection
 0.000000 0.000000 1.000000 0.000000
 
 ('Wrote calibration data to', '/tmp/calibrationdata.tar.gz')
+
+
+ros2 launch robot_task_manager repeatability_test_client.launch.py \
+  axis:=0 \
+  repeat_count:=3 \
+  meas_offset:=0.02 \
+  velocity_scale:=0.25
