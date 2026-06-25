@@ -14,3 +14,4 @@ events.out.tfevents.*
 *.bag
 *.db3
 *.mcap
+codex.md
