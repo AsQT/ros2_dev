@@ -27,13 +27,15 @@ public:
     double opening,
     std::string & error_msg,
     double velocity_scale = 0.5,
-    double acceleration_scale = 0.5);
+    double acceleration_scale = 0.5,
+    bool execute = true);
 
-  bool open(std::string & error_msg);
+  bool open(std::string & error_msg, bool execute = true);
 
   bool close(
     double close_opening,
-    std::string & error_msg);
+    std::string & error_msg,
+    bool execute = true);
 
   void stop();
 

@@ -11,6 +11,7 @@ def generate_launch_description():
         DeclareLaunchArgument("repeat_count", default_value="3"),
         DeclareLaunchArgument("meas_offset", default_value="0.02"),
         DeclareLaunchArgument("velocity_scale", default_value="0.25"),
+        DeclareLaunchArgument("execute", default_value="true"),
         DeclareLaunchArgument("frame_id", default_value="world"),
         Node(
             package="robot_task_manager",
@@ -22,6 +23,7 @@ def generate_launch_description():
                 "repeat_count": ParameterValue(LaunchConfiguration("repeat_count"), value_type=int),
                 "meas_offset": ParameterValue(LaunchConfiguration("meas_offset"), value_type=float),
                 "velocity_scale": ParameterValue(LaunchConfiguration("velocity_scale"), value_type=float),
+                "execute": ParameterValue(LaunchConfiguration("execute"), value_type=bool),
                 "frame_id": LaunchConfiguration("frame_id"),
             }],
         ),

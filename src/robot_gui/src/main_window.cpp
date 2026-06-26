@@ -7,6 +7,7 @@
 
 #include <QApplication>
 #include <QComboBox>
+#include <QDebug>
 #include <QDir>
 #include <QFrame>
 #include <QFont>
@@ -16,6 +17,8 @@
 #include <QPixmap>
 #include <QPushButton>
 #include <QStackedWidget>
+#include <QTabBar>
+#include <QTabWidget>
 #include <QTextEdit>
 #include <QTimer>
 #include <QVBoxLayout>
@@ -24,6 +27,7 @@
 #include "rclcpp/logging.hpp"
 #include "robot_gui/rviz_panel.hpp"
 #include "robot_gui/status_led.hpp"
+#include "robot_gui/task_action_controller.hpp"
 #include "ui_robot_gui.h"
 
 namespace robot_gui
@@ -156,11 +160,14 @@ MainWindow::MainWindow(
   });
 
   setup_defaults();
+  setup_task_mode_tabs();
   setup_image_display();
   setup_navigation();
   setup_robot_controls();
   setup_axis_controls();
   setup_logs();
+  task_action_controller_ = std::make_unique<TaskActionController>(node_, this, this);
+  task_action_controller_->connectUiSignals();
   log_robot_tab_widget_mapping();
   log_joint_state_widget_mapping();
   setup_rviz(app);
@@ -205,6 +212,72 @@ void MainWindow::setup_defaults()
     set_axis_leds(axis, 0);
   }
   update_robot_enable_button();
+}
+
+void MainWindow::setup_task_mode_tabs()
+{
+  auto * combo = ui_->cbModeControl;
+  auto * tabs = ui_->taskModeTabs;
+
+  if (combo == nullptr || tabs == nullptr) {
+    qWarning() << "Task mode widgets are missing"
+               << "cbModeControl=" << combo
+               << "taskModeTabs=" << tabs;
+    return;
+  }
+
+  if (tabs->tabBar() != nullptr) {
+    tabs->tabBar()->hide();
+  }
+
+  if (combo->count() != tabs->count()) {
+    qWarning() << "cbModeControl count != taskModeTabs count"
+               << combo->count()
+               << tabs->count();
+  }
+
+  const QStringList expected_modes = {
+    "Move Pose",
+    "Move Pose RL",
+    "Gripper",
+    "Pick Place",
+    "Pick Place Vision",
+    "Pick Place RL",
+    "Check Board",
+    "Repeatability Test"};
+
+  const int common_count = std::min(combo->count(), tabs->count());
+  for (int index = 0; index < common_count; ++index) {
+    const QString combo_text = combo->itemText(index);
+    const QString tab_text = tabs->tabText(index);
+    if (index < expected_modes.size() && combo_text != expected_modes.at(index)) {
+      qWarning() << "Unexpected task mode order at index"
+                 << index
+                 << "combo=" << combo_text
+                 << "expected=" << expected_modes.at(index);
+    }
+    if (combo_text != tab_text) {
+      qWarning() << "cbModeControl text != taskModeTabs title at index"
+                 << index
+                 << "combo=" << combo_text
+                 << "tab=" << tab_text;
+    }
+  }
+
+  connect(
+    combo,
+    QOverload<int>::of(&QComboBox::currentIndexChanged),
+    this,
+    [tabs](int index) {
+      if (index >= 0 && index < tabs->count()) {
+        tabs->setCurrentIndex(index);
+      }
+    });
+
+  const int initial_index = combo->currentIndex();
+  if (initial_index >= 0 && initial_index < tabs->count()) {
+    tabs->setCurrentIndex(initial_index);
+  }
 }
 
 void MainWindow::setup_image_display()
@@ -271,15 +344,6 @@ void MainWindow::setup_robot_controls()
   }
   if (auto * btn = button("btnRobotDisable")) {
     connect(btn, &QPushButton::clicked, this, [this]() {node_->set_servo_all(false);});
-  }
-  if (auto * btn = button("btnStopTask")) {
-    connect(btn, &QPushButton::clicked, this, [this]() {node_->stop_all();});
-  }
-  if (auto * btn = button("btnStartTask")) {
-    connect(btn, &QPushButton::clicked, this, [this]() {append_ros_log("Start task requested");});
-  }
-  if (auto * btn = button("btnResetTask")) {
-    connect(btn, &QPushButton::clicked, this, [this]() {append_ros_log("Reset task requested");});
   }
   if (auto * btn = button("btnGripperOpen")) {
     connect(btn, &QPushButton::clicked, this, [this]() {node_->publish_gripper(0.04);});

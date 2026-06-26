@@ -72,7 +72,8 @@ bool GripperExecutor::moveToOpening(
                         double opening,
                         std::string & error_msg,
                         double velocity_scale,
-                        double acceleration_scale)
+                        double acceleration_scale,
+                        bool execute)
 {
   std::lock_guard<std::mutex> lock(motion_mutex_);
 
@@ -134,6 +135,16 @@ bool GripperExecutor::moveToOpening(
     return false;
   }
 
+  if (!execute) {
+    move_group_->clearPoseTargets();
+    error_msg.clear();
+    RCLCPP_INFO(
+      node_->get_logger(),
+      "Gripper planning succeeded for opening %.4f m; execution skipped",
+      opening);
+    return true;
+  }
+
   const auto exec_result = move_group_->execute(plan);
 
   move_group_->clearPoseTargets();
@@ -153,16 +164,17 @@ bool GripperExecutor::moveToOpening(
   return true;
 }
 
-bool GripperExecutor::open(std::string & error_msg)
+bool GripperExecutor::open(std::string & error_msg, bool execute)
 {
-  return moveToOpening(max_open_, error_msg, 0.5, 0.5);
+  return moveToOpening(max_open_, error_msg, 0.5, 0.5, execute);
 }
 
 bool GripperExecutor::close(
   double close_opening,
-  std::string & error_msg)
+  std::string & error_msg,
+  bool execute)
 {
-  return moveToOpening(close_opening, error_msg, 0.5, 0.5);
+  return moveToOpening(close_opening, error_msg, 0.5, 0.5, execute);
 }
 
 void GripperExecutor::stop()

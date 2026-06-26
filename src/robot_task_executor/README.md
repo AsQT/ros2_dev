@@ -4,6 +4,8 @@ High-level task executor for the robot using MoveIt 2 (C++). Provides a service-
 
 **Role in the project:** Sits between high-level callers (GUI, DRL nodes, CLI) and the MoveIt `move_group` action server. All motion execution goes through MoveIt — no direct joint streaming.
 
+Planned TCP path visualization uses high-contrast colors for light RViz backgrounds: the main line marker is dark blue and waypoint markers are dark purple, while start/goal keep their semantic green/red colors.
+
 ## Package Structure
 
 ```

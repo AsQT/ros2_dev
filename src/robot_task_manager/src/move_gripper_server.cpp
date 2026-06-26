@@ -102,7 +102,7 @@ private:
 
     const auto goal = goal_handle->get_goal();
 
-    feedback->stage = "Planning gripper motion";
+    feedback->stage = goal->execute ? "Planning gripper motion" : "Planning gripper motion (plan-only)";
     feedback->progress = 30.0f;
     goal_handle->publish_feedback(feedback);
 
@@ -111,7 +111,8 @@ private:
       goal->position,
       error_msg,
       default_velocity_scale_,
-      default_acceleration_scale_);
+      default_acceleration_scale_,
+      goal->execute);
 
     if (goal_handle->is_canceling()) {
       if (gripper_executor_) {
@@ -131,12 +132,14 @@ private:
       return;
     }
 
-    feedback->stage = "Gripper position reached";
+    feedback->stage = goal->execute ? "Gripper position reached" : "Gripper plan validated (execution skipped)";
     feedback->progress = 100.0f;
     goal_handle->publish_feedback(feedback);
 
     result->success = true;
-    result->message = "Gripper moved successfully";
+    result->message = goal->execute ?
+      "Gripper moved successfully" :
+      "MoveGripper planning success; execution skipped";
     goal_handle->succeed(result);
   }
 };

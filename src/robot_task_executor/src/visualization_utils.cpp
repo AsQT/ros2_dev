@@ -161,9 +161,9 @@ void VisualizationUtils::publish_plan_visualization(
   waypoint_spheres.scale.x = 0.015;
   waypoint_spheres.scale.y = 0.015;
   waypoint_spheres.scale.z = 0.015;
-  waypoint_spheres.color.r = 0.0;
-  waypoint_spheres.color.g = 0.8;
-  waypoint_spheres.color.b = 1.0;
+  waypoint_spheres.color.r = 0.25;
+  waypoint_spheres.color.g = 0.0;
+  waypoint_spheres.color.b = 0.45;
   waypoint_spheres.color.a = 1.0;
   for (const auto& pose : tcp_poses)
   {
@@ -220,9 +220,9 @@ void VisualizationUtils::publish_plan_visualization(
   path_line.type = visualization_msgs::msg::Marker::LINE_STRIP;
   path_line.action = visualization_msgs::msg::Marker::ADD;
   path_line.scale.x = 0.008;
-  path_line.color.r = 1.0;
-  path_line.color.g = 0.84;
-  path_line.color.b = 0.0;
+  path_line.color.r = 0.0;
+  path_line.color.g = 0.1;
+  path_line.color.b = 0.6;
   path_line.color.a = 0.9;
   for (const auto& pose : tcp_poses)
   {

@@ -53,6 +53,7 @@ class DrlPickPlaceRandomTestClient(Node):
         self.declare_parameter("wait_for_joint_states", False)
         self.declare_parameter("joint_states_timeout_sec", 30.0)
         self.declare_parameter("start_velocity_scale", 0.35)
+        self.declare_parameter("execute", True)
         self.declare_parameter("obstacle_id", "drl_pick_place_random_obstacle")
         self.declare_parameter("obstacle_size_min", [0.018, 0.018, 0.018])
         self.declare_parameter("obstacle_size_max", [0.040, 0.040, 0.045])
@@ -374,6 +375,7 @@ class DrlPickPlaceRandomTestClient(Node):
         goal = MoveToPoseCartesian.Goal()
         goal.target_pose = self._pose(start).pose
         goal.velocity_scale = float(self.get_parameter("start_velocity_scale").value)
+        goal.execute = bool(self.get_parameter("execute").value)
         future = self._cartesian_client.send_goal_async(goal)
         self._wait_for_future(
             future,
@@ -412,6 +414,7 @@ class DrlPickPlaceRandomTestClient(Node):
         goal.target_pick = self._pose(pick)
         goal.target_place = self._pose(place)
         goal.gripper_close_width_m = close_width
+        goal.execute = bool(self.get_parameter("execute").value)
 
         self.get_logger().info(
             f"trial={trial_id} seed={seed} "
@@ -422,7 +425,7 @@ class DrlPickPlaceRandomTestClient(Node):
             f"{obstacle_orientation[2]:.4f}, {obstacle_orientation[3]:.4f}) "
             f"pick=({pick[0]:.4f}, {pick[1]:.4f}, {pick[2]:.4f}) "
             f"place=({place[0]:.4f}, {place[1]:.4f}, {place[2]:.4f}) "
-            f"gripper={close_width:.4f}"
+            f"gripper={close_width:.4f} execute={goal.execute}"
         )
 
         start = time.monotonic()

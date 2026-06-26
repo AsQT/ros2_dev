@@ -1,5 +1,6 @@
 geometry_msgs/Pose target_pose
 float64 velocity_scale
+bool execute
 ---
 bool success
 string message

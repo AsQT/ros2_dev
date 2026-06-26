@@ -1,397 +1,672 @@
-Bạn hãy thực hiện nhiệm vụ sau trong workspace ROS 2 hiện tại. Mục tiêu là tạo **demo pick_place bằng RL trong Gazebo**, chưa dùng YOLO/xử lý ảnh, mà dùng **Gazebo ground truth / spawn info làm perception tạm thời**.
+Yêu cầu cập nhật pkg `robot_gui` để các nút trong các tab `TaskControlPanel` gọi đúng các ROS2 action tương ứng.
 
-# 1. Bối cảnh
+## 1. Bối cảnh
 
-Hiện tại chưa build kịp phần xử lý ảnh / YOLO trong mô phỏng, nhưng cần chạy được demo:
+Layout `robot_gui.ui` đã có khu vực `TaskControlPanel` gồm:
 
-```text
-Gazebo + robot + box 3cm + RL pick_place
-```
-
-Thông tin vật cần gắp sẽ lấy từ:
+* `cbModeControl`: chọn mode/task.
+* `taskModeTabs`: chứa các tab chức năng.
+* Các tab dự kiến:
 
 ```text
-Gazebo ground truth
-hoặc
-thông tin spawn object
+0. Move Pose
+1. Move Pose RL
+2. Gripper
+3. Pick Place
+4. Pick Place Vision
+5. Pick Place RL
+6. Check Board
+7. Repeatability Test
 ```
 
-Không cần dùng camera, không cần YOLO, không cần image topic.
-
-Các package liên quan hiện có:
+Tài liệu hướng dẫn gọi action nằm trong file:
 
 ```text
-robot_description
-robot_drl
-robot_task_manager
-robot_bringup
+Call_action.md
 ```
 
-Hiện trong repo đã có file tham khảo:
+Cần đọc kỹ file này trước khi code.
+
+Hiện tại đã làm phần chuyển tab bằng `cbModeControl`. Bước này cần cập nhật chức năng các nút trong từng tab để gọi action.
+
+## 2. Mục tiêu chính
+
+Cập nhật `robot_gui` để:
+
+* Nút `Start` gọi action tương ứng với `execute=true`.
+* Nút `Plan` gọi action tương ứng với `execute=false`.
+* Nút `Stop` hiện tại chỉ cần log/cancel nếu đã có cancel action client; nếu chưa có cancel thì log rõ “cancel chưa implement”.
+* Khi gọi action, hiển thị feedback/result/status vào ô thông tin phía dưới màn hình.
+* Chỉ tập trung gọi action từ GUI, không sửa server action.
+* Phải test được trên `mock_hardware`.
+
+## 3. Khuyến nghị tổ chức code
+
+Có thể viết riêng file mới để dễ chỉnh sửa, ví dụ:
 
 ```text
-robot_description/gazebo/random_wood_block.py
+robot_gui/include/robot_gui/task_action_controller.hpp
+robot_gui/src/task_action_controller.cpp
 ```
 
-và có launch Gazebo hiện có, ví dụ:
+Class đề xuất:
+
+```cpp
+class TaskActionController : public QObject
+{
+    Q_OBJECT
+public:
+    TaskActionController(rclcpp::Node::SharedPtr node, Ui::MainWindow *ui, QObject *parent = nullptr);
+
+    void connectUiSignals();
+
+private:
+    void sendMovePose(bool execute);
+    void sendMovePoseCartesian(bool execute);
+    void sendGripper(bool execute);
+    void sendPickPlace(bool execute);
+    void sendDrlPickPlace(bool execute);
+    void sendCheckerBoard(bool execute);
+    void sendRepeatabilityTest(bool execute);
+
+    void appendActionLog(const QString &msg);
+};
+```
+
+Nếu project hiện tại không dùng `Ui::MainWindow` trực tiếp thì điều chỉnh theo class GUI hiện có, nhưng vẫn nên tách logic action ra file riêng.
+
+## 4. Action cần hỗ trợ
+
+Theo `Call_action.md`, cần dùng các action sau:
 
 ```text
-gazebo.launch.py
-sim.launch.py
+/move_to_pose
+robot_task_manager/action/MoveToPose
+
+/move_to_pose_cartesian
+robot_task_manager/action/MoveToPoseCartesian
+
+/move_gripper
+robot_task_manager/action/MoveGripper
+
+/pickplace
+robot_task_manager/action/PickPlace
+
+/drl_pickplace
+robot_task_manager/action/DrlPickPlace
+
+/move_checker_board
+robot_task_manager/action/CheckerBoard
+
+/repeatability_test
+robot_task_manager/action/RepeatabilityTest
 ```
 
-Hãy tự tìm đúng vị trí file trong repo.
-
-Hiện có model box tương tự model wood, nằm trong:
+Nếu tab `Move Pose RL` hiện chưa có action riêng trong backend thì chưa tự chế action mới. Chỉ log rõ:
 
 ```text
-robot_description/worlds/box
+Move Pose RL action chưa có mapping backend, chưa gửi goal.
 ```
 
-hoặc vị trí tương tự trong `robot_description/worlds/`.
+Không sửa `robot_task_manager` ở bước này.
 
-# 2. Yêu cầu quan trọng
+## 5. Quy tắc Plan / Start
 
-## 2.1. Không phá code cũ
+Tất cả action đã có field `execute`.
 
-Ưu tiên **tạo file mới**, không sửa các file đang chạy ổn.
-
-Chỉ được sửa file cũ khi thật sự bắt buộc, ví dụ:
+Quy tắc bắt buộc:
 
 ```text
-- CMakeLists.txt để install file launch/script mới
-- package.xml nếu thiếu dependency bắt buộc
-- setup.py/setup.cfg nếu package Python cần install entry point mới
+Nút Plan  -> execute = false
+Nút Start -> execute = true
 ```
 
-Nếu phải sửa file cũ, phải sửa tối thiểu và ghi rõ trong báo cáo:
+Không được dùng nút `Plan` để chạy thật robot.
+
+Khi `execute=false`, action server vẫn phải planning/validate và đường plan phải hiển thị trên RViz nếu backend MoveIt đang publish trajectory như hiện tại.
+
+## 6. Tab Move Pose
+
+Tab `Move Pose` có ô tick chọn Cartesian.
+
+Yêu cầu sửa đúng logic:
+
+* Nếu checkbox **không tick**:
+
+  * `Plan` gọi `/move_to_pose` với `execute=false`.
+  * `Start` gọi `/move_to_pose` với `execute=true`.
+
+* Nếu checkbox **có tick**:
+
+  * `Plan` gọi `/move_to_pose_cartesian` với `execute=false`.
+  * `Start` gọi `/move_to_pose_cartesian` với `execute=true`.
+
+Checkbox nên có text rõ:
 
 ```text
-- đã sửa file nào
-- lý do sửa
-- nội dung sửa có ảnh hưởng gì không
+Move Pose Cartesian
 ```
 
-Không được thay đổi logic hiện có của các action/task đang chạy ổn nếu không cần thiết.
+Goal:
 
-# 3. Nhiệm vụ 1 — Đưa box vào Gazebo
+```yaml
+target_pose:
+  position:
+    x: <x nhập từ GUI>
+    y: <y nhập từ GUI>
+    z: <z nhập từ GUI>
+  orientation:
+    x: <quaternion.x>
+    y: <quaternion.y>
+    z: <quaternion.z>
+    w: <quaternion.w>
+velocity_scale: <velocity nhập từ GUI hoặc default>
+execute: true/false
+```
 
-Hiện tại box chưa spawn được vào Gazebo. Bạn phải làm cho box xuất hiện được trong Gazebo.
+Nếu chưa có ô velocity trong tab, dùng hằng số default:
 
-Hãy dựa trên logic của:
+```cpp
+static constexpr double DEFAULT_VELOCITY_SCALE = 0.5;
+```
+
+## 7. Xử lý Orientation
+
+Các ô nhập hướng trong GUI là dạng Euler:
 
 ```text
-robot_description/gazebo/random_wood_block.py
+Roll
+Pitch
+Yaw
 ```
 
-để tạo file mới, ví dụ:
+Quy tắc:
+
+* Nếu người dùng có nhập Roll/Pitch/Yaw:
+
+  * Parse sang `double`.
+  * Quy ước đơn vị phải rõ ràng.
+  * Nếu UI đang ghi `deg`, chuyển degree sang radian trước.
+  * Nếu UI không ghi đơn vị, mặc định dùng degree và ghi rõ trong report.
+  * Convert RPY sang quaternion trước khi gửi action.
+
+* Nếu người dùng không nhập orientation:
+
+  * Dùng orientation mặc định dạng hằng số dễ chỉnh:
+
+```cpp
+static constexpr double DEFAULT_ORI_X = 1.0;
+static constexpr double DEFAULT_ORI_Y = 1.0;
+static constexpr double DEFAULT_ORI_Z = 0.0;
+static constexpr double DEFAULT_ORI_W = 0.0;
+```
+
+Lưu ý: giữ đúng default trên theo yêu cầu hiện tại, không tự đổi sang `{0,0,0,1}`.
+
+Nên gom logic thành hàm dùng chung:
+
+```cpp
+geometry_msgs::msg::Quaternion makeQuaternionFromUi(
+    QLineEdit *rollEdit,
+    QLineEdit *pitchEdit,
+    QLineEdit *yawEdit);
+```
+
+hoặc hàm tương đương.
+
+## 8. Tab Gripper
+
+Tab `Gripper` gọi action:
 
 ```text
-robot_description/gazebo/spawn_pick_box.py
+/move_gripper
+robot_task_manager/action/MoveGripper
 ```
 
-hoặc tên hợp lý hơn.
+Goal:
 
-Yêu cầu:
+```yaml
+position: <width/position nhập từ GUI>
+execute: true/false
+```
+
+Nếu chỉ có nút Open/Close:
+
+* Open dùng default:
+
+```cpp
+static constexpr double DEFAULT_GRIPPER_OPEN = 0.048;
+```
+
+* Close dùng default hoặc ô nhập:
+
+```cpp
+static constexpr double DEFAULT_GRIPPER_CLOSE = 0.028;
+```
+
+Nếu tab có nút Plan thì `execute=false`. Nếu không có Plan thì chỉ cần Start/Open/Close execute=true theo UI hiện có.
+
+## 9. Tab Pick Place
+
+Tab `Pick Place` gọi:
 
 ```text
-- Spawn được box vào Gazebo.
-- Box là khối lập phương kích thước 3 cm.
-- Kích thước: 0.03 x 0.03 x 0.03 m.
-- Có thể dùng model có sẵn trong robot_description/worlds/box nếu đúng.
-- Nếu model có sẵn chưa đúng hoặc không spawn được, tạo model SDF tối thiểu mới để spawn được box 3 cm.
-- Không xóa model wood hoặc các model cũ.
+/pickplace
+robot_task_manager/action/PickPlace
 ```
 
-Vì robot đang đặt trên bàn trong Gazebo, tọa độ Z của box phải tính thêm chiều cao bàn.
+Goal:
 
-Yêu cầu xử lý Z:
+```yaml
+pose_pick:
+  position: {x, y, z}
+  orientation: <quaternion>
+pose_place:
+  position: {x, y, z}
+  orientation: <quaternion>
+gripper: <gripper width>
+velocity_scale: <velocity>
+execute: true/false
+```
+
+Quy tắc:
+
+* `Plan` -> `execute=false`.
+* `Start` -> `execute=true`.
+* Nếu orientation pick/place không nhập thì dùng default quaternion hằng số ở mục 7.
+* Nếu chỉ có một cụm orientation dùng chung thì dùng chung cho cả pick và place.
+* Nếu có 2 cụm orientation riêng thì parse riêng.
+
+Default nếu ô trống:
+
+```cpp
+static constexpr double DEFAULT_PICK_X = 0.40;
+static constexpr double DEFAULT_PICK_Y = 0.10;
+static constexpr double DEFAULT_PICK_Z = 0.25;
+
+static constexpr double DEFAULT_PLACE_X = 0.30;
+static constexpr double DEFAULT_PLACE_Y = 0.00;
+static constexpr double DEFAULT_PLACE_Z = 0.25;
+
+static constexpr double DEFAULT_PICKPLACE_GRIPPER = 0.01;
+static constexpr double DEFAULT_PICKPLACE_VELOCITY = 0.5;
+```
+
+## 10. Tab Pick Place Vision
+
+Tab `Pick Place Vision` hiện có khung ảnh/preview.
+
+Ở bước này:
+
+* Không cần implement xử lý vision.
+* Nếu nút Start/Plan cần gọi action mà chưa có mapping rõ thì có thể gọi `/pickplace` bằng tọa độ đang nhập tay.
+* Nếu tọa độ lấy từ vision chưa có topic/data thì log rõ:
 
 ```text
-box_center_z = table_height + box_size_z / 2
+Vision pose chưa có dữ liệu, dùng pose nhập tay hoặc không gửi goal.
 ```
 
-Trong đó:
+Không tự thêm pipeline YOLO/vision mới.
+
+## 11. Tab Pick Place RL
+
+Tab `Pick Place RL` gọi:
 
 ```text
-box_size_z = 0.03 m
+/drl_pickplace
+robot_task_manager/action/DrlPickPlace
 ```
 
-Nếu có thể đọc được `table_height` từ world/model hiện có thì dùng giá trị đó. Nếu không đọc tự động được, hãy tạo launch parameter:
+Goal:
 
-```text
-table_height
+```yaml
+target_pick:
+  header:
+    frame_id: <frame_id>
+  pose:
+    position: {x, y, z}
+    orientation: <quaternion>
+target_place:
+  header:
+    frame_id: <frame_id>
+  pose:
+    position: {x, y, z}
+    orientation: <quaternion>
+gripper_close_width_m: <width>
+execute: true/false
 ```
 
-và đặt default hợp lý theo world hiện tại. Không hard-code tùy tiện nếu có thể tránh.
+Default:
 
-# 4. Nhiệm vụ 2 — Publish ground truth / spawn info làm perception tạm
-
-Sau khi spawn box, cần publish thông tin vật thể cho pipeline pick_place đọc.
-
-Tạo node/topic mới, ví dụ:
-
-```text
-/sim/pick_box_info
+```cpp
+static const QString DEFAULT_DRL_FRAME_ID = "base_link";
+static constexpr double DEFAULT_DRL_GRIPPER_CLOSE = 0.028;
 ```
 
-hoặc:
+Quy tắc:
 
-```text
-/sim/object_info
-```
+* `Plan` -> `execute=false`.
+* `Start` -> `execute=true`.
 
-Nội dung tối thiểu phải có:
+Ngoài ra, cập nhật layout:
 
-```text
-- object name
-- pose của box trong frame dùng cho robot/Gazebo
-- size_x = 0.03
-- size_y = 0.03
-- size_z = 0.03
-```
-
-Nếu không muốn tạo custom msg mới, có thể dùng các message chuẩn có sẵn, ví dụ:
-
-```text
-geometry_msgs/PoseStamped
-visualization_msgs/Marker
-```
-
-Nhưng phải đảm bảo task/action đọc được cả pose và size. Nếu dùng nhiều topic thì đặt tên rõ ràng, ví dụ:
-
-```text
-/sim/pick_box_pose
-/sim/pick_box_size
-```
-
-Yêu cầu quan trọng:
-
-```text
-- Không dùng YOLO.
-- Không dùng camera.
-- Không cần xử lý ảnh.
-- Đây là mock/sim perception lấy từ Gazebo ground truth hoặc spawn info.
-```
-
-# 5. Nhiệm vụ 3 — Tạo launch Gazebo demo mới
-
-Tạo launch file mới, không sửa launch cũ nếu không bắt buộc.
-
-Tên đề xuất:
-
-```text
-robot_bringup/launch/rl_pick_place_box_gazebo_demo.launch.py
-```
-
-hoặc vị trí phù hợp hơn nếu repo đang tổ chức khác.
-
-Launch mới phải dựa trên launch Gazebo hiện có, ví dụ:
-
-```text
-gazebo.launch.py
-sim.launch.py
-```
-
-Yêu cầu launch mới:
-
-```text
-- Khởi động Gazebo với robot như pipeline hiện tại.
-- Spawn bàn/world giống cấu hình đang dùng.
-- Spawn box 3 cm lên bàn.
-- Publish box info làm perception tạm.
-- Khởi động các node/action cần thiết từ robot_drl và robot_task_manager để chạy demo pick_place RL.
-- Có parameter để bật/tắt random vị trí box nếu cần.
-- Có parameter table_height.
-- Có parameter box_size mặc định 0.03.
-- Có parameter gripper_close_width mặc định 0.025.
-```
-
-Không được làm hỏng các launch hiện có.
-
-# 6. Nhiệm vụ 4 — Dùng RL hiện có để chạy pick_place trong Gazebo
-
-Hãy kiểm tra các package:
-
-```text
-robot_drl
-robot_task_manager
-```
-
-và dùng những gì đã có để thực hiện demo pick_place.
-
-Yêu cầu luồng demo:
-
-```text
-1. Launch Gazebo.
-2. Spawn box 3 cm trên bàn.
-3. Lấy pose box từ /sim/pick_box_info hoặc ground truth provider.
-4. Tính target_pick từ pose box.
-5. Tính pre_pick = target_pick + offset Z.
-6. Dùng RL planner để đi tới pre_pick.
-7. Dùng MoveToPoseCartesian để hạ xuống vị trí gắp.
-8. Đóng gripper.
-9. Gripper close width dùng 0.025 m vì box 3 cm, để đảm bảo gắp được.
-10. Nâng lên theo Z.
-11. Dùng RL planner đi tới pre_place.
-12. Hạ xuống vị trí đặt.
-13. Mở gripper.
-14. Kết thúc demo.
-```
-
-Thông số mặc định:
-
-```text
-box_size = 0.03 m
-gripper_close_width = 0.025 m
-pre_pick_z_offset = 0.05 m
-pre_place_z_offset = 0.05 m
-```
-
-Vì robot đặt trên bàn, mọi tọa độ Z liên quan đến pick/place phải cộng đúng chiều cao bàn/world.
+* Sao chép y nguyên khung ảnh/preview từ tab `PickPlaceVision` sang tab `PickPlace_RL`.
+* Hai tab cùng thể hiện chung nội dung ảnh/preview.
+* Không làm mất objectName hiện có ở tab `PickPlaceVision`.
+* Với tab `PickPlace_RL`, objectName mới nên có suffix `_RL` để tránh duplicate objectName.
 
 Ví dụ:
 
 ```text
-box_center_z = table_height + 0.015
-target_pick_z = table_height + 0.03 hoặc giá trị phù hợp với TCP/gripper
-pre_pick_z = target_pick_z + 0.05
+yoloPreviewWidget      -> yoloPreviewWidget_RL
+rawImageFrame          -> rawImageFrame_RL
+detectionImageFrame    -> detectionImageFrame_RL
 ```
 
-Phải kiểm tra thực tế frame robot đang dùng là `world`, `base_link`, hay frame khác. Không được đoán sai frame. Nếu cần transform thì dùng TF2.
+Nếu code hiện tại đang publish ảnh vào widget cũ, chưa cần nối ảnh cho tab RL ở bước này; chỉ cần layout có khung ảnh giống nhau và không làm hỏng tab Vision.
 
-# 7. Nếu gripper trong Gazebo không gắp vật ổn
+## 12. Tab Check Board
 
-Nếu gripper physics trong Gazebo chưa đủ ổn để giữ box 3 cm, hãy xử lý theo thứ tự ưu tiên:
+Tab `Check Board` gọi:
 
 ```text
-1. Ưu tiên dùng gripper/physics hiện có nếu gắp được.
-2. Nếu vật bị rơi/trượt và demo không ổn, tạo thêm node helper mới cho mô phỏng, ví dụ:
-   robot_task_manager/sim/sim_grasp_helper_node.py
+/move_checker_board
+robot_task_manager/action/CheckerBoard
 ```
 
-Node helper này chỉ dùng cho Gazebo demo, không ảnh hưởng robot thật.
+Goal:
 
-Logic helper nếu cần:
+```yaml
+step: <step nhập từ GUI>
+velocity_scale: <velocity>
+execute: true/false
+```
+
+Yêu cầu layout:
+
+* Thêm nút `Plan` cho tab `Check Board`.
+* `Plan` gọi `/move_checker_board` với `execute=false`.
+* `Start` gọi `/move_checker_board` với `execute=true`.
+
+Default:
+
+```cpp
+static constexpr double DEFAULT_CHECKER_STEP = 0.10;
+static constexpr double DEFAULT_CHECKER_VELOCITY = 0.5;
+```
+
+## 13. Tab Repeatability Test
+
+Tab `Repeatability Test` gọi:
 
 ```text
-- Khi gripper đóng và TCP gần box trong ngưỡng cho phép, coi như attach box vào end-effector.
-- Trong lúc attach, cập nhật pose box theo end-effector hoặc dùng cơ chế attach phù hợp của Gazebo nếu có.
-- Khi gripper mở tại vị trí đặt, detach box.
+/repeatability_test
+robot_task_manager/action/RepeatabilityTest
 ```
+
+Goal:
+
+```yaml
+retract_pose:
+  header:
+    frame_id: <frame_id>
+  pose:
+    position: {x, y, z}
+    orientation: <quaternion>
+
+disturb_pose_1:
+  header:
+    frame_id: <frame_id>
+  pose:
+    position: {x, y, z}
+    orientation: <quaternion>
+
+disturb_pose_2:
+  header:
+    frame_id: <frame_id>
+  pose:
+    position: {x, y, z}
+    orientation: <quaternion>
+
+axis: 0/1/2
+meas_offset: <offset>
+repeat_count: <N>
+velocity_scale: <velocity chậm lúc đo>
+execute: true/false
+```
+
+Axis mapping:
+
+```text
+X -> 0
+Y -> 1
+Z -> 2
+```
+
+Default:
+
+```cpp
+static const QString DEFAULT_REPEAT_FRAME_ID = "world";
+static constexpr double DEFAULT_REPEAT_RETRACT_X = 0.40;
+static constexpr double DEFAULT_REPEAT_RETRACT_Y = 0.00;
+static constexpr double DEFAULT_REPEAT_RETRACT_Z = 0.18;
+
+static constexpr double DEFAULT_REPEAT_DISTURB1_X = 0.35;
+static constexpr double DEFAULT_REPEAT_DISTURB1_Y = -0.08;
+static constexpr double DEFAULT_REPEAT_DISTURB1_Z = 0.18;
+
+static constexpr double DEFAULT_REPEAT_DISTURB2_X = 0.45;
+static constexpr double DEFAULT_REPEAT_DISTURB2_Y = 0.08;
+static constexpr double DEFAULT_REPEAT_DISTURB2_Z = 0.18;
+
+static constexpr double DEFAULT_REPEAT_MEAS_OFFSET = 0.02;
+static constexpr int DEFAULT_REPEAT_COUNT = 3;
+static constexpr double DEFAULT_REPEAT_VELOCITY = 0.25;
+```
+
+Quy tắc:
+
+* `Plan` -> `execute=false`.
+* `Start` -> `execute=true`.
+
+## 14. Ô thông tin action phía dưới màn hình
+
+Khu vực ô dưới cùng, nằm bên dưới vùng RViz và các tab, hiện chưa dùng.
 
 Yêu cầu:
 
+* Dùng khu vực này để hiển thị trạng thái action.
+* Nếu đã có widget dạng `QTextEdit`, `QPlainTextEdit`, `QLabel`, `QFrame` thì tận dụng.
+* Nếu chưa có widget text bên trong, thêm `QPlainTextEdit` hoặc `QTextEdit` vào đúng khu vực đó.
+* Không làm thay đổi layout các phần khác.
+
+ObjectName đề xuất:
+
 ```text
-- Helper chỉ dùng trong launch demo mới.
-- Không ảnh hưởng các action thật.
-- Phải ghi rõ trong báo cáo nếu có dùng helper.
+txtActionLog
 ```
 
-# 8. Ép chạy được demo
+Nội dung cần hiển thị:
 
-Bạn không chỉ tạo file. Bạn phải build và test đến khi chạy được demo.
+* Khi bấm Plan/Start:
 
-Bắt buộc thực hiện:
+```text
+[Move Pose] Sending goal to /move_to_pose, execute=false
+```
+
+* Khi action server available/unavailable.
+* Feedback action.
+* Result success/fail.
+* Message result.
+* Lỗi parse input.
+* Lỗi timeout.
+* Lỗi cancel nếu có.
+
+Log nên append, không ghi đè toàn bộ.
+
+## 15. Action client implementation
+
+Dùng `rclcpp_action`.
+
+Cần đảm bảo GUI không bị block.
+
+Không được dùng kiểu chờ blocking dài trong thread UI.
+
+Nếu cần chờ action server, dùng timeout ngắn và log lỗi:
+
+```cpp
+if (!client->wait_for_action_server(std::chrono::seconds(2))) {
+    appendActionLog("Action server not available: /move_to_pose");
+    return;
+}
+```
+
+Feedback callback phải append log an toàn với Qt thread. Nếu callback chạy ngoài UI thread, dùng:
+
+```cpp
+QMetaObject::invokeMethod(...)
+```
+
+hoặc signal/slot queued connection.
+
+## 16. Validate input
+
+Tất cả ô nhập số phải parse an toàn:
+
+* Nếu rỗng thì dùng default.
+* Nếu nhập sai kiểu số thì log lỗi và không gửi goal.
+* `velocity_scale` phải nằm trong `(0, 1]`.
+* `gripper` không âm.
+* `repeat_count > 0`.
+* `axis` chỉ là X/Y/Z.
+* `meas_offset` không được bằng 0.
+
+Không để GUI crash vì input sai.
+
+## 17. Không được làm
+
+Không sửa action server.
+
+Không sửa `robot_task_manager` nếu không bắt buộc.
+
+Không sửa `mock_hardware`.
+
+Không đổi tên action.
+
+Không đổi type action.
+
+Không đổi objectName cũ nếu code đang dùng.
+
+Không phá chức năng chuyển tab `cbModeControl -> taskModeTabs`.
+
+Không tự thêm thuật toán vision hoặc RL mới.
+
+Không làm blocking GUI khi action đang chạy.
+
+## 18. Build và test bắt buộc trên mock_hardware
+
+Phải build:
 
 ```bash
 cd ~/ros2_dev
-colcon build --symlink-install
+colcon build --packages-select robot_gui robot_task_manager --symlink-install
 source install/setup.bash
 ```
 
-Sau đó chạy launch demo mới, ví dụ:
+Chạy mock stack/action server theo project hiện có, ví dụ:
 
 ```bash
-ros2 launch robot_bringup rl_pick_place_box_gazebo_demo.launch.py
+ros2 launch robot_task_manager task_servers.launch.py
 ```
 
-Nếu launch command thực tế khác, hãy ghi đúng command trong báo cáo.
+Nếu cần mock hardware/bringup thì dùng launch mock hiện có của repo.
 
-Bạn phải kiểm tra:
+Kiểm tra action server:
+
+```bash
+ros2 action list
+```
+
+Phải thấy tối thiểu:
 
 ```text
-- Gazebo mở được.
-- Robot xuất hiện đúng.
-- Box 3 cm xuất hiện trên bàn.
-- Topic perception tạm publish được pose/size box.
-- RL/action pick_place được gọi.
-- Robot di chuyển tới vị trí gắp.
-- Gripper đóng 0.025 m.
-- Robot nâng box hoặc ít nhất thực hiện đầy đủ chuỗi pick_place trong sim.
-- Robot đi tới vị trí đặt.
-- Gripper mở.
-- Action trả về success hoặc log hoàn thành rõ ràng.
+/move_to_pose
+/move_to_pose_cartesian
+/move_gripper
+/pickplace
+/move_checker_board
+/repeatability_test
 ```
 
-Nếu demo không chạy ngay, phải tự debug cho đến khi chạy được. Không được dừng ở mức “đã viết code”.
+Nếu test `/drl_pickplace` cần chạy đủ DRL planner/mock stack tương ứng. Nếu chưa đủ dependency thì báo cáo rõ điều kiện còn thiếu, không được giả vờ pass.
 
-# 9. Không được dùng YOLO/camera cho demo này
+## 19. Checklist test thủ công
 
-Demo này không phụ thuộc perception thật.
+### Move Pose
 
-Không thêm yêu cầu:
+* Nhập X/Y/Z.
+* Không tick Cartesian.
+* Bấm Plan -> gửi `/move_to_pose`, `execute=false`.
+* Bấm Start -> gửi `/move_to_pose`, `execute=true`.
+* Tick Cartesian.
+* Bấm Plan -> gửi `/move_to_pose_cartesian`, `execute=false`.
+* Bấm Start -> gửi `/move_to_pose_cartesian`, `execute=true`.
+
+### Gripper
+
+* Nhập width.
+* Bấm Start/Open/Close.
+* Xác nhận gọi `/move_gripper`.
+
+### Pick Place
+
+* Nhập pick/place pose.
+* Bấm Plan -> `/pickplace`, `execute=false`.
+* Bấm Start -> `/pickplace`, `execute=true`.
+
+### Pick Place RL
+
+* Xác nhận có khung ảnh giống Pick Place Vision.
+* Bấm Plan -> `/drl_pickplace`, `execute=false`, nếu server đủ.
+* Bấm Start -> `/drl_pickplace`, `execute=true`, nếu server đủ.
+
+### Check Board
+
+* Xác nhận đã có nút Plan.
+* Bấm Plan -> `/move_checker_board`, `execute=false`.
+* Bấm Start -> `/move_checker_board`, `execute=true`.
+
+### Repeatability Test
+
+* Chọn X/Y/Z.
+* Nhập retract/disturb poses, offset, repeat count, velocity.
+* Bấm Plan -> `/repeatability_test`, `execute=false`.
+* Bấm Start -> `/repeatability_test`, `execute=true`.
+
+### Action log
+
+* Mọi lần bấm nút đều có log ở ô dưới cùng.
+* Feedback/result hiện rõ.
+* Input sai phải hiện lỗi, không crash.
+
+## 20. Báo cáo sau khi hoàn thành
+
+Tạo file:
 
 ```text
-- camera plugin
-- image topic
-- YOLO node
-- depth image
-- point cloud
-- camera calibration
+robot_gui/task_action_gui_report.md
 ```
 
-Trừ khi repo hiện có tự launch sẵn camera, nhưng demo này không được phụ thuộc vào nó.
+Nội dung gồm:
 
-# 10. Báo cáo bắt buộc
+* File đã sửa/thêm.
+* Mapping từng nút sang action.
+* Quy tắc Plan/Start execute false/true.
+* Cách xử lý orientation Euler -> quaternion.
+* Hằng số orientation mặc định đang dùng.
+* Widget log action đang dùng.
+* Kết quả build.
+* Kết quả test trên mock_hardware.
+* Action nào chưa test được và lý do cụ thể nếu có.
 
-Sau khi làm xong, tạo file báo cáo mới, ví dụ:
-
-```text
-rl_pick_place_box_gazebo_demo_report.md
-```
-
-Nội dung báo cáo phải có:
-
-```text
-1. Mục tiêu demo.
-2. Các file mới đã tạo.
-3. Các file cũ đã sửa nếu có, kèm lý do.
-4. Cách spawn box 3 cm vào Gazebo.
-5. Cách tính Z khi robot/box nằm trên bàn.
-6. Topic dùng làm mock perception / ground truth perception.
-7. Luồng pick_place RL trong Gazebo.
-8. Action/node/launch nào được dùng từ robot_drl và robot_task_manager.
-9. Lệnh build.
-10. Lệnh chạy demo.
-11. Lệnh kiểm tra topic box pose/size.
-12. Lệnh gọi action nếu cần gọi thủ công.
-13. Kết quả test thực tế.
-14. Các lỗi đã gặp và cách đã sửa.
-15. Giới hạn hiện tại: chưa dùng YOLO/xử lý ảnh, đang dùng Gazebo ground truth.
-16. Hướng thay thế sau này: thay mock perception bằng YOLO/depth perception.
-```
-
-# 11. Tiêu chí nghiệm thu
-
-Chỉ coi là hoàn thành khi đạt các tiêu chí sau:
-
-```text
-- colcon build thành công.
-- Launch demo mới chạy được.
-- Box 3 cm xuất hiện trong Gazebo trên bàn.
-- Pose/size box được publish qua topic hoặc provider rõ ràng.
-- Robot dùng pipeline RL/task_manager hiện có để chạy chuỗi pick_place.
-- Không phá các launch/action/package hiện có.
-- Có báo cáo hướng dẫn chạy đầy đủ.
-```
-
-# 12. Lưu ý cuối
-
-Mục tiêu không phải làm perception thật. Mục tiêu là chạy được demo:
-
-```text
-RL pick_place trong Gazebo bằng Gazebo ground truth / spawn info.
-```
-
-Hãy ưu tiên giải pháp đơn giản, ổn định, dễ chạy demo, không làm phức tạp hệ thống bằng YOLO/camera ở giai đoạn này.
+Chỉ xem là hoàn thành khi build thành công và các nút Plan/Start trong các tab gọi đúng action tương ứng trên mock_hardware.

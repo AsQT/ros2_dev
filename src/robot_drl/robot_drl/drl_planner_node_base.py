@@ -79,6 +79,10 @@ except ImportError:
 _EXECUTION_STATUS_RATE_HZ = 2.0
 
 _EXECUTION_QUATERNION = (0.7071068, 0.7071068, 0.0, 0.0)
+_FORWARD_PATH_COLOR = (0.0, 0.1, 0.6)
+_BACKWARD_PATH_COLOR = (0.25, 0.0, 0.45)
+_WAYPOINT_START_COLOR = (0.0, 0.25, 0.45)
+_WAYPOINT_END_COLOR = (0.45, 0.0, 0.20)
 
 
 # -------------------------------------------------------------------------
@@ -577,9 +581,9 @@ class DrlPlannerNodeBase(Node):
             build_trajectory_markers(
                 trajectory_base=fwd,
                 path_ns="drl_forward",
-                start_color=(0.0, 1.0, 0.0),
-                end_color=(1.0, 0.0, 0.0),
-                line_color=(0.0, 0.7, 1.0),
+                start_color=_WAYPOINT_START_COLOR,
+                end_color=_WAYPOINT_END_COLOR,
+                line_color=_FORWARD_PATH_COLOR,
                 now=now,
             )
         )
@@ -616,9 +620,9 @@ class DrlPlannerNodeBase(Node):
             build_trajectory_markers(
                 trajectory_base=bwd,
                 path_ns="drl_backward",
-                start_color=(1.0, 0.6, 0.0),
-                end_color=(0.0, 1.0, 0.0),
-                line_color=(0.8, 0.2, 0.8),
+                start_color=(0.35, 0.18, 0.0),
+                end_color=_WAYPOINT_START_COLOR,
+                line_color=_BACKWARD_PATH_COLOR,
                 line_width=0.010,
                 sphere_scale=0.035,
                 now=now,

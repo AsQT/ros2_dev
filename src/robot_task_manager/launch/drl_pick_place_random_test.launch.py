@@ -7,6 +7,7 @@ from launch.conditions import IfCondition, UnlessCondition
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
+from launch_ros.parameter_descriptions import ParameterValue
 
 
 def generate_launch_description():
@@ -20,6 +21,11 @@ def generate_launch_description():
     gripper_close_width_arg = DeclareLaunchArgument(
         "gripper_close_width_m",
         default_value="0.028",
+    )
+    execute_arg = DeclareLaunchArgument(
+        "execute",
+        default_value="true",
+        description="Plan and execute when true; plan-only when false",
     )
 
     drl_mock_hw = IncludeLaunchDescription(
@@ -76,6 +82,7 @@ def generate_launch_description():
             "number_of_trials": LaunchConfiguration("number_of_trials"),
             "random_seed": LaunchConfiguration("random_seed"),
             "gripper_close_width_m": LaunchConfiguration("gripper_close_width_m"),
+            "execute": ParameterValue(LaunchConfiguration("execute"), value_type=bool),
         }],
         condition=UnlessCondition(LaunchConfiguration("use_gazebo")),
     )
@@ -89,6 +96,7 @@ def generate_launch_description():
             "number_of_trials": LaunchConfiguration("number_of_trials"),
             "random_seed": LaunchConfiguration("random_seed"),
             "gripper_close_width_m": LaunchConfiguration("gripper_close_width_m"),
+            "execute": ParameterValue(LaunchConfiguration("execute"), value_type=bool),
             "workspace_min": [0.32, -0.10, 0.10],
             "workspace_max": [0.46, 0.10, 0.18],
             "start_min": [0.35, -0.06, 0.22],
@@ -107,6 +115,7 @@ def generate_launch_description():
         number_of_trials_arg,
         random_seed_arg,
         gripper_close_width_arg,
+        execute_arg,
         LogInfo(
             msg="[drl_pick_place_random_test] starting mock HW + DRL stack",
             condition=UnlessCondition(LaunchConfiguration("use_gazebo")),

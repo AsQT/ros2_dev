@@ -322,10 +322,11 @@ private:
     return true;
   }
 
-  bool call_move_gripper(double width_m, std::string & error_msg)
+  bool call_move_gripper(double width_m, bool execute, std::string & error_msg)
   {
     MoveGripper::Goal goal;
     goal.position = width_m;
+    goal.execute = execute;
     auto timeout = std::chrono::duration_cast<std::chrono::nanoseconds>(
       std::chrono::duration<double>(sub_action_timeout_sec_));
     auto goal_future = move_gripper_client_->async_send_goal(goal);
@@ -366,11 +367,13 @@ private:
 
   bool call_cartesian(
     const geometry_msgs::msg::Pose & target,
+    bool execute,
     std::string & error_msg)
   {
     MoveToPoseCartesian::Goal goal;
     goal.target_pose = target;
     goal.velocity_scale = cartesian_velocity_scale_;
+    goal.execute = execute;
     auto timeout = std::chrono::duration_cast<std::chrono::nanoseconds>(
       std::chrono::duration<double>(sub_action_timeout_sec_));
     auto goal_future = cartesian_client_->async_send_goal(goal);
@@ -553,6 +556,7 @@ private:
   bool call_drl_plan_and_execute(
     const geometry_msgs::msg::Pose & target,
     bool preposition_before_plan,
+    bool execute,
     std::string & error_msg)
   {
     const int attempts = std::max(1, drl_plan_attempts_);
@@ -560,9 +564,10 @@ private:
     for (int attempt = 1; attempt <= attempts; ++attempt) {
       RCLCPP_INFO(
         get_logger(),
-        "DRL plan attempt %d/%d target=(%.4f %.4f %.4f) preposition=%s",
+        "DRL plan attempt %d/%d mode=%s target=(%.4f %.4f %.4f) preposition=%s",
         attempt,
         attempts,
+        execute ? "execute" : "plan-only",
         target.position.x,
         target.position.y,
         target.position.z,
@@ -586,6 +591,8 @@ private:
         last_error = "Start DRL planning failed: " + msg;
       } else if (!wait_for_planned_trajectory(seq_before, target, last_error)) {
         // last_error is already populated.
+      } else if (!execute) {
+        return true;
       } else if (!call_trigger(drl_execute_client_, "/drl/execute_forward", msg, 5.0)) {
         last_error = "Start DRL execution failed: " + msg;
       } else if (!wait_for_drl_execution(last_error)) {
@@ -652,8 +659,9 @@ private:
     auto result = std::make_shared<DrlPickPlace::Result>();
     const auto goal = goal_handle->get_goal();
     std::string error_msg;
+    const bool execute_motion = goal->execute;
 
-    publish_feedback(goal_handle, "VALIDATE_GOAL", 1.0f);
+    publish_feedback(goal_handle, execute_motion ? "VALIDATE_GOAL" : "VALIDATE_GOAL_PLAN_ONLY", 1.0f);
     geometry_msgs::msg::PoseStamped target_pick;
     geometry_msgs::msg::PoseStamped target_place;
     try {
@@ -678,8 +686,8 @@ private:
     pre_pick.position.z += pick_approach_height_m_;
     auto lift_pose = pre_pick;
 
-    publish_feedback(goal_handle, "OPEN_GRIPPER", 8.0f);
-    if (!call_move_gripper(gripper_open_width_m_, error_msg)) {
+    publish_feedback(goal_handle, execute_motion ? "OPEN_GRIPPER" : "PLAN_OPEN_GRIPPER_EXECUTION_SKIPPED", 8.0f);
+    if (!call_move_gripper(gripper_open_width_m_, execute_motion, error_msg)) {
       abort_goal(goal_handle, result, "OPEN_GRIPPER", error_msg);
       return;
     }
@@ -687,9 +695,9 @@ private:
       return;
     }
 
-    publish_feedback(goal_handle, "PLAN_TO_PRE_PICK", 22.0f);
-    if (!call_drl_plan_and_execute(pre_pick, true, error_msg) ||
-        !verify_pose("PLAN_TO_PRE_PICK", pre_pick, error_msg))
+    publish_feedback(goal_handle, execute_motion ? "PLAN_TO_PRE_PICK" : "PLAN_TO_PRE_PICK_EXECUTION_SKIPPED", 22.0f);
+    if (!call_drl_plan_and_execute(pre_pick, true, execute_motion, error_msg) ||
+        (execute_motion && !verify_pose("PLAN_TO_PRE_PICK", pre_pick, error_msg)))
     {
       abort_goal(goal_handle, result, "PLAN_TO_PRE_PICK", error_msg);
       return;
@@ -698,9 +706,9 @@ private:
       return;
     }
 
-    publish_feedback(goal_handle, "DESCEND_TO_PICK", 38.0f);
-    if (!call_cartesian(target_pick.pose, error_msg) ||
-        !verify_pose("DESCEND_TO_PICK", target_pick.pose, error_msg))
+    publish_feedback(goal_handle, execute_motion ? "DESCEND_TO_PICK" : "PLAN_DESCEND_TO_PICK_EXECUTION_SKIPPED", 38.0f);
+    if (!call_cartesian(target_pick.pose, execute_motion, error_msg) ||
+        (execute_motion && !verify_pose("DESCEND_TO_PICK", target_pick.pose, error_msg)))
     {
       abort_goal(goal_handle, result, "DESCEND_TO_PICK", error_msg);
       return;
@@ -709,8 +717,8 @@ private:
       return;
     }
 
-    publish_feedback(goal_handle, "CLOSE_GRIPPER", 50.0f);
-    if (!call_move_gripper(close_width_m, error_msg)) {
+    publish_feedback(goal_handle, execute_motion ? "CLOSE_GRIPPER" : "PLAN_CLOSE_GRIPPER_EXECUTION_SKIPPED", 50.0f);
+    if (!call_move_gripper(close_width_m, execute_motion, error_msg)) {
       abort_goal(goal_handle, result, "CLOSE_GRIPPER", error_msg);
       return;
     }
@@ -718,9 +726,9 @@ private:
       return;
     }
 
-    publish_feedback(goal_handle, "LIFT_FROM_PICK", 62.0f);
-    if (!call_cartesian(lift_pose, error_msg) ||
-        !verify_pose("LIFT_FROM_PICK", lift_pose, error_msg))
+    publish_feedback(goal_handle, execute_motion ? "LIFT_FROM_PICK" : "PLAN_LIFT_FROM_PICK_EXECUTION_SKIPPED", 62.0f);
+    if (!call_cartesian(lift_pose, execute_motion, error_msg) ||
+        (execute_motion && !verify_pose("LIFT_FROM_PICK", lift_pose, error_msg)))
     {
       abort_goal(goal_handle, result, "LIFT_FROM_PICK", error_msg);
       return;
@@ -729,9 +737,9 @@ private:
       return;
     }
 
-    publish_feedback(goal_handle, "PLAN_TO_PLACE", 82.0f);
-    if (!call_drl_plan_and_execute(target_place.pose, false, error_msg) ||
-        !verify_pose("PLAN_TO_PLACE", target_place.pose, error_msg))
+    publish_feedback(goal_handle, execute_motion ? "PLAN_TO_PLACE" : "PLAN_TO_PLACE_EXECUTION_SKIPPED", 82.0f);
+    if (!call_drl_plan_and_execute(target_place.pose, false, execute_motion, error_msg) ||
+        (execute_motion && !verify_pose("PLAN_TO_PLACE", target_place.pose, error_msg)))
     {
       abort_goal(goal_handle, result, "PLAN_TO_PLACE", error_msg);
       return;
@@ -740,8 +748,8 @@ private:
       return;
     }
 
-    publish_feedback(goal_handle, "OPEN_GRIPPER_AT_PLACE", 96.0f);
-    if (!call_move_gripper(gripper_open_width_m_, error_msg)) {
+    publish_feedback(goal_handle, execute_motion ? "OPEN_GRIPPER_AT_PLACE" : "PLAN_OPEN_GRIPPER_AT_PLACE_EXECUTION_SKIPPED", 96.0f);
+    if (!call_move_gripper(gripper_open_width_m_, execute_motion, error_msg)) {
       abort_goal(goal_handle, result, "OPEN_GRIPPER_AT_PLACE", error_msg);
       return;
     }
@@ -749,9 +757,11 @@ private:
       return;
     }
 
-    publish_feedback(goal_handle, "DONE", 100.0f);
+    publish_feedback(goal_handle, execute_motion ? "DONE" : "DONE_PLANNING_EXECUTION_SKIPPED", 100.0f);
     result->success = true;
-    result->message = "DrlPickPlace completed successfully";
+    result->message = execute_motion ?
+      "DrlPickPlace completed successfully" :
+      "DrlPickPlace planning success; execution skipped";
     result->failed_stage = "";
     clear_active_goals();
     goal_handle->succeed(result);

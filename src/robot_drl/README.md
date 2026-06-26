@@ -4,6 +4,8 @@ Deep Reinforcement Learning inference package for autonomous robot pick-and-plac
 
 **Preferred node:** `drl_unified_planner_node` — a single unified node that handles planning, execution, and visualization for both manual and vision modes.
 
+DRL trajectory markers are styled for light RViz backgrounds: forward trajectories use dark blue, backward trajectories use dark purple, and endpoint markers use darker waypoint colors.
+
 ## Package Structure
 
 ```

@@ -38,10 +38,11 @@ public:
   : Node("task_manager_client")
   {
     declare_parameter<std::string>("task_name", "gohome");
+    declare_parameter<bool>("execute", true);
     gohome_client_                  = rclcpp_action::create_client<GoHome>(this, "gohome");
     move_to_pose_client_            = rclcpp_action::create_client<MoveToPose>(this, "move_to_pose");
     move_to_pose_cartesian_client_  = rclcpp_action::create_client<MoveToPoseCartesian>(this, "move_to_pose_cartesian");
-    move_checker_board_client_      = rclcpp_action::create_client<CheckerBoard>(this, "checker_board");
+    move_checker_board_client_      = rclcpp_action::create_client<CheckerBoard>(this, "move_checker_board");
     move_gripper_client_            = rclcpp_action::create_client<MoveGripper>(this, "move_gripper");
     pickplace_client_               = rclcpp_action::create_client<PickPlace>(this, "pickplace");
 
@@ -86,6 +87,7 @@ private:
 
     GoHome::Goal goal;
     goal.start = true;
+    goal.execute = get_parameter("execute").as_bool();
 
     rclcpp_action::Client<GoHome>::SendGoalOptions options;
     options.goal_response_callback =
@@ -133,6 +135,7 @@ private:
     goal.target_pose.orientation.z = 0.0;
     goal.target_pose.orientation.w = 1.0;
     goal.velocity_scale = 0.5;
+    goal.execute = get_parameter("execute").as_bool();
 
     rclcpp_action::Client<MoveToPose>::SendGoalOptions options;
     options.goal_response_callback = [this](const MoveToPoseGoalHandle::SharedPtr & handle)
@@ -178,6 +181,7 @@ private:
     goal.target_pose.orientation.z = 0.0;
     goal.target_pose.orientation.w = 1.0;
     goal.velocity_scale = 0.5;
+    goal.execute = get_parameter("execute").as_bool();
 
     rclcpp_action::Client<MoveToPoseCartesian>::SendGoalOptions options;
     options.goal_response_callback =   [this](const MoveToPoseCartesianGoalHandle::SharedPtr & handle)
@@ -217,6 +221,7 @@ private:
     CheckerBoard::Goal goal;
     goal.step = 0.40;
     goal.velocity_scale = 0.5;
+    goal.execute = get_parameter("execute").as_bool();
 
     rclcpp_action::Client<CheckerBoard>::SendGoalOptions options;
     options.goal_response_callback = [this](const CheckerBoardGoalHandle::SharedPtr & handle)
@@ -256,6 +261,7 @@ private:
 
     MoveGripper::Goal goal;
     goal.position = 0.03; 
+    goal.execute = get_parameter("execute").as_bool();
 
     rclcpp_action::Client<MoveGripper>::SendGoalOptions options;
 
@@ -341,6 +347,7 @@ private:
 
     // Scale vận tốc
     goal.velocity_scale = 0.5;
+    goal.execute = get_parameter("execute").as_bool();
 
     rclcpp_action::Client<PickPlace>::SendGoalOptions options;
 

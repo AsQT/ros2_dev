@@ -11,12 +11,14 @@ set(CMAKE_AUTOUIC_SEARCH_PATHS ${CMAKE_CURRENT_SOURCE_DIR}/ui)
 
 find_package(ament_cmake REQUIRED)
 find_package(rclcpp REQUIRED)
+find_package(rclcpp_action REQUIRED)
 find_package(std_srvs REQUIRED)
 find_package(std_msgs REQUIRED)
 find_package(sensor_msgs REQUIRED)
 find_package(geometry_msgs REQUIRED)
 find_package(trajectory_msgs REQUIRED)
 find_package(robot_hardware_interface REQUIRED)
+find_package(robot_task_manager REQUIRED)
 find_package(ament_index_cpp REQUIRED)
 find_package(rviz_common REQUIRED)
 find_package(rviz_rendering REQUIRED)
@@ -26,11 +28,13 @@ find_package(Qt5 REQUIRED COMPONENTS Widgets)
 set(SOURCES
   include/robot_gui/main_window.hpp
   include/robot_gui/rviz_panel.hpp
+  include/robot_gui/task_action_controller.hpp
   src/main.cpp
   src/main_window.cpp
   src/rviz_panel.cpp
   src/robot_gui_node.cpp
   src/status_led.cpp
+  src/task_action_controller.cpp
   ui/robot_gui.ui
 )
 
@@ -41,12 +45,14 @@ target_include_directories(robot_gui_node PRIVATE
 )
 ament_target_dependencies(robot_gui_node
   rclcpp
+  rclcpp_action
   std_srvs
   std_msgs
   sensor_msgs
   geometry_msgs
   trajectory_msgs
   robot_hardware_interface
+  robot_task_manager
   ament_index_cpp
   rviz_common
   rviz_rendering

@@ -716,468 +716,3524 @@ QFrame#SideMenu QPushButton:checked:hover {
        </rect>
       </property>
       <property name="styleSheet">
-       <string>background: qlineargradient(x1:0,y1:0,x2:0,y2:1, stop:0 #d5f2f7, stop:1 #9bd9e5); border-radius:18px;</string>
+       <string>QFrame#TaskControlPanel{
+background: qlineargradient(x1:0,y1:0,x2:0,y2:1, stop:0 #d9f5f8, stop:0.45 #bcecf1, stop:1 #80c9d7);
+border-radius:18px;
+border:1px solid #6db7c6;
+}
+QLabel{font-family:Arial;}
+QLineEdit{font-family:Arial;}
+QPushButton{font-family:Arial;}
+QComboBox{font-family:Arial;}</string>
       </property>
       <widget class="QFrame" name="ModeControlGroup">
        <property name="geometry">
         <rect>
-         <x>20</x>
-         <y>20</y>
-         <width>345</width>
-         <height>78</height>
+         <x>12</x>
+         <y>10</y>
+         <width>361</width>
+         <height>64</height>
         </rect>
        </property>
        <property name="styleSheet">
-        <string>background:#004d7a; border-radius:8px; border:2px solid #aee7ee;</string>
+        <string>QFrame#ModeControlGroup{
+background: qlineargradient(x1:0,y1:0,x2:0,y2:1, stop:0 #006692, stop:1 #003f67);
+border-radius:10px;
+border:2px solid #aee7ee;
+}</string>
        </property>
-       <widget class="QLabel" name="lblModeControl">
-        <property name="geometry">
-         <rect>
-          <x>0</x>
-          <y>2</y>
-          <width>345</width>
-          <height>30</height>
-         </rect>
-        </property>
-        <property name="font">
-         <font>
-          <family>Arial</family>
-          <pointsize>16</pointsize>
-         </font>
-        </property>
-        <property name="styleSheet">
-         <string>color:white; background:transparent; border:0px;</string>
-        </property>
-        <property name="text">
-         <string>Mode Control</string>
-        </property>
-        <property name="alignment">
-         <set>Qt::AlignCenter</set>
-        </property>
-       </widget>
-       <widget class="QComboBox" name="cbModeControl">
-        <property name="geometry">
-         <rect>
-          <x>15</x>
-          <y>34</y>
-          <width>315</width>
-          <height>34</height>
-         </rect>
-        </property>
-        <property name="styleSheet">
-         <string>QComboBox{background:white; color:black; border-radius:5px; padding-left:50px; font: 18pt Arial;}</string>
-        </property>
-        <item>
-         <property name="text">
-          <string>Auto</string>
-         </property>
-        </item>
-        <item>
-         <property name="text">
-          <string>Manual</string>
-         </property>
-        </item>
-        <item>
-         <property name="text">
-          <string>Pose</string>
-         </property>
-        </item>
-       </widget>
+      <widget class="QLabel" name="lblModeControl">
+       <property name="geometry">
+        <rect>
+         <x>0</x>
+         <y>2</y>
+         <width>361</width>
+         <height>22</height>
+        </rect>
+       </property>
+       <property name="font">
+        <font>
+         <family>Arial</family>
+         <pointsize>11</pointsize>
+        </font>
+       </property>
+       <property name="styleSheet">
+        <string>color:white; background:transparent; border:0px;</string>
+       </property>
+       <property name="text">
+        <string>Task Mode</string>
+       </property>
+       <property name="alignment">
+        <set>Qt::AlignCenter</set>
+       </property>
       </widget>
-      <widget class="QFrame" name="TargetPoseGroup">
+      <widget class="QComboBox" name="cbModeControl">
+       <property name="geometry">
+        <rect>
+         <x>14</x>
+         <y>27</y>
+         <width>333</width>
+         <height>29</height>
+        </rect>
+       </property>
+       <property name="styleSheet">
+        <string>QComboBox{
+background:white;
+color:#111111;
+border-radius:5px;
+border:1px solid #66b7c7;
+padding-left:12px;
+padding-right:30px;
+font: 11pt Arial;
+}
+QComboBox::drop-down{
+subcontrol-origin:padding;
+subcontrol-position:top right;
+width:28px;
+border-left:1px solid #66b7c7;
+border-top-right-radius:5px;
+border-bottom-right-radius:5px;
+background:qlineargradient(x1:0,y1:0,x2:0,y2:1, stop:0 #e8fbff, stop:1 #bcecf1);
+}
+QComboBox QAbstractItemView{
+background:white;
+color:#111111;
+selection-background-color:#007aa5;
+selection-color:white;
+border:1px solid #66b7c7;
+font: 10pt Arial;
+}</string>
+       </property>
+       <property name="maxVisibleItems">
+        <number>8</number>
+       </property>
+       <item>
+        <property name="text">
+         <string>Move Pose</string>
+        </property>
+       </item>
+       <item>
+        <property name="text">
+         <string>Move Pose RL</string>
+        </property>
+       </item>
+       <item>
+        <property name="text">
+         <string>Gripper</string>
+        </property>
+       </item>
+       <item>
+        <property name="text">
+         <string>Pick Place</string>
+        </property>
+       </item>
+       <item>
+        <property name="text">
+         <string>Pick Place Vision</string>
+        </property>
+       </item>
+       <item>
+        <property name="text">
+         <string>Pick Place RL</string>
+        </property>
+       </item>
+       <item>
+        <property name="text">
+         <string>Check Board</string>
+        </property>
+       </item>
+       <item>
+        <property name="text">
+         <string>Repeatability Test</string>
+        </property>
+       </item>
+      </widget>
+      </widget>
+      <widget class="QTabWidget" name="taskModeTabs">
+       <property name="geometry">
+        <rect>
+         <x>12</x>
+         <y>84</y>
+         <width>361</width>
+         <height>504</height>
+        </rect>
+       </property>
+       <property name="styleSheet">
+        <string>QTabWidget::pane{
+background:rgba(255,255,255,115);
+border:1px solid #83c8d4;
+border-radius:10px;
+top:0px;
+}
+QTabWidget::tab-bar{
+width:0px;
+height:0px;
+}
+QTabBar{
+width:0px;
+height:0px;
+min-height:0px;
+max-height:0px;
+border:0px;
+background:transparent;
+}
+QTabBar::tab{
+width:0px;
+height:0px;
+min-width:0px;
+max-width:0px;
+min-height:0px;
+max-height:0px;
+padding:0px;
+margin:0px;
+border:0px;
+background:transparent;
+color:transparent;
+}
+QTabBar::scroller{
+width:0px;
+height:0px;
+}
+QToolButton{
+width:0px;
+height:0px;
+padding:0px;
+margin:0px;
+border:0px;
+background:transparent;
+}</string>
+       </property>
+       <property name="currentIndex">
+        <number>0</number>
+       </property>
+       <property name="usesScrollButtons">
+        <bool>false</bool>
+       </property>
+       <property name="documentMode">
+        <bool>false</bool>
+       </property>
+      <widget class="QWidget" name="tabMovePose">
+       <property name="styleSheet">
+        <string>background:transparent; border:0px;</string>
+       </property>
+       <attribute name="title">
+        <string>Move Pose</string>
+       </attribute>
+      <widget class="QLabel" name="lblMovePoseTitle">
+       <property name="geometry">
+        <rect>
+         <x>0</x>
+         <y>6</y>
+         <width>337</width>
+         <height>42</height>
+        </rect>
+       </property>
+       <property name="font">
+        <font>
+         <family>Arial</family>
+         <pointsize>17</pointsize>
+        </font>
+       </property>
+       <property name="styleSheet">
+        <string>background:transparent; color:#111111; border:0px;</string>
+       </property>
+       <property name="text">
+        <string>Move Pose</string>
+       </property>
+       <property name="alignment">
+        <set>Qt::AlignCenter</set>
+       </property>
+      </widget>
+      <widget class="QLabel" name="lblMovePoseCartesian">
+       <property name="geometry">
+        <rect>
+         <x>0</x>
+         <y>54</y>
+         <width>210</width>
+         <height>30</height>
+        </rect>
+       </property>
+       <property name="font">
+        <font>
+         <family>Arial</family>
+         <pointsize>10</pointsize>
+        </font>
+       </property>
+       <property name="styleSheet">
+        <string>background:transparent; color:#102d3d; border:0px;</string>
+       </property>
+       <property name="text">
+        <string>Move Pose Cartesian</string>
+       </property>
+       <property name="alignment">
+        <set>Qt::AlignVCenter|Qt::AlignLeft</set>
+       </property>
+      </widget>
+      <widget class="QCheckBox" name="chkMovePoseCartesian">
+       <property name="geometry">
+        <rect>
+         <x>270</x>
+         <y>58</y>
+         <width>44</width>
+         <height>24</height>
+        </rect>
+       </property>
+       <property name="styleSheet">
+        <string>QCheckBox{background:transparent; color:#102d3d; border:0px;} QCheckBox::indicator{width:22px; height:22px; border:1px solid #b8cfd8; background:white;}</string>
+       </property>
+       <property name="text">
+        <string></string>
+       </property>
+      </widget>
+      <widget class="QPushButton" name="btnStartTask">
+       <property name="geometry">
+        <rect>
+         <x>15</x>
+         <y>104</y>
+         <width>72</width>
+         <height>34</height>
+        </rect>
+       </property>
+       <property name="font">
+        <font>
+         <family>Arial</family>
+         <pointsize>9</pointsize>
+        </font>
+       </property>
+       <property name="styleSheet">
+        <string>QPushButton{background:qlineargradient(x1:0,y1:0,x2:0,y2:1, stop:0 #ffffff, stop:1 #e6f4f7); color:#102d3d; border:1px solid #b8cfd8; border-radius:4px;} QPushButton:pressed{background:#cdebf0;}</string>
+       </property>
+       <property name="text">
+        <string>Plan</string>
+       </property>
+      </widget>
+      <widget class="QPushButton" name="btnResetTask">
+       <property name="geometry">
+        <rect>
+         <x>132</x>
+         <y>104</y>
+         <width>72</width>
+         <height>34</height>
+        </rect>
+       </property>
+       <property name="font">
+        <font>
+         <family>Arial</family>
+         <pointsize>9</pointsize>
+        </font>
+       </property>
+       <property name="styleSheet">
+        <string>QPushButton{background:qlineargradient(x1:0,y1:0,x2:0,y2:1, stop:0 #ffffff, stop:1 #e6f4f7); color:#102d3d; border:1px solid #b8cfd8; border-radius:4px;} QPushButton:pressed{background:#cdebf0;}</string>
+       </property>
+       <property name="text">
+        <string>Execute</string>
+       </property>
+      </widget>
+      <widget class="QPushButton" name="btnStopTask">
+       <property name="geometry">
+        <rect>
+         <x>249</x>
+         <y>104</y>
+         <width>72</width>
+         <height>34</height>
+        </rect>
+       </property>
+       <property name="font">
+        <font>
+         <family>Arial</family>
+         <pointsize>9</pointsize>
+        </font>
+       </property>
+       <property name="styleSheet">
+        <string>QPushButton{background:qlineargradient(x1:0,y1:0,x2:0,y2:1, stop:0 #ff5757, stop:1 #e00000); color:#00334f; border:1px solid #b80000; border-radius:6px;} QPushButton:pressed{background:#c50000;}</string>
+       </property>
+       <property name="text">
+        <string>Stop</string>
+       </property>
+      </widget>
+      <widget class="QFrame" name="movePosePositionGroup">
+       <property name="geometry">
+        <rect>
+         <x>0</x>
+         <y>158</y>
+         <width>337</width>
+         <height>88</height>
+        </rect>
+       </property>
+       <property name="styleSheet">
+        <string>QFrame{background:rgba(255,255,255,220); border:1px solid #c1d7df; border-radius:8px;}</string>
+       </property>
+      <widget class="QLabel" name="movePosePositionTitle">
+       <property name="geometry">
+        <rect>
+         <x>0</x>
+         <y>5</y>
+         <width>337</width>
+         <height>24</height>
+        </rect>
+       </property>
+       <property name="font">
+        <font>
+         <family>Arial</family>
+         <pointsize>10</pointsize>
+        </font>
+       </property>
+       <property name="styleSheet">
+        <string>background:transparent; color:#102d3d; border:0px;</string>
+       </property>
+       <property name="text">
+        <string>Position</string>
+       </property>
+       <property name="alignment">
+        <set>Qt::AlignCenter</set>
+       </property>
+      </widget>
+      <widget class="QLabel" name="txtTargetX_label">
        <property name="geometry">
         <rect>
          <x>20</x>
-         <y>118</y>
-         <width>345</width>
-         <height>128</height>
+         <y>32</y>
+         <width>72</width>
+         <height>16</height>
         </rect>
        </property>
-       <property name="styleSheet">
-        <string>background:#004d7a; border-radius:8px; border:2px solid #aee7ee;</string>
+       <property name="font">
+        <font>
+         <family>Arial</family>
+         <pointsize>8</pointsize>
+        </font>
        </property>
-       <widget class="QLabel" name="lblTargetPose">
-        <property name="geometry">
-         <rect>
-          <x>0</x>
-          <y>4</y>
-          <width>345</width>
-          <height>34</height>
-         </rect>
-        </property>
-        <property name="font">
-         <font>
-          <family>Arial</family>
-          <pointsize>16</pointsize>
-         </font>
-        </property>
-        <property name="styleSheet">
-         <string>color:white; background:transparent; border:0px;</string>
-        </property>
-        <property name="text">
-         <string>Target Pose</string>
-        </property>
-        <property name="alignment">
-         <set>Qt::AlignCenter</set>
-        </property>
-       </widget>
-       <widget class="QLabel" name="txtTargetX_label">
-        <property name="geometry">
-         <rect>
-          <x>9</x>
-          <y>48</y>
-          <width>24</width>
-          <height>28</height>
-         </rect>
-        </property>
-        <property name="font">
-         <font>
-          <family>Arial</family>
-          <pointsize>18</pointsize>
-          <weight>75</weight>
-          <bold>true</bold>
-         </font>
-        </property>
-        <property name="styleSheet">
-         <string>color:white; background:transparent; border:0px;</string>
-        </property>
-        <property name="text">
-         <string>X</string>
-        </property>
-        <property name="alignment">
-         <set>Qt::AlignCenter</set>
-        </property>
-       </widget>
-       <widget class="QLineEdit" name="txtTargetX">
-        <property name="geometry">
-         <rect>
-          <x>37</x>
-          <y>48</y>
-          <width>66</width>
-          <height>28</height>
-         </rect>
-        </property>
-        <property name="styleSheet">
-         <string>QLineEdit { background:white; border-radius:3px; border:1px solid #cbd8e0; padding-left:6px; color:black;}</string>
-        </property>
-       </widget>
-       <widget class="QLabel" name="txtTargetY_label">
-        <property name="geometry">
-         <rect>
-          <x>123</x>
-          <y>48</y>
-          <width>24</width>
-          <height>28</height>
-         </rect>
-        </property>
-        <property name="font">
-         <font>
-          <family>Arial</family>
-          <pointsize>18</pointsize>
-          <weight>75</weight>
-          <bold>true</bold>
-         </font>
-        </property>
-        <property name="styleSheet">
-         <string>color:white; background:transparent; border:0px;</string>
-        </property>
-        <property name="text">
-         <string>Y</string>
-        </property>
-        <property name="alignment">
-         <set>Qt::AlignCenter</set>
-        </property>
-       </widget>
-       <widget class="QLineEdit" name="txtTargetY">
-        <property name="geometry">
-         <rect>
-          <x>151</x>
-          <y>48</y>
-          <width>66</width>
-          <height>28</height>
-         </rect>
-        </property>
-        <property name="styleSheet">
-         <string>QLineEdit { background:white; border-radius:3px; border:1px solid #cbd8e0; padding-left:6px; color:black;}</string>
-        </property>
-       </widget>
-       <widget class="QLabel" name="txtTargetZ_label">
-        <property name="geometry">
-         <rect>
-          <x>238</x>
-          <y>48</y>
-          <width>24</width>
-          <height>28</height>
-         </rect>
-        </property>
-        <property name="font">
-         <font>
-          <family>Arial</family>
-          <pointsize>18</pointsize>
-          <weight>75</weight>
-          <bold>true</bold>
-         </font>
-        </property>
-        <property name="styleSheet">
-         <string>color:white; background:transparent; border:0px;</string>
-        </property>
-        <property name="text">
-         <string>Z</string>
-        </property>
-        <property name="alignment">
-         <set>Qt::AlignCenter</set>
-        </property>
-       </widget>
-       <widget class="QLineEdit" name="txtTargetZ">
-        <property name="geometry">
-         <rect>
-          <x>266</x>
-          <y>48</y>
-          <width>66</width>
-          <height>28</height>
-         </rect>
-        </property>
-        <property name="styleSheet">
-         <string>QLineEdit { background:white; border-radius:3px; border:1px solid #cbd8e0; padding-left:6px; color:black;}</string>
-        </property>
-       </widget>
-       <widget class="QLabel" name="txtTargetRoll_label">
-        <property name="geometry">
-         <rect>
-          <x>9</x>
-          <y>88</y>
-          <width>24</width>
-          <height>28</height>
-         </rect>
-        </property>
-        <property name="font">
-         <font>
-          <family>Arial</family>
-          <pointsize>18</pointsize>
-          <weight>75</weight>
-          <bold>true</bold>
-         </font>
-        </property>
-        <property name="styleSheet">
-         <string>color:white; background:transparent; border:0px;</string>
-        </property>
-        <property name="text">
-         <string>R</string>
-        </property>
-        <property name="alignment">
-         <set>Qt::AlignCenter</set>
-        </property>
-       </widget>
-       <widget class="QLineEdit" name="txtTargetRoll">
-        <property name="geometry">
-         <rect>
-          <x>37</x>
-          <y>88</y>
-          <width>66</width>
-          <height>28</height>
-         </rect>
-        </property>
-        <property name="styleSheet">
-         <string>QLineEdit { background:white; border-radius:3px; border:1px solid #cbd8e0; padding-left:6px; color:black;}</string>
-        </property>
-       </widget>
-       <widget class="QLabel" name="txtTargetPitch_label">
-        <property name="geometry">
-         <rect>
-          <x>123</x>
-          <y>88</y>
-          <width>24</width>
-          <height>28</height>
-         </rect>
-        </property>
-        <property name="font">
-         <font>
-          <family>Arial</family>
-          <pointsize>18</pointsize>
-          <weight>75</weight>
-          <bold>true</bold>
-         </font>
-        </property>
-        <property name="styleSheet">
-         <string>color:white; background:transparent; border:0px;</string>
-        </property>
-        <property name="text">
-         <string>P</string>
-        </property>
-        <property name="alignment">
-         <set>Qt::AlignCenter</set>
-        </property>
-       </widget>
-       <widget class="QLineEdit" name="txtTargetPitch">
-        <property name="geometry">
-         <rect>
-          <x>151</x>
-          <y>88</y>
-          <width>66</width>
-          <height>28</height>
-         </rect>
-        </property>
-        <property name="styleSheet">
-         <string>QLineEdit { background:white; border-radius:3px; border:1px solid #cbd8e0; padding-left:6px; color:black;}</string>
-        </property>
-       </widget>
-       <widget class="QLabel" name="txtTargetYaw_label">
-        <property name="geometry">
-         <rect>
-          <x>238</x>
-          <y>88</y>
-          <width>24</width>
-          <height>28</height>
-         </rect>
-        </property>
-        <property name="font">
-         <font>
-          <family>Arial</family>
-          <pointsize>18</pointsize>
-          <weight>75</weight>
-          <bold>true</bold>
-         </font>
-        </property>
-        <property name="styleSheet">
-         <string>color:white; background:transparent; border:0px;</string>
-        </property>
-        <property name="text">
-         <string>Y</string>
-        </property>
-        <property name="alignment">
-         <set>Qt::AlignCenter</set>
-        </property>
-       </widget>
-       <widget class="QLineEdit" name="txtTargetYaw">
-        <property name="geometry">
-         <rect>
-          <x>266</x>
-          <y>88</y>
-          <width>66</width>
-          <height>28</height>
-         </rect>
-        </property>
-        <property name="styleSheet">
-         <string>QLineEdit { background:white; border-radius:3px; border:1px solid #cbd8e0; padding-left:6px; color:black;}</string>
-        </property>
-       </widget>
+       <property name="styleSheet">
+        <string>background:transparent; color:#102d3d; border:0px;</string>
+       </property>
+       <property name="text">
+        <string>X</string>
+       </property>
+       <property name="alignment">
+        <set>Qt::AlignCenter</set>
+       </property>
       </widget>
-      <widget class="QFrame" name="TaskCommandGroup">
+      <widget class="QLineEdit" name="txtTargetX">
        <property name="geometry">
         <rect>
          <x>20</x>
-         <y>260</y>
-         <width>345</width>
-         <height>85</height>
+         <y>48</y>
+         <width>72</width>
+         <height>30</height>
         </rect>
        </property>
        <property name="styleSheet">
-        <string>background:#004d7a; border-radius:8px; border:2px solid #aee7ee;</string>
+        <string>QLineEdit{background:white; color:black; border-radius:3px; border:1px solid #b8cfd8; padding-left:3px; padding-right:3px; selection-background-color:#00a6c7;}</string>
        </property>
-       <widget class="QPushButton" name="btnStartTask">
-        <property name="geometry">
-         <rect>
-          <x>15</x>
-          <y>18</y>
-          <width>102</width>
-          <height>50</height>
-         </rect>
-        </property>
-        <property name="font">
-         <font>
-          <family>Arial</family>
-          <pointsize>14</pointsize>
-         </font>
-        </property>
-        <property name="styleSheet">
-         <string>QPushButton{background:#00f018; color:#00334f; border-radius:7px; border:0px;}</string>
-        </property>
-        <property name="text">
-         <string>START</string>
-        </property>
-       </widget>
-       <widget class="QPushButton" name="btnStopTask">
-        <property name="geometry">
-         <rect>
-          <x>123</x>
-          <y>18</y>
-          <width>102</width>
-          <height>50</height>
-         </rect>
-        </property>
-        <property name="font">
-         <font>
-          <family>Arial</family>
-          <pointsize>14</pointsize>
-         </font>
-        </property>
-        <property name="styleSheet">
-         <string>QPushButton{background:#ff0000; color:#00334f; border-radius:7px; border:0px;}</string>
-        </property>
-        <property name="text">
-         <string>STOP</string>
-        </property>
-       </widget>
-       <widget class="QPushButton" name="btnResetTask">
-        <property name="geometry">
-         <rect>
-          <x>230</x>
-          <y>18</y>
-          <width>102</width>
-          <height>50</height>
-         </rect>
-        </property>
-        <property name="font">
-         <font>
-          <family>Arial</family>
-          <pointsize>14</pointsize>
-         </font>
-        </property>
-        <property name="styleSheet">
-         <string>QPushButton{background:#08ddec; color:#00334f; border-radius:7px; border:0px;}</string>
-        </property>
-        <property name="text">
-         <string>RST</string>
-        </property>
-       </widget>
+       <property name="alignment">
+        <set>Qt::AlignCenter</set>
+       </property>
+      </widget>
+      <widget class="QLabel" name="txtTargetY_label">
+       <property name="geometry">
+        <rect>
+         <x>132</x>
+         <y>32</y>
+         <width>72</width>
+         <height>16</height>
+        </rect>
+       </property>
+       <property name="font">
+        <font>
+         <family>Arial</family>
+         <pointsize>8</pointsize>
+        </font>
+       </property>
+       <property name="styleSheet">
+        <string>background:transparent; color:#102d3d; border:0px;</string>
+       </property>
+       <property name="text">
+        <string>Y</string>
+       </property>
+       <property name="alignment">
+        <set>Qt::AlignCenter</set>
+       </property>
+      </widget>
+      <widget class="QLineEdit" name="txtTargetY">
+       <property name="geometry">
+        <rect>
+         <x>132</x>
+         <y>48</y>
+         <width>72</width>
+         <height>30</height>
+        </rect>
+       </property>
+       <property name="styleSheet">
+        <string>QLineEdit{background:white; color:black; border-radius:3px; border:1px solid #b8cfd8; padding-left:3px; padding-right:3px; selection-background-color:#00a6c7;}</string>
+       </property>
+       <property name="alignment">
+        <set>Qt::AlignCenter</set>
+       </property>
+      </widget>
+      <widget class="QLabel" name="txtTargetZ_label">
+       <property name="geometry">
+        <rect>
+         <x>244</x>
+         <y>32</y>
+         <width>72</width>
+         <height>16</height>
+        </rect>
+       </property>
+       <property name="font">
+        <font>
+         <family>Arial</family>
+         <pointsize>8</pointsize>
+        </font>
+       </property>
+       <property name="styleSheet">
+        <string>background:transparent; color:#102d3d; border:0px;</string>
+       </property>
+       <property name="text">
+        <string>Z</string>
+       </property>
+       <property name="alignment">
+        <set>Qt::AlignCenter</set>
+       </property>
+      </widget>
+      <widget class="QLineEdit" name="txtTargetZ">
+       <property name="geometry">
+        <rect>
+         <x>244</x>
+         <y>48</y>
+         <width>72</width>
+         <height>30</height>
+        </rect>
+       </property>
+       <property name="styleSheet">
+        <string>QLineEdit{background:white; color:black; border-radius:3px; border:1px solid #b8cfd8; padding-left:3px; padding-right:3px; selection-background-color:#00a6c7;}</string>
+       </property>
+       <property name="alignment">
+        <set>Qt::AlignCenter</set>
+       </property>
+      </widget>
+      </widget>
+      <widget class="QFrame" name="movePoseOrientationGroup">
+       <property name="geometry">
+        <rect>
+         <x>0</x>
+         <y>251</y>
+         <width>337</width>
+         <height>88</height>
+        </rect>
+       </property>
+       <property name="styleSheet">
+        <string>QFrame{background:rgba(255,255,255,220); border:1px solid #c1d7df; border-radius:8px;}</string>
+       </property>
+      <widget class="QLabel" name="movePoseOrientationTitle">
+       <property name="geometry">
+        <rect>
+         <x>0</x>
+         <y>5</y>
+         <width>337</width>
+         <height>24</height>
+        </rect>
+       </property>
+       <property name="font">
+        <font>
+         <family>Arial</family>
+         <pointsize>10</pointsize>
+        </font>
+       </property>
+       <property name="styleSheet">
+        <string>background:transparent; color:#102d3d; border:0px;</string>
+       </property>
+       <property name="text">
+        <string>Orientation</string>
+       </property>
+       <property name="alignment">
+        <set>Qt::AlignCenter</set>
+       </property>
+      </widget>
+      <widget class="QLabel" name="txtTargetRoll_label">
+       <property name="geometry">
+        <rect>
+         <x>20</x>
+         <y>32</y>
+         <width>72</width>
+         <height>16</height>
+        </rect>
+       </property>
+       <property name="font">
+        <font>
+         <family>Arial</family>
+         <pointsize>8</pointsize>
+        </font>
+       </property>
+       <property name="styleSheet">
+        <string>background:transparent; color:#102d3d; border:0px;</string>
+       </property>
+       <property name="text">
+        <string>Roll</string>
+       </property>
+       <property name="alignment">
+        <set>Qt::AlignCenter</set>
+       </property>
+      </widget>
+      <widget class="QLineEdit" name="txtTargetRoll">
+       <property name="geometry">
+        <rect>
+         <x>20</x>
+         <y>48</y>
+         <width>72</width>
+         <height>30</height>
+        </rect>
+       </property>
+       <property name="styleSheet">
+        <string>QLineEdit{background:white; color:black; border-radius:3px; border:1px solid #b8cfd8; padding-left:3px; padding-right:3px; selection-background-color:#00a6c7;}</string>
+       </property>
+       <property name="alignment">
+        <set>Qt::AlignCenter</set>
+       </property>
+      </widget>
+      <widget class="QLabel" name="txtTargetPitch_label">
+       <property name="geometry">
+        <rect>
+         <x>132</x>
+         <y>32</y>
+         <width>72</width>
+         <height>16</height>
+        </rect>
+       </property>
+       <property name="font">
+        <font>
+         <family>Arial</family>
+         <pointsize>8</pointsize>
+        </font>
+       </property>
+       <property name="styleSheet">
+        <string>background:transparent; color:#102d3d; border:0px;</string>
+       </property>
+       <property name="text">
+        <string>Pitch</string>
+       </property>
+       <property name="alignment">
+        <set>Qt::AlignCenter</set>
+       </property>
+      </widget>
+      <widget class="QLineEdit" name="txtTargetPitch">
+       <property name="geometry">
+        <rect>
+         <x>132</x>
+         <y>48</y>
+         <width>72</width>
+         <height>30</height>
+        </rect>
+       </property>
+       <property name="styleSheet">
+        <string>QLineEdit{background:white; color:black; border-radius:3px; border:1px solid #b8cfd8; padding-left:3px; padding-right:3px; selection-background-color:#00a6c7;}</string>
+       </property>
+       <property name="alignment">
+        <set>Qt::AlignCenter</set>
+       </property>
+      </widget>
+      <widget class="QLabel" name="txtTargetYaw_label">
+       <property name="geometry">
+        <rect>
+         <x>244</x>
+         <y>32</y>
+         <width>72</width>
+         <height>16</height>
+        </rect>
+       </property>
+       <property name="font">
+        <font>
+         <family>Arial</family>
+         <pointsize>8</pointsize>
+        </font>
+       </property>
+       <property name="styleSheet">
+        <string>background:transparent; color:#102d3d; border:0px;</string>
+       </property>
+       <property name="text">
+        <string>Yaw</string>
+       </property>
+       <property name="alignment">
+        <set>Qt::AlignCenter</set>
+       </property>
+      </widget>
+      <widget class="QLineEdit" name="txtTargetYaw">
+       <property name="geometry">
+        <rect>
+         <x>244</x>
+         <y>48</y>
+         <width>72</width>
+         <height>30</height>
+        </rect>
+       </property>
+       <property name="styleSheet">
+        <string>QLineEdit{background:white; color:black; border-radius:3px; border:1px solid #b8cfd8; padding-left:3px; padding-right:3px; selection-background-color:#00a6c7;}</string>
+       </property>
+       <property name="alignment">
+        <set>Qt::AlignCenter</set>
+       </property>
+      </widget>
+      </widget>
+      <widget class="QFrame" name="movePosePreviewGroup">
+       <property name="geometry">
+        <rect>
+         <x>0</x>
+         <y>355</y>
+         <width>337</width>
+         <height>100</height>
+        </rect>
+       </property>
+       <property name="styleSheet">
+        <string>QFrame{background:rgba(255,255,255,235); border:1px solid #c1d7df; border-radius:10px;}</string>
+       </property>
+      <widget class="QLabel" name="movePosePreviewGroupLabel">
+       <property name="geometry">
+        <rect>
+         <x>0</x>
+         <y>0</y>
+         <width>337</width>
+         <height>100</height>
+        </rect>
+       </property>
+       <property name="font">
+        <font>
+         <family>Arial</family>
+         <pointsize>14</pointsize>
+        </font>
+       </property>
+       <property name="styleSheet">
+        <string>background:transparent; color:black; border:0px;</string>
+       </property>
+       <property name="text">
+        <string></string>
+       </property>
+       <property name="alignment">
+        <set>Qt::AlignCenter</set>
+       </property>
+      </widget>
+      </widget>
+      </widget>
+      <widget class="QWidget" name="tabMovePoseRL">
+       <property name="styleSheet">
+        <string>background:transparent; border:0px;</string>
+       </property>
+       <attribute name="title">
+        <string>Move Pose RL</string>
+       </attribute>
+      <widget class="QLabel" name="lblMovePoseRLTitle">
+       <property name="geometry">
+        <rect>
+         <x>0</x>
+         <y>6</y>
+         <width>337</width>
+         <height>42</height>
+        </rect>
+       </property>
+       <property name="font">
+        <font>
+         <family>Arial</family>
+         <pointsize>17</pointsize>
+        </font>
+       </property>
+       <property name="styleSheet">
+        <string>background:transparent; color:#111111; border:0px;</string>
+       </property>
+       <property name="text">
+        <string>Move Pose RL</string>
+       </property>
+       <property name="alignment">
+        <set>Qt::AlignCenter</set>
+       </property>
+      </widget>
+      <widget class="QPushButton" name="btnRLPlan">
+       <property name="geometry">
+        <rect>
+         <x>15</x>
+         <y>92</y>
+         <width>72</width>
+         <height>34</height>
+        </rect>
+       </property>
+       <property name="font">
+        <font>
+         <family>Arial</family>
+         <pointsize>9</pointsize>
+        </font>
+       </property>
+       <property name="styleSheet">
+        <string>QPushButton{background:qlineargradient(x1:0,y1:0,x2:0,y2:1, stop:0 #ffffff, stop:1 #e6f4f7); color:#102d3d; border:1px solid #b8cfd8; border-radius:4px;} QPushButton:pressed{background:#cdebf0;}</string>
+       </property>
+       <property name="text">
+        <string>Plan</string>
+       </property>
+      </widget>
+      <widget class="QPushButton" name="btnRLExecute">
+       <property name="geometry">
+        <rect>
+         <x>132</x>
+         <y>92</y>
+         <width>72</width>
+         <height>34</height>
+        </rect>
+       </property>
+       <property name="font">
+        <font>
+         <family>Arial</family>
+         <pointsize>9</pointsize>
+        </font>
+       </property>
+       <property name="styleSheet">
+        <string>QPushButton{background:qlineargradient(x1:0,y1:0,x2:0,y2:1, stop:0 #ffffff, stop:1 #e6f4f7); color:#102d3d; border:1px solid #b8cfd8; border-radius:4px;} QPushButton:pressed{background:#cdebf0;}</string>
+       </property>
+       <property name="text">
+        <string>Execute</string>
+       </property>
+      </widget>
+      <widget class="QPushButton" name="btnRLStop">
+       <property name="geometry">
+        <rect>
+         <x>249</x>
+         <y>92</y>
+         <width>72</width>
+         <height>34</height>
+        </rect>
+       </property>
+       <property name="font">
+        <font>
+         <family>Arial</family>
+         <pointsize>9</pointsize>
+        </font>
+       </property>
+       <property name="styleSheet">
+        <string>QPushButton{background:qlineargradient(x1:0,y1:0,x2:0,y2:1, stop:0 #ff5757, stop:1 #e00000); color:#00334f; border:1px solid #b80000; border-radius:6px;} QPushButton:pressed{background:#c50000;}</string>
+       </property>
+       <property name="text">
+        <string>Stop</string>
+       </property>
+      </widget>
+      <widget class="QFrame" name="rlPosePositionGroup">
+       <property name="geometry">
+        <rect>
+         <x>0</x>
+         <y>146</y>
+         <width>337</width>
+         <height>88</height>
+        </rect>
+       </property>
+       <property name="styleSheet">
+        <string>QFrame{background:rgba(255,255,255,220); border:1px solid #c1d7df; border-radius:8px;}</string>
+       </property>
+      <widget class="QLabel" name="rlPosePositionTitle">
+       <property name="geometry">
+        <rect>
+         <x>0</x>
+         <y>5</y>
+         <width>337</width>
+         <height>24</height>
+        </rect>
+       </property>
+       <property name="font">
+        <font>
+         <family>Arial</family>
+         <pointsize>10</pointsize>
+        </font>
+       </property>
+       <property name="styleSheet">
+        <string>background:transparent; color:#102d3d; border:0px;</string>
+       </property>
+       <property name="text">
+        <string>Position</string>
+       </property>
+       <property name="alignment">
+        <set>Qt::AlignCenter</set>
+       </property>
+      </widget>
+      <widget class="QLabel" name="rlPosePositionX_label">
+       <property name="geometry">
+        <rect>
+         <x>20</x>
+         <y>32</y>
+         <width>72</width>
+         <height>16</height>
+        </rect>
+       </property>
+       <property name="font">
+        <font>
+         <family>Arial</family>
+         <pointsize>8</pointsize>
+        </font>
+       </property>
+       <property name="styleSheet">
+        <string>background:transparent; color:#102d3d; border:0px;</string>
+       </property>
+       <property name="text">
+        <string>X</string>
+       </property>
+       <property name="alignment">
+        <set>Qt::AlignCenter</set>
+       </property>
+      </widget>
+      <widget class="QLineEdit" name="rlPosePositionX">
+       <property name="geometry">
+        <rect>
+         <x>20</x>
+         <y>48</y>
+         <width>72</width>
+         <height>30</height>
+        </rect>
+       </property>
+       <property name="styleSheet">
+        <string>QLineEdit{background:white; color:black; border-radius:3px; border:1px solid #b8cfd8; padding-left:3px; padding-right:3px; selection-background-color:#00a6c7;}</string>
+       </property>
+       <property name="alignment">
+        <set>Qt::AlignCenter</set>
+       </property>
+      </widget>
+      <widget class="QLabel" name="rlPosePositionY_label">
+       <property name="geometry">
+        <rect>
+         <x>132</x>
+         <y>32</y>
+         <width>72</width>
+         <height>16</height>
+        </rect>
+       </property>
+       <property name="font">
+        <font>
+         <family>Arial</family>
+         <pointsize>8</pointsize>
+        </font>
+       </property>
+       <property name="styleSheet">
+        <string>background:transparent; color:#102d3d; border:0px;</string>
+       </property>
+       <property name="text">
+        <string>Y</string>
+       </property>
+       <property name="alignment">
+        <set>Qt::AlignCenter</set>
+       </property>
+      </widget>
+      <widget class="QLineEdit" name="rlPosePositionY">
+       <property name="geometry">
+        <rect>
+         <x>132</x>
+         <y>48</y>
+         <width>72</width>
+         <height>30</height>
+        </rect>
+       </property>
+       <property name="styleSheet">
+        <string>QLineEdit{background:white; color:black; border-radius:3px; border:1px solid #b8cfd8; padding-left:3px; padding-right:3px; selection-background-color:#00a6c7;}</string>
+       </property>
+       <property name="alignment">
+        <set>Qt::AlignCenter</set>
+       </property>
+      </widget>
+      <widget class="QLabel" name="rlPosePositionZ_label">
+       <property name="geometry">
+        <rect>
+         <x>244</x>
+         <y>32</y>
+         <width>72</width>
+         <height>16</height>
+        </rect>
+       </property>
+       <property name="font">
+        <font>
+         <family>Arial</family>
+         <pointsize>8</pointsize>
+        </font>
+       </property>
+       <property name="styleSheet">
+        <string>background:transparent; color:#102d3d; border:0px;</string>
+       </property>
+       <property name="text">
+        <string>Z</string>
+       </property>
+       <property name="alignment">
+        <set>Qt::AlignCenter</set>
+       </property>
+      </widget>
+      <widget class="QLineEdit" name="rlPosePositionZ">
+       <property name="geometry">
+        <rect>
+         <x>244</x>
+         <y>48</y>
+         <width>72</width>
+         <height>30</height>
+        </rect>
+       </property>
+       <property name="styleSheet">
+        <string>QLineEdit{background:white; color:black; border-radius:3px; border:1px solid #b8cfd8; padding-left:3px; padding-right:3px; selection-background-color:#00a6c7;}</string>
+       </property>
+       <property name="alignment">
+        <set>Qt::AlignCenter</set>
+       </property>
+      </widget>
+      </widget>
+      <widget class="QFrame" name="rlPoseOrientationGroup">
+       <property name="geometry">
+        <rect>
+         <x>0</x>
+         <y>239</y>
+         <width>337</width>
+         <height>88</height>
+        </rect>
+       </property>
+       <property name="styleSheet">
+        <string>QFrame{background:rgba(255,255,255,220); border:1px solid #c1d7df; border-radius:8px;}</string>
+       </property>
+      <widget class="QLabel" name="rlPoseOrientationTitle">
+       <property name="geometry">
+        <rect>
+         <x>0</x>
+         <y>5</y>
+         <width>337</width>
+         <height>24</height>
+        </rect>
+       </property>
+       <property name="font">
+        <font>
+         <family>Arial</family>
+         <pointsize>10</pointsize>
+        </font>
+       </property>
+       <property name="styleSheet">
+        <string>background:transparent; color:#102d3d; border:0px;</string>
+       </property>
+       <property name="text">
+        <string>Orientation</string>
+       </property>
+       <property name="alignment">
+        <set>Qt::AlignCenter</set>
+       </property>
+      </widget>
+      <widget class="QLabel" name="rlPoseOrientationRoll_label">
+       <property name="geometry">
+        <rect>
+         <x>20</x>
+         <y>32</y>
+         <width>72</width>
+         <height>16</height>
+        </rect>
+       </property>
+       <property name="font">
+        <font>
+         <family>Arial</family>
+         <pointsize>8</pointsize>
+        </font>
+       </property>
+       <property name="styleSheet">
+        <string>background:transparent; color:#102d3d; border:0px;</string>
+       </property>
+       <property name="text">
+        <string>Roll</string>
+       </property>
+       <property name="alignment">
+        <set>Qt::AlignCenter</set>
+       </property>
+      </widget>
+      <widget class="QLineEdit" name="rlPoseOrientationRoll">
+       <property name="geometry">
+        <rect>
+         <x>20</x>
+         <y>48</y>
+         <width>72</width>
+         <height>30</height>
+        </rect>
+       </property>
+       <property name="styleSheet">
+        <string>QLineEdit{background:white; color:black; border-radius:3px; border:1px solid #b8cfd8; padding-left:3px; padding-right:3px; selection-background-color:#00a6c7;}</string>
+       </property>
+       <property name="alignment">
+        <set>Qt::AlignCenter</set>
+       </property>
+      </widget>
+      <widget class="QLabel" name="rlPoseOrientationPitch_label">
+       <property name="geometry">
+        <rect>
+         <x>132</x>
+         <y>32</y>
+         <width>72</width>
+         <height>16</height>
+        </rect>
+       </property>
+       <property name="font">
+        <font>
+         <family>Arial</family>
+         <pointsize>8</pointsize>
+        </font>
+       </property>
+       <property name="styleSheet">
+        <string>background:transparent; color:#102d3d; border:0px;</string>
+       </property>
+       <property name="text">
+        <string>Pitch</string>
+       </property>
+       <property name="alignment">
+        <set>Qt::AlignCenter</set>
+       </property>
+      </widget>
+      <widget class="QLineEdit" name="rlPoseOrientationPitch">
+       <property name="geometry">
+        <rect>
+         <x>132</x>
+         <y>48</y>
+         <width>72</width>
+         <height>30</height>
+        </rect>
+       </property>
+       <property name="styleSheet">
+        <string>QLineEdit{background:white; color:black; border-radius:3px; border:1px solid #b8cfd8; padding-left:3px; padding-right:3px; selection-background-color:#00a6c7;}</string>
+       </property>
+       <property name="alignment">
+        <set>Qt::AlignCenter</set>
+       </property>
+      </widget>
+      <widget class="QLabel" name="rlPoseOrientationYaw_label">
+       <property name="geometry">
+        <rect>
+         <x>244</x>
+         <y>32</y>
+         <width>72</width>
+         <height>16</height>
+        </rect>
+       </property>
+       <property name="font">
+        <font>
+         <family>Arial</family>
+         <pointsize>8</pointsize>
+        </font>
+       </property>
+       <property name="styleSheet">
+        <string>background:transparent; color:#102d3d; border:0px;</string>
+       </property>
+       <property name="text">
+        <string>Yaw</string>
+       </property>
+       <property name="alignment">
+        <set>Qt::AlignCenter</set>
+       </property>
+      </widget>
+      <widget class="QLineEdit" name="rlPoseOrientationYaw">
+       <property name="geometry">
+        <rect>
+         <x>244</x>
+         <y>48</y>
+         <width>72</width>
+         <height>30</height>
+        </rect>
+       </property>
+       <property name="styleSheet">
+        <string>QLineEdit{background:white; color:black; border-radius:3px; border:1px solid #b8cfd8; padding-left:3px; padding-right:3px; selection-background-color:#00a6c7;}</string>
+       </property>
+       <property name="alignment">
+        <set>Qt::AlignCenter</set>
+       </property>
+      </widget>
+      </widget>
+      <widget class="QFrame" name="rlPosePreviewGroup">
+       <property name="geometry">
+        <rect>
+         <x>0</x>
+         <y>343</y>
+         <width>337</width>
+         <height>112</height>
+        </rect>
+       </property>
+       <property name="styleSheet">
+        <string>QFrame{background:rgba(255,255,255,235); border:1px solid #c1d7df; border-radius:10px;}</string>
+       </property>
+      <widget class="QLabel" name="rlPosePreviewGroupLabel">
+       <property name="geometry">
+        <rect>
+         <x>0</x>
+         <y>0</y>
+         <width>337</width>
+         <height>112</height>
+        </rect>
+       </property>
+       <property name="font">
+        <font>
+         <family>Arial</family>
+         <pointsize>14</pointsize>
+        </font>
+       </property>
+       <property name="styleSheet">
+        <string>background:transparent; color:black; border:0px;</string>
+       </property>
+       <property name="text">
+        <string></string>
+       </property>
+       <property name="alignment">
+        <set>Qt::AlignCenter</set>
+       </property>
+      </widget>
+      </widget>
+      </widget>
+      <widget class="QWidget" name="tabGripper">
+       <property name="styleSheet">
+        <string>background:transparent; border:0px;</string>
+       </property>
+       <attribute name="title">
+        <string>Gripper</string>
+       </attribute>
+      <widget class="QLabel" name="lblGripperTitle">
+       <property name="geometry">
+        <rect>
+         <x>0</x>
+         <y>6</y>
+         <width>337</width>
+         <height>42</height>
+        </rect>
+       </property>
+       <property name="font">
+        <font>
+         <family>Arial</family>
+         <pointsize>17</pointsize>
+        </font>
+       </property>
+       <property name="styleSheet">
+        <string>background:transparent; color:#111111; border:0px;</string>
+       </property>
+       <property name="text">
+        <string>Gripper</string>
+       </property>
+       <property name="alignment">
+        <set>Qt::AlignCenter</set>
+       </property>
+      </widget>
+      <widget class="QPushButton" name="btnTaskGripperOpen">
+       <property name="geometry">
+        <rect>
+         <x>35</x>
+         <y>86</y>
+         <width>82</width>
+         <height>36</height>
+        </rect>
+       </property>
+       <property name="font">
+        <font>
+         <family>Arial</family>
+         <pointsize>9</pointsize>
+        </font>
+       </property>
+       <property name="styleSheet">
+        <string>QPushButton{background:qlineargradient(x1:0,y1:0,x2:0,y2:1, stop:0 #ffffff, stop:1 #e6f4f7); color:#102d3d; border:1px solid #b8cfd8; border-radius:4px;} QPushButton:pressed{background:#cdebf0;}</string>
+       </property>
+       <property name="text">
+        <string>Open</string>
+       </property>
+      </widget>
+      <widget class="QPushButton" name="btnTaskGripperClose">
+       <property name="geometry">
+        <rect>
+         <x>225</x>
+         <y>86</y>
+         <width>82</width>
+         <height>36</height>
+        </rect>
+       </property>
+       <property name="font">
+        <font>
+         <family>Arial</family>
+         <pointsize>9</pointsize>
+        </font>
+       </property>
+       <property name="styleSheet">
+        <string>QPushButton{background:qlineargradient(x1:0,y1:0,x2:0,y2:1, stop:0 #ffffff, stop:1 #e6f4f7); color:#102d3d; border:1px solid #b8cfd8; border-radius:4px;} QPushButton:pressed{background:#cdebf0;}</string>
+       </property>
+       <property name="text">
+        <string>Close</string>
+       </property>
+      </widget>
+      <widget class="QLabel" name="lblGripperDistance">
+       <property name="geometry">
+        <rect>
+         <x>54</x>
+         <y>154</y>
+         <width>90</width>
+         <height>20</height>
+        </rect>
+       </property>
+       <property name="font">
+        <font>
+         <family>Arial</family>
+         <pointsize>8</pointsize>
+        </font>
+       </property>
+       <property name="styleSheet">
+        <string>background:transparent; color:#102d3d; border:0px;</string>
+       </property>
+       <property name="text">
+        <string>Distance</string>
+       </property>
+       <property name="alignment">
+        <set>Qt::AlignLeft|Qt::AlignVCenter</set>
+       </property>
+      </widget>
+      <widget class="QLineEdit" name="txtGripperDistance">
+       <property name="geometry">
+        <rect>
+         <x>40</x>
+         <y>177</y>
+         <width>88</width>
+         <height>32</height>
+        </rect>
+       </property>
+       <property name="styleSheet">
+        <string>QLineEdit{background:white; color:black; border-radius:3px; border:1px solid #b8cfd8; padding-left:3px; padding-right:3px; selection-background-color:#00a6c7;}</string>
+       </property>
+       <property name="alignment">
+        <set>Qt::AlignCenter</set>
+       </property>
+      </widget>
+      <widget class="QPushButton" name="btnGripperRun">
+       <property name="geometry">
+        <rect>
+         <x>235</x>
+         <y>171</y>
+         <width>76</width>
+         <height>36</height>
+        </rect>
+       </property>
+       <property name="font">
+        <font>
+         <family>Arial</family>
+         <pointsize>9</pointsize>
+        </font>
+       </property>
+       <property name="styleSheet">
+        <string>QPushButton{background:qlineargradient(x1:0,y1:0,x2:0,y2:1, stop:0 #ffffff, stop:1 #e6f4f7); color:#102d3d; border:1px solid #b8cfd8; border-radius:4px;} QPushButton:pressed{background:#cdebf0;}</string>
+       </property>
+       <property name="text">
+        <string>Run</string>
+       </property>
+      </widget>
+      <widget class="QFrame" name="gripperPreviewGroup">
+       <property name="geometry">
+        <rect>
+         <x>0</x>
+         <y>270</y>
+         <width>337</width>
+         <height>185</height>
+        </rect>
+       </property>
+       <property name="styleSheet">
+        <string>QFrame{background:rgba(255,255,255,235); border:1px solid #c1d7df; border-radius:10px;}</string>
+       </property>
+      <widget class="QLabel" name="gripperPreviewGroupLabel">
+       <property name="geometry">
+        <rect>
+         <x>0</x>
+         <y>0</y>
+         <width>337</width>
+         <height>185</height>
+        </rect>
+       </property>
+       <property name="font">
+        <font>
+         <family>Arial</family>
+         <pointsize>14</pointsize>
+        </font>
+       </property>
+       <property name="styleSheet">
+        <string>background:transparent; color:black; border:0px;</string>
+       </property>
+       <property name="text">
+        <string></string>
+       </property>
+       <property name="alignment">
+        <set>Qt::AlignCenter</set>
+       </property>
+      </widget>
+      </widget>
+      </widget>
+      <widget class="QWidget" name="tabPickPlace">
+       <property name="styleSheet">
+        <string>background:transparent; border:0px;</string>
+       </property>
+       <attribute name="title">
+        <string>Pick Place</string>
+       </attribute>
+      <widget class="QLabel" name="lblPickPlaceTitle">
+       <property name="geometry">
+        <rect>
+         <x>0</x>
+         <y>6</y>
+         <width>337</width>
+         <height>42</height>
+        </rect>
+       </property>
+       <property name="font">
+        <font>
+         <family>Arial</family>
+         <pointsize>17</pointsize>
+        </font>
+       </property>
+       <property name="styleSheet">
+        <string>background:transparent; color:#111111; border:0px;</string>
+       </property>
+       <property name="text">
+        <string>Pick Place</string>
+       </property>
+       <property name="alignment">
+        <set>Qt::AlignCenter</set>
+       </property>
+      </widget>
+      <widget class="QPushButton" name="btnPickPlaceStart">
+       <property name="geometry">
+        <rect>
+         <x>15</x>
+         <y>58</y>
+         <width>72</width>
+         <height>34</height>
+        </rect>
+       </property>
+       <property name="font">
+        <font>
+         <family>Arial</family>
+         <pointsize>9</pointsize>
+        </font>
+       </property>
+       <property name="styleSheet">
+        <string>QPushButton{background:qlineargradient(x1:0,y1:0,x2:0,y2:1, stop:0 #ffffff, stop:1 #e6f4f7); color:#102d3d; border:1px solid #b8cfd8; border-radius:4px;} QPushButton:pressed{background:#cdebf0;}</string>
+       </property>
+       <property name="text">
+        <string>Start</string>
+       </property>
+      </widget>
+      <widget class="QPushButton" name="btnPickPlaceStop">
+       <property name="geometry">
+        <rect>
+         <x>249</x>
+         <y>58</y>
+         <width>72</width>
+         <height>34</height>
+        </rect>
+       </property>
+       <property name="font">
+        <font>
+         <family>Arial</family>
+         <pointsize>9</pointsize>
+        </font>
+       </property>
+       <property name="styleSheet">
+        <string>QPushButton{background:qlineargradient(x1:0,y1:0,x2:0,y2:1, stop:0 #ffffff, stop:1 #e6f4f7); color:#102d3d; border:1px solid #b8cfd8; border-radius:4px;} QPushButton:pressed{background:#cdebf0;}</string>
+       </property>
+       <property name="text">
+        <string>Stop</string>
+       </property>
+      </widget>
+      <widget class="QFrame" name="pickPlacePickGroup">
+       <property name="geometry">
+        <rect>
+         <x>0</x>
+         <y>112</y>
+         <width>337</width>
+         <height>96</height>
+        </rect>
+       </property>
+       <property name="styleSheet">
+        <string>QFrame{background:rgba(255,255,255,220); border:1px solid #c1d7df; border-radius:8px;}</string>
+       </property>
+      <widget class="QLabel" name="pickPoseTitle">
+       <property name="geometry">
+        <rect>
+         <x>0</x>
+         <y>6</y>
+         <width>337</width>
+         <height>24</height>
+        </rect>
+       </property>
+       <property name="font">
+        <font>
+         <family>Arial</family>
+         <pointsize>10</pointsize>
+        </font>
+       </property>
+       <property name="styleSheet">
+        <string>background:transparent; color:#102d3d; border:0px;</string>
+       </property>
+       <property name="text">
+        <string>Position pick</string>
+       </property>
+       <property name="alignment">
+        <set>Qt::AlignCenter</set>
+       </property>
+      </widget>
+      <widget class="QLabel" name="pickPoseX_label">
+       <property name="geometry">
+        <rect>
+         <x>10</x>
+         <y>35</y>
+         <width>72</width>
+         <height>16</height>
+        </rect>
+       </property>
+       <property name="font">
+        <font>
+         <family>Arial</family>
+         <pointsize>8</pointsize>
+        </font>
+       </property>
+       <property name="styleSheet">
+        <string>background:transparent; color:#102d3d; border:0px;</string>
+       </property>
+       <property name="text">
+        <string>X</string>
+       </property>
+       <property name="alignment">
+        <set>Qt::AlignCenter</set>
+       </property>
+      </widget>
+      <widget class="QLineEdit" name="pickPoseX">
+       <property name="geometry">
+        <rect>
+         <x>10</x>
+         <y>53</y>
+         <width>72</width>
+         <height>30</height>
+        </rect>
+       </property>
+       <property name="styleSheet">
+        <string>QLineEdit{background:white; color:black; border-radius:3px; border:1px solid #b8cfd8; padding-left:3px; padding-right:3px; selection-background-color:#00a6c7;}</string>
+       </property>
+       <property name="alignment">
+        <set>Qt::AlignCenter</set>
+       </property>
+      </widget>
+      <widget class="QLabel" name="pickPoseY_label">
+       <property name="geometry">
+        <rect>
+         <x>92</x>
+         <y>35</y>
+         <width>72</width>
+         <height>16</height>
+        </rect>
+       </property>
+       <property name="font">
+        <font>
+         <family>Arial</family>
+         <pointsize>8</pointsize>
+        </font>
+       </property>
+       <property name="styleSheet">
+        <string>background:transparent; color:#102d3d; border:0px;</string>
+       </property>
+       <property name="text">
+        <string>Y</string>
+       </property>
+       <property name="alignment">
+        <set>Qt::AlignCenter</set>
+       </property>
+      </widget>
+      <widget class="QLineEdit" name="pickPoseY">
+       <property name="geometry">
+        <rect>
+         <x>92</x>
+         <y>53</y>
+         <width>72</width>
+         <height>30</height>
+        </rect>
+       </property>
+       <property name="styleSheet">
+        <string>QLineEdit{background:white; color:black; border-radius:3px; border:1px solid #b8cfd8; padding-left:3px; padding-right:3px; selection-background-color:#00a6c7;}</string>
+       </property>
+       <property name="alignment">
+        <set>Qt::AlignCenter</set>
+       </property>
+      </widget>
+      <widget class="QLabel" name="pickPoseZ_label">
+       <property name="geometry">
+        <rect>
+         <x>174</x>
+         <y>35</y>
+         <width>72</width>
+         <height>16</height>
+        </rect>
+       </property>
+       <property name="font">
+        <font>
+         <family>Arial</family>
+         <pointsize>8</pointsize>
+        </font>
+       </property>
+       <property name="styleSheet">
+        <string>background:transparent; color:#102d3d; border:0px;</string>
+       </property>
+       <property name="text">
+        <string>Z</string>
+       </property>
+       <property name="alignment">
+        <set>Qt::AlignCenter</set>
+       </property>
+      </widget>
+      <widget class="QLineEdit" name="pickPoseZ">
+       <property name="geometry">
+        <rect>
+         <x>174</x>
+         <y>53</y>
+         <width>72</width>
+         <height>30</height>
+        </rect>
+       </property>
+       <property name="styleSheet">
+        <string>QLineEdit{background:white; color:black; border-radius:3px; border:1px solid #b8cfd8; padding-left:3px; padding-right:3px; selection-background-color:#00a6c7;}</string>
+       </property>
+       <property name="alignment">
+        <set>Qt::AlignCenter</set>
+       </property>
+      </widget>
+      <widget class="QLabel" name="pickPoseYaw_label">
+       <property name="geometry">
+        <rect>
+         <x>256</x>
+         <y>35</y>
+         <width>72</width>
+         <height>16</height>
+        </rect>
+       </property>
+       <property name="font">
+        <font>
+         <family>Arial</family>
+         <pointsize>8</pointsize>
+        </font>
+       </property>
+       <property name="styleSheet">
+        <string>background:transparent; color:#102d3d; border:0px;</string>
+       </property>
+       <property name="text">
+        <string>Yaw</string>
+       </property>
+       <property name="alignment">
+        <set>Qt::AlignCenter</set>
+       </property>
+      </widget>
+      <widget class="QLineEdit" name="pickPoseYaw">
+       <property name="geometry">
+        <rect>
+         <x>256</x>
+         <y>53</y>
+         <width>72</width>
+         <height>30</height>
+        </rect>
+       </property>
+       <property name="styleSheet">
+        <string>QLineEdit{background:white; color:black; border-radius:3px; border:1px solid #b8cfd8; padding-left:3px; padding-right:3px; selection-background-color:#00a6c7;}</string>
+       </property>
+       <property name="alignment">
+        <set>Qt::AlignCenter</set>
+       </property>
+      </widget>
+      </widget>
+      <widget class="QFrame" name="pickPlacePlaceGroup">
+       <property name="geometry">
+        <rect>
+         <x>0</x>
+         <y>224</y>
+         <width>337</width>
+         <height>96</height>
+        </rect>
+       </property>
+       <property name="styleSheet">
+        <string>QFrame{background:rgba(255,255,255,220); border:1px solid #c1d7df; border-radius:8px;}</string>
+       </property>
+      <widget class="QLabel" name="placePoseTitle">
+       <property name="geometry">
+        <rect>
+         <x>0</x>
+         <y>6</y>
+         <width>337</width>
+         <height>24</height>
+        </rect>
+       </property>
+       <property name="font">
+        <font>
+         <family>Arial</family>
+         <pointsize>10</pointsize>
+        </font>
+       </property>
+       <property name="styleSheet">
+        <string>background:transparent; color:#102d3d; border:0px;</string>
+       </property>
+       <property name="text">
+        <string>Position place</string>
+       </property>
+       <property name="alignment">
+        <set>Qt::AlignCenter</set>
+       </property>
+      </widget>
+      <widget class="QLabel" name="placePoseX_label">
+       <property name="geometry">
+        <rect>
+         <x>10</x>
+         <y>35</y>
+         <width>72</width>
+         <height>16</height>
+        </rect>
+       </property>
+       <property name="font">
+        <font>
+         <family>Arial</family>
+         <pointsize>8</pointsize>
+        </font>
+       </property>
+       <property name="styleSheet">
+        <string>background:transparent; color:#102d3d; border:0px;</string>
+       </property>
+       <property name="text">
+        <string>X</string>
+       </property>
+       <property name="alignment">
+        <set>Qt::AlignCenter</set>
+       </property>
+      </widget>
+      <widget class="QLineEdit" name="placePoseX">
+       <property name="geometry">
+        <rect>
+         <x>10</x>
+         <y>53</y>
+         <width>72</width>
+         <height>30</height>
+        </rect>
+       </property>
+       <property name="styleSheet">
+        <string>QLineEdit{background:white; color:black; border-radius:3px; border:1px solid #b8cfd8; padding-left:3px; padding-right:3px; selection-background-color:#00a6c7;}</string>
+       </property>
+       <property name="alignment">
+        <set>Qt::AlignCenter</set>
+       </property>
+      </widget>
+      <widget class="QLabel" name="placePoseY_label">
+       <property name="geometry">
+        <rect>
+         <x>92</x>
+         <y>35</y>
+         <width>72</width>
+         <height>16</height>
+        </rect>
+       </property>
+       <property name="font">
+        <font>
+         <family>Arial</family>
+         <pointsize>8</pointsize>
+        </font>
+       </property>
+       <property name="styleSheet">
+        <string>background:transparent; color:#102d3d; border:0px;</string>
+       </property>
+       <property name="text">
+        <string>Y</string>
+       </property>
+       <property name="alignment">
+        <set>Qt::AlignCenter</set>
+       </property>
+      </widget>
+      <widget class="QLineEdit" name="placePoseY">
+       <property name="geometry">
+        <rect>
+         <x>92</x>
+         <y>53</y>
+         <width>72</width>
+         <height>30</height>
+        </rect>
+       </property>
+       <property name="styleSheet">
+        <string>QLineEdit{background:white; color:black; border-radius:3px; border:1px solid #b8cfd8; padding-left:3px; padding-right:3px; selection-background-color:#00a6c7;}</string>
+       </property>
+       <property name="alignment">
+        <set>Qt::AlignCenter</set>
+       </property>
+      </widget>
+      <widget class="QLabel" name="placePoseZ_label">
+       <property name="geometry">
+        <rect>
+         <x>174</x>
+         <y>35</y>
+         <width>72</width>
+         <height>16</height>
+        </rect>
+       </property>
+       <property name="font">
+        <font>
+         <family>Arial</family>
+         <pointsize>8</pointsize>
+        </font>
+       </property>
+       <property name="styleSheet">
+        <string>background:transparent; color:#102d3d; border:0px;</string>
+       </property>
+       <property name="text">
+        <string>Z</string>
+       </property>
+       <property name="alignment">
+        <set>Qt::AlignCenter</set>
+       </property>
+      </widget>
+      <widget class="QLineEdit" name="placePoseZ">
+       <property name="geometry">
+        <rect>
+         <x>174</x>
+         <y>53</y>
+         <width>72</width>
+         <height>30</height>
+        </rect>
+       </property>
+       <property name="styleSheet">
+        <string>QLineEdit{background:white; color:black; border-radius:3px; border:1px solid #b8cfd8; padding-left:3px; padding-right:3px; selection-background-color:#00a6c7;}</string>
+       </property>
+       <property name="alignment">
+        <set>Qt::AlignCenter</set>
+       </property>
+      </widget>
+      <widget class="QLabel" name="placePoseYaw_label">
+       <property name="geometry">
+        <rect>
+         <x>256</x>
+         <y>35</y>
+         <width>72</width>
+         <height>16</height>
+        </rect>
+       </property>
+       <property name="font">
+        <font>
+         <family>Arial</family>
+         <pointsize>8</pointsize>
+        </font>
+       </property>
+       <property name="styleSheet">
+        <string>background:transparent; color:#102d3d; border:0px;</string>
+       </property>
+       <property name="text">
+        <string>Yaw</string>
+       </property>
+       <property name="alignment">
+        <set>Qt::AlignCenter</set>
+       </property>
+      </widget>
+      <widget class="QLineEdit" name="placePoseYaw">
+       <property name="geometry">
+        <rect>
+         <x>256</x>
+         <y>53</y>
+         <width>72</width>
+         <height>30</height>
+        </rect>
+       </property>
+       <property name="styleSheet">
+        <string>QLineEdit{background:white; color:black; border-radius:3px; border:1px solid #b8cfd8; padding-left:3px; padding-right:3px; selection-background-color:#00a6c7;}</string>
+       </property>
+       <property name="alignment">
+        <set>Qt::AlignCenter</set>
+       </property>
+      </widget>
+      </widget>
+      <widget class="QFrame" name="pickPlacePreviewGroup">
+       <property name="geometry">
+        <rect>
+         <x>0</x>
+         <y>338</y>
+         <width>337</width>
+         <height>118</height>
+        </rect>
+       </property>
+       <property name="styleSheet">
+        <string>QFrame{background:rgba(255,255,255,235); border:1px solid #c1d7df; border-radius:10px;}</string>
+       </property>
+      <widget class="QLabel" name="pickPlacePreviewGroupLabel">
+       <property name="geometry">
+        <rect>
+         <x>0</x>
+         <y>0</y>
+         <width>337</width>
+         <height>118</height>
+        </rect>
+       </property>
+       <property name="font">
+        <font>
+         <family>Arial</family>
+         <pointsize>14</pointsize>
+        </font>
+       </property>
+       <property name="styleSheet">
+        <string>background:transparent; color:black; border:0px;</string>
+       </property>
+       <property name="text">
+        <string></string>
+       </property>
+       <property name="alignment">
+        <set>Qt::AlignCenter</set>
+       </property>
+      </widget>
+      </widget>
+      </widget>
+      <widget class="QWidget" name="tabPickPlaceVision">
+       <property name="styleSheet">
+        <string>background:transparent; border:0px;</string>
+       </property>
+       <attribute name="title">
+        <string>Pick Place Vision</string>
+       </attribute>
+      <widget class="QLabel" name="lblPickPlaceVisionTitle">
+       <property name="geometry">
+        <rect>
+         <x>0</x>
+         <y>6</y>
+         <width>337</width>
+         <height>42</height>
+        </rect>
+       </property>
+       <property name="font">
+        <font>
+         <family>Arial</family>
+         <pointsize>17</pointsize>
+        </font>
+       </property>
+       <property name="styleSheet">
+        <string>background:transparent; color:#111111; border:0px;</string>
+       </property>
+       <property name="text">
+        <string>Pick Place Vision</string>
+       </property>
+       <property name="alignment">
+        <set>Qt::AlignCenter</set>
+       </property>
+      </widget>
+      <widget class="QPushButton" name="btnPickPlaceVisionStart">
+       <property name="geometry">
+        <rect>
+         <x>15</x>
+         <y>58</y>
+         <width>72</width>
+         <height>34</height>
+        </rect>
+       </property>
+       <property name="font">
+        <font>
+         <family>Arial</family>
+         <pointsize>9</pointsize>
+        </font>
+       </property>
+       <property name="styleSheet">
+        <string>QPushButton{background:qlineargradient(x1:0,y1:0,x2:0,y2:1, stop:0 #ffffff, stop:1 #e6f4f7); color:#102d3d; border:1px solid #b8cfd8; border-radius:4px;} QPushButton:pressed{background:#cdebf0;}</string>
+       </property>
+       <property name="text">
+        <string>Start</string>
+       </property>
+      </widget>
+      <widget class="QPushButton" name="btnPickPlaceVisionStop">
+       <property name="geometry">
+        <rect>
+         <x>249</x>
+         <y>58</y>
+         <width>72</width>
+         <height>34</height>
+        </rect>
+       </property>
+       <property name="font">
+        <font>
+         <family>Arial</family>
+         <pointsize>9</pointsize>
+        </font>
+       </property>
+       <property name="styleSheet">
+        <string>QPushButton{background:qlineargradient(x1:0,y1:0,x2:0,y2:1, stop:0 #ffffff, stop:1 #e6f4f7); color:#102d3d; border:1px solid #b8cfd8; border-radius:4px;} QPushButton:pressed{background:#cdebf0;}</string>
+       </property>
+       <property name="text">
+        <string>Stop</string>
+       </property>
+      </widget>
+      <widget class="QFrame" name="pickPlaceVisionPlaceGroup">
+       <property name="geometry">
+        <rect>
+         <x>0</x>
+         <y>112</y>
+         <width>337</width>
+         <height>96</height>
+        </rect>
+       </property>
+       <property name="styleSheet">
+        <string>QFrame{background:rgba(255,255,255,220); border:1px solid #c1d7df; border-radius:8px;}</string>
+       </property>
+      <widget class="QLabel" name="visionPlacePoseTitle">
+       <property name="geometry">
+        <rect>
+         <x>0</x>
+         <y>6</y>
+         <width>337</width>
+         <height>24</height>
+        </rect>
+       </property>
+       <property name="font">
+        <font>
+         <family>Arial</family>
+         <pointsize>10</pointsize>
+        </font>
+       </property>
+       <property name="styleSheet">
+        <string>background:transparent; color:#102d3d; border:0px;</string>
+       </property>
+       <property name="text">
+        <string>Position place</string>
+       </property>
+       <property name="alignment">
+        <set>Qt::AlignCenter</set>
+       </property>
+      </widget>
+      <widget class="QLabel" name="visionPlacePoseX_label">
+       <property name="geometry">
+        <rect>
+         <x>10</x>
+         <y>35</y>
+         <width>72</width>
+         <height>16</height>
+        </rect>
+       </property>
+       <property name="font">
+        <font>
+         <family>Arial</family>
+         <pointsize>8</pointsize>
+        </font>
+       </property>
+       <property name="styleSheet">
+        <string>background:transparent; color:#102d3d; border:0px;</string>
+       </property>
+       <property name="text">
+        <string>X</string>
+       </property>
+       <property name="alignment">
+        <set>Qt::AlignCenter</set>
+       </property>
+      </widget>
+      <widget class="QLineEdit" name="visionPlacePoseX">
+       <property name="geometry">
+        <rect>
+         <x>10</x>
+         <y>53</y>
+         <width>72</width>
+         <height>30</height>
+        </rect>
+       </property>
+       <property name="styleSheet">
+        <string>QLineEdit{background:white; color:black; border-radius:3px; border:1px solid #b8cfd8; padding-left:3px; padding-right:3px; selection-background-color:#00a6c7;}</string>
+       </property>
+       <property name="alignment">
+        <set>Qt::AlignCenter</set>
+       </property>
+      </widget>
+      <widget class="QLabel" name="visionPlacePoseY_label">
+       <property name="geometry">
+        <rect>
+         <x>92</x>
+         <y>35</y>
+         <width>72</width>
+         <height>16</height>
+        </rect>
+       </property>
+       <property name="font">
+        <font>
+         <family>Arial</family>
+         <pointsize>8</pointsize>
+        </font>
+       </property>
+       <property name="styleSheet">
+        <string>background:transparent; color:#102d3d; border:0px;</string>
+       </property>
+       <property name="text">
+        <string>Y</string>
+       </property>
+       <property name="alignment">
+        <set>Qt::AlignCenter</set>
+       </property>
+      </widget>
+      <widget class="QLineEdit" name="visionPlacePoseY">
+       <property name="geometry">
+        <rect>
+         <x>92</x>
+         <y>53</y>
+         <width>72</width>
+         <height>30</height>
+        </rect>
+       </property>
+       <property name="styleSheet">
+        <string>QLineEdit{background:white; color:black; border-radius:3px; border:1px solid #b8cfd8; padding-left:3px; padding-right:3px; selection-background-color:#00a6c7;}</string>
+       </property>
+       <property name="alignment">
+        <set>Qt::AlignCenter</set>
+       </property>
+      </widget>
+      <widget class="QLabel" name="visionPlacePoseZ_label">
+       <property name="geometry">
+        <rect>
+         <x>174</x>
+         <y>35</y>
+         <width>72</width>
+         <height>16</height>
+        </rect>
+       </property>
+       <property name="font">
+        <font>
+         <family>Arial</family>
+         <pointsize>8</pointsize>
+        </font>
+       </property>
+       <property name="styleSheet">
+        <string>background:transparent; color:#102d3d; border:0px;</string>
+       </property>
+       <property name="text">
+        <string>Z</string>
+       </property>
+       <property name="alignment">
+        <set>Qt::AlignCenter</set>
+       </property>
+      </widget>
+      <widget class="QLineEdit" name="visionPlacePoseZ">
+       <property name="geometry">
+        <rect>
+         <x>174</x>
+         <y>53</y>
+         <width>72</width>
+         <height>30</height>
+        </rect>
+       </property>
+       <property name="styleSheet">
+        <string>QLineEdit{background:white; color:black; border-radius:3px; border:1px solid #b8cfd8; padding-left:3px; padding-right:3px; selection-background-color:#00a6c7;}</string>
+       </property>
+       <property name="alignment">
+        <set>Qt::AlignCenter</set>
+       </property>
+      </widget>
+      <widget class="QLabel" name="visionPlacePoseYaw_label">
+       <property name="geometry">
+        <rect>
+         <x>256</x>
+         <y>35</y>
+         <width>72</width>
+         <height>16</height>
+        </rect>
+       </property>
+       <property name="font">
+        <font>
+         <family>Arial</family>
+         <pointsize>8</pointsize>
+        </font>
+       </property>
+       <property name="styleSheet">
+        <string>background:transparent; color:#102d3d; border:0px;</string>
+       </property>
+       <property name="text">
+        <string>Yaw</string>
+       </property>
+       <property name="alignment">
+        <set>Qt::AlignCenter</set>
+       </property>
+      </widget>
+      <widget class="QLineEdit" name="visionPlacePoseYaw">
+       <property name="geometry">
+        <rect>
+         <x>256</x>
+         <y>53</y>
+         <width>72</width>
+         <height>30</height>
+        </rect>
+       </property>
+       <property name="styleSheet">
+        <string>QLineEdit{background:white; color:black; border-radius:3px; border:1px solid #b8cfd8; padding-left:3px; padding-right:3px; selection-background-color:#00a6c7;}</string>
+       </property>
+       <property name="alignment">
+        <set>Qt::AlignCenter</set>
+       </property>
+      </widget>
       </widget>
       <widget class="QFrame" name="VisionPreviewGroup">
        <property name="geometry">
         <rect>
-         <x>20</x>
-         <y>365</y>
-         <width>345</width>
-         <height>215</height>
+         <x>0</x>
+         <y>230</y>
+         <width>337</width>
+         <height>226</height>
         </rect>
        </property>
        <property name="styleSheet">
-        <string>background:white; border-radius:18px; border:0px solid #ffffff;</string>
+        <string>QFrame{background:rgba(255,255,255,235); border:1px solid #c1d7df; border-radius:10px;}</string>
        </property>
-       <widget class="QLabel" name="yoloPreviewWidget">
-        <property name="geometry">
-         <rect>
-          <x>0</x>
-          <y>0</y>
-          <width>345</width>
-          <height>215</height>
-         </rect>
-        </property>
-        <property name="font">
-         <font>
-          <family>Arial</family>
-          <pointsize>42</pointsize>
-         </font>
-        </property>
-        <property name="styleSheet">
-         <string>background:transparent; color:black;</string>
-        </property>
-        <property name="text">
-         <string>yolo</string>
-        </property>
-        <property name="alignment">
-         <set>Qt::AlignCenter</set>
-        </property>
-       </widget>
+      <widget class="QLabel" name="yoloPreviewWidget">
+       <property name="geometry">
+        <rect>
+         <x>0</x>
+         <y>0</y>
+         <width>337</width>
+         <height>226</height>
+        </rect>
+       </property>
+       <property name="font">
+        <font>
+         <family>Arial</family>
+         <pointsize>18</pointsize>
+        </font>
+       </property>
+       <property name="styleSheet">
+        <string>background:transparent; color:black; border:0px;</string>
+       </property>
+       <property name="text">
+        <string>Yolo Image</string>
+       </property>
+       <property name="alignment">
+        <set>Qt::AlignCenter</set>
+       </property>
+      </widget>
+      </widget>
+      </widget>
+      <widget class="QWidget" name="tabPickPlaceRL">
+       <property name="styleSheet">
+        <string>background:transparent; border:0px;</string>
+       </property>
+       <attribute name="title">
+        <string>Pick Place RL</string>
+       </attribute>
+      <widget class="QLabel" name="lblPickPlaceRLTitle">
+       <property name="geometry">
+        <rect>
+         <x>0</x>
+         <y>6</y>
+         <width>337</width>
+         <height>42</height>
+        </rect>
+       </property>
+       <property name="font">
+        <font>
+         <family>Arial</family>
+         <pointsize>17</pointsize>
+        </font>
+       </property>
+       <property name="styleSheet">
+        <string>background:transparent; color:#111111; border:0px;</string>
+       </property>
+       <property name="text">
+        <string>Pick Place RL</string>
+       </property>
+       <property name="alignment">
+        <set>Qt::AlignCenter</set>
+       </property>
+      </widget>
+      <widget class="QPushButton" name="btnPickPlaceRLStart">
+       <property name="geometry">
+        <rect>
+         <x>15</x>
+         <y>58</y>
+         <width>72</width>
+         <height>34</height>
+        </rect>
+       </property>
+       <property name="font">
+        <font>
+         <family>Arial</family>
+         <pointsize>9</pointsize>
+        </font>
+       </property>
+       <property name="styleSheet">
+        <string>QPushButton{background:qlineargradient(x1:0,y1:0,x2:0,y2:1, stop:0 #ffffff, stop:1 #e6f4f7); color:#102d3d; border:1px solid #b8cfd8; border-radius:4px;} QPushButton:pressed{background:#cdebf0;}</string>
+       </property>
+       <property name="text">
+        <string>Start</string>
+       </property>
+      </widget>
+      <widget class="QPushButton" name="btnPickPlaceRLStop">
+       <property name="geometry">
+        <rect>
+         <x>249</x>
+         <y>58</y>
+         <width>72</width>
+         <height>34</height>
+        </rect>
+       </property>
+       <property name="font">
+        <font>
+         <family>Arial</family>
+         <pointsize>9</pointsize>
+        </font>
+       </property>
+       <property name="styleSheet">
+        <string>QPushButton{background:qlineargradient(x1:0,y1:0,x2:0,y2:1, stop:0 #ffffff, stop:1 #e6f4f7); color:#102d3d; border:1px solid #b8cfd8; border-radius:4px;} QPushButton:pressed{background:#cdebf0;}</string>
+       </property>
+       <property name="text">
+        <string>Stop</string>
+       </property>
+      </widget>
+      <widget class="QFrame" name="pickPlaceRLPlaceGroup">
+       <property name="geometry">
+        <rect>
+         <x>0</x>
+         <y>112</y>
+         <width>337</width>
+         <height>96</height>
+        </rect>
+       </property>
+       <property name="styleSheet">
+        <string>QFrame{background:rgba(255,255,255,220); border:1px solid #c1d7df; border-radius:8px;}</string>
+       </property>
+      <widget class="QLabel" name="rlPlacePoseTitle">
+       <property name="geometry">
+        <rect>
+         <x>0</x>
+         <y>6</y>
+         <width>337</width>
+         <height>24</height>
+        </rect>
+       </property>
+       <property name="font">
+        <font>
+         <family>Arial</family>
+         <pointsize>10</pointsize>
+        </font>
+       </property>
+       <property name="styleSheet">
+        <string>background:transparent; color:#102d3d; border:0px;</string>
+       </property>
+       <property name="text">
+        <string>Position place</string>
+       </property>
+       <property name="alignment">
+        <set>Qt::AlignCenter</set>
+       </property>
+      </widget>
+      <widget class="QLabel" name="rlPlacePoseX_label">
+       <property name="geometry">
+        <rect>
+         <x>10</x>
+         <y>35</y>
+         <width>72</width>
+         <height>16</height>
+        </rect>
+       </property>
+       <property name="font">
+        <font>
+         <family>Arial</family>
+         <pointsize>8</pointsize>
+        </font>
+       </property>
+       <property name="styleSheet">
+        <string>background:transparent; color:#102d3d; border:0px;</string>
+       </property>
+       <property name="text">
+        <string>X</string>
+       </property>
+       <property name="alignment">
+        <set>Qt::AlignCenter</set>
+       </property>
+      </widget>
+      <widget class="QLineEdit" name="rlPlacePoseX">
+       <property name="geometry">
+        <rect>
+         <x>10</x>
+         <y>53</y>
+         <width>72</width>
+         <height>30</height>
+        </rect>
+       </property>
+       <property name="styleSheet">
+        <string>QLineEdit{background:white; color:black; border-radius:3px; border:1px solid #b8cfd8; padding-left:3px; padding-right:3px; selection-background-color:#00a6c7;}</string>
+       </property>
+       <property name="alignment">
+        <set>Qt::AlignCenter</set>
+       </property>
+      </widget>
+      <widget class="QLabel" name="rlPlacePoseY_label">
+       <property name="geometry">
+        <rect>
+         <x>92</x>
+         <y>35</y>
+         <width>72</width>
+         <height>16</height>
+        </rect>
+       </property>
+       <property name="font">
+        <font>
+         <family>Arial</family>
+         <pointsize>8</pointsize>
+        </font>
+       </property>
+       <property name="styleSheet">
+        <string>background:transparent; color:#102d3d; border:0px;</string>
+       </property>
+       <property name="text">
+        <string>Y</string>
+       </property>
+       <property name="alignment">
+        <set>Qt::AlignCenter</set>
+       </property>
+      </widget>
+      <widget class="QLineEdit" name="rlPlacePoseY">
+       <property name="geometry">
+        <rect>
+         <x>92</x>
+         <y>53</y>
+         <width>72</width>
+         <height>30</height>
+        </rect>
+       </property>
+       <property name="styleSheet">
+        <string>QLineEdit{background:white; color:black; border-radius:3px; border:1px solid #b8cfd8; padding-left:3px; padding-right:3px; selection-background-color:#00a6c7;}</string>
+       </property>
+       <property name="alignment">
+        <set>Qt::AlignCenter</set>
+       </property>
+      </widget>
+      <widget class="QLabel" name="rlPlacePoseZ_label">
+       <property name="geometry">
+        <rect>
+         <x>174</x>
+         <y>35</y>
+         <width>72</width>
+         <height>16</height>
+        </rect>
+       </property>
+       <property name="font">
+        <font>
+         <family>Arial</family>
+         <pointsize>8</pointsize>
+        </font>
+       </property>
+       <property name="styleSheet">
+        <string>background:transparent; color:#102d3d; border:0px;</string>
+       </property>
+       <property name="text">
+        <string>Z</string>
+       </property>
+       <property name="alignment">
+        <set>Qt::AlignCenter</set>
+       </property>
+      </widget>
+      <widget class="QLineEdit" name="rlPlacePoseZ">
+       <property name="geometry">
+        <rect>
+         <x>174</x>
+         <y>53</y>
+         <width>72</width>
+         <height>30</height>
+        </rect>
+       </property>
+       <property name="styleSheet">
+        <string>QLineEdit{background:white; color:black; border-radius:3px; border:1px solid #b8cfd8; padding-left:3px; padding-right:3px; selection-background-color:#00a6c7;}</string>
+       </property>
+       <property name="alignment">
+        <set>Qt::AlignCenter</set>
+       </property>
+      </widget>
+      <widget class="QLabel" name="rlPlacePoseYaw_label">
+       <property name="geometry">
+        <rect>
+         <x>256</x>
+         <y>35</y>
+         <width>72</width>
+         <height>16</height>
+        </rect>
+       </property>
+       <property name="font">
+        <font>
+         <family>Arial</family>
+         <pointsize>8</pointsize>
+        </font>
+       </property>
+       <property name="styleSheet">
+        <string>background:transparent; color:#102d3d; border:0px;</string>
+       </property>
+       <property name="text">
+        <string>Yaw</string>
+       </property>
+       <property name="alignment">
+        <set>Qt::AlignCenter</set>
+       </property>
+      </widget>
+      <widget class="QLineEdit" name="rlPlacePoseYaw">
+       <property name="geometry">
+        <rect>
+         <x>256</x>
+         <y>53</y>
+         <width>72</width>
+         <height>30</height>
+        </rect>
+       </property>
+       <property name="styleSheet">
+        <string>QLineEdit{background:white; color:black; border-radius:3px; border:1px solid #b8cfd8; padding-left:3px; padding-right:3px; selection-background-color:#00a6c7;}</string>
+       </property>
+       <property name="alignment">
+        <set>Qt::AlignCenter</set>
+       </property>
+      </widget>
+      </widget>
+      <widget class="QFrame" name="PickPlaceRLPreviewGroup">
+       <property name="geometry">
+        <rect>
+         <x>0</x>
+         <y>230</y>
+         <width>337</width>
+         <height>226</height>
+        </rect>
+       </property>
+       <property name="styleSheet">
+        <string>QFrame{background:rgba(255,255,255,235); border:1px solid #c1d7df; border-radius:10px;}</string>
+       </property>
+      <widget class="QLabel" name="yoloRLPreviewWidget">
+       <property name="geometry">
+        <rect>
+         <x>0</x>
+         <y>0</y>
+         <width>337</width>
+         <height>226</height>
+        </rect>
+       </property>
+       <property name="font">
+        <font>
+         <family>Arial</family>
+         <pointsize>18</pointsize>
+        </font>
+       </property>
+       <property name="styleSheet">
+        <string>background:transparent; color:black; border:0px;</string>
+       </property>
+       <property name="text">
+        <string>Yolo Image</string>
+       </property>
+       <property name="alignment">
+        <set>Qt::AlignCenter</set>
+       </property>
+      </widget>
+      </widget>
+      </widget>
+      <widget class="QWidget" name="tabCheckBoard">
+       <property name="styleSheet">
+        <string>background:transparent; border:0px;</string>
+       </property>
+       <attribute name="title">
+        <string>Check Board</string>
+       </attribute>
+      <widget class="QLabel" name="lblCheckBoardTitle">
+       <property name="geometry">
+        <rect>
+         <x>0</x>
+         <y>6</y>
+         <width>337</width>
+         <height>42</height>
+        </rect>
+       </property>
+       <property name="font">
+        <font>
+         <family>Arial</family>
+         <pointsize>17</pointsize>
+        </font>
+       </property>
+       <property name="styleSheet">
+        <string>background:transparent; color:#111111; border:0px;</string>
+       </property>
+       <property name="text">
+        <string>Check Board</string>
+       </property>
+       <property name="alignment">
+        <set>Qt::AlignCenter</set>
+       </property>
+      </widget>
+      <widget class="QPushButton" name="btnCheckBoardStart">
+       <property name="geometry">
+        <rect>
+         <x>15</x>
+         <y>58</y>
+         <width>72</width>
+         <height>34</height>
+        </rect>
+       </property>
+       <property name="font">
+        <font>
+         <family>Arial</family>
+         <pointsize>9</pointsize>
+        </font>
+       </property>
+       <property name="styleSheet">
+        <string>QPushButton{background:qlineargradient(x1:0,y1:0,x2:0,y2:1, stop:0 #ffffff, stop:1 #e6f4f7); color:#102d3d; border:1px solid #b8cfd8; border-radius:4px;} QPushButton:pressed{background:#cdebf0;}</string>
+       </property>
+       <property name="text">
+        <string>Start</string>
+       </property>
+      </widget>
+      <widget class="QPushButton" name="btnCheckBoardStop">
+       <property name="geometry">
+        <rect>
+         <x>249</x>
+         <y>58</y>
+         <width>72</width>
+         <height>34</height>
+        </rect>
+       </property>
+       <property name="font">
+        <font>
+         <family>Arial</family>
+         <pointsize>9</pointsize>
+        </font>
+       </property>
+       <property name="styleSheet">
+        <string>QPushButton{background:qlineargradient(x1:0,y1:0,x2:0,y2:1, stop:0 #ffffff, stop:1 #e6f4f7); color:#102d3d; border:1px solid #b8cfd8; border-radius:4px;} QPushButton:pressed{background:#cdebf0;}</string>
+       </property>
+       <property name="text">
+        <string>Stop</string>
+       </property>
+      </widget>
+      <widget class="QFrame" name="checkBoardPointCenterGroup">
+       <property name="geometry">
+        <rect>
+         <x>0</x>
+         <y>112</y>
+         <width>337</width>
+         <height>96</height>
+        </rect>
+       </property>
+       <property name="styleSheet">
+        <string>QFrame{background:rgba(255,255,255,220); border:1px solid #c1d7df; border-radius:8px;}</string>
+       </property>
+      <widget class="QLabel" name="checkBoardPointCenterTitle">
+       <property name="geometry">
+        <rect>
+         <x>0</x>
+         <y>6</y>
+         <width>337</width>
+         <height>24</height>
+        </rect>
+       </property>
+       <property name="font">
+        <font>
+         <family>Arial</family>
+         <pointsize>10</pointsize>
+        </font>
+       </property>
+       <property name="styleSheet">
+        <string>background:transparent; color:#102d3d; border:0px;</string>
+       </property>
+       <property name="text">
+        <string>Point center</string>
+       </property>
+       <property name="alignment">
+        <set>Qt::AlignCenter</set>
+       </property>
+      </widget>
+      <widget class="QLabel" name="checkBoardX_label">
+       <property name="geometry">
+        <rect>
+         <x>10</x>
+         <y>35</y>
+         <width>72</width>
+         <height>16</height>
+        </rect>
+       </property>
+       <property name="font">
+        <font>
+         <family>Arial</family>
+         <pointsize>8</pointsize>
+        </font>
+       </property>
+       <property name="styleSheet">
+        <string>background:transparent; color:#102d3d; border:0px;</string>
+       </property>
+       <property name="text">
+        <string>X</string>
+       </property>
+       <property name="alignment">
+        <set>Qt::AlignCenter</set>
+       </property>
+      </widget>
+      <widget class="QLineEdit" name="txtCheckBoardX">
+       <property name="geometry">
+        <rect>
+         <x>10</x>
+         <y>53</y>
+         <width>72</width>
+         <height>30</height>
+        </rect>
+       </property>
+       <property name="styleSheet">
+        <string>QLineEdit{background:white; color:black; border-radius:3px; border:1px solid #b8cfd8; padding-left:3px; padding-right:3px; selection-background-color:#00a6c7;}</string>
+       </property>
+       <property name="alignment">
+        <set>Qt::AlignCenter</set>
+       </property>
+      </widget>
+      <widget class="QLabel" name="checkBoardY_label">
+       <property name="geometry">
+        <rect>
+         <x>92</x>
+         <y>35</y>
+         <width>72</width>
+         <height>16</height>
+        </rect>
+       </property>
+       <property name="font">
+        <font>
+         <family>Arial</family>
+         <pointsize>8</pointsize>
+        </font>
+       </property>
+       <property name="styleSheet">
+        <string>background:transparent; color:#102d3d; border:0px;</string>
+       </property>
+       <property name="text">
+        <string>Y</string>
+       </property>
+       <property name="alignment">
+        <set>Qt::AlignCenter</set>
+       </property>
+      </widget>
+      <widget class="QLineEdit" name="txtCheckBoardY">
+       <property name="geometry">
+        <rect>
+         <x>92</x>
+         <y>53</y>
+         <width>72</width>
+         <height>30</height>
+        </rect>
+       </property>
+       <property name="styleSheet">
+        <string>QLineEdit{background:white; color:black; border-radius:3px; border:1px solid #b8cfd8; padding-left:3px; padding-right:3px; selection-background-color:#00a6c7;}</string>
+       </property>
+       <property name="alignment">
+        <set>Qt::AlignCenter</set>
+       </property>
+      </widget>
+      <widget class="QLabel" name="checkBoardZ_label">
+       <property name="geometry">
+        <rect>
+         <x>174</x>
+         <y>35</y>
+         <width>72</width>
+         <height>16</height>
+        </rect>
+       </property>
+       <property name="font">
+        <font>
+         <family>Arial</family>
+         <pointsize>8</pointsize>
+        </font>
+       </property>
+       <property name="styleSheet">
+        <string>background:transparent; color:#102d3d; border:0px;</string>
+       </property>
+       <property name="text">
+        <string>Z</string>
+       </property>
+       <property name="alignment">
+        <set>Qt::AlignCenter</set>
+       </property>
+      </widget>
+      <widget class="QLineEdit" name="txtCheckBoardZ">
+       <property name="geometry">
+        <rect>
+         <x>174</x>
+         <y>53</y>
+         <width>72</width>
+         <height>30</height>
+        </rect>
+       </property>
+       <property name="styleSheet">
+        <string>QLineEdit{background:white; color:black; border-radius:3px; border:1px solid #b8cfd8; padding-left:3px; padding-right:3px; selection-background-color:#00a6c7;}</string>
+       </property>
+       <property name="alignment">
+        <set>Qt::AlignCenter</set>
+       </property>
+      </widget>
+      <widget class="QLabel" name="checkBoardStep_label">
+       <property name="geometry">
+        <rect>
+         <x>256</x>
+         <y>35</y>
+         <width>72</width>
+         <height>16</height>
+        </rect>
+       </property>
+       <property name="font">
+        <font>
+         <family>Arial</family>
+         <pointsize>8</pointsize>
+        </font>
+       </property>
+       <property name="styleSheet">
+        <string>background:transparent; color:#102d3d; border:0px;</string>
+       </property>
+       <property name="text">
+        <string>Step</string>
+       </property>
+       <property name="alignment">
+        <set>Qt::AlignCenter</set>
+       </property>
+      </widget>
+      <widget class="QLineEdit" name="txtCheckBoardStep">
+       <property name="geometry">
+        <rect>
+         <x>256</x>
+         <y>53</y>
+         <width>72</width>
+         <height>30</height>
+        </rect>
+       </property>
+       <property name="styleSheet">
+        <string>QLineEdit{background:white; color:black; border-radius:3px; border:1px solid #b8cfd8; padding-left:3px; padding-right:3px; selection-background-color:#00a6c7;}</string>
+       </property>
+       <property name="alignment">
+        <set>Qt::AlignCenter</set>
+       </property>
+      </widget>
+      </widget>
+      <widget class="QFrame" name="checkBoardPreviewGroup">
+       <property name="geometry">
+        <rect>
+         <x>0</x>
+         <y>230</y>
+         <width>337</width>
+         <height>226</height>
+        </rect>
+       </property>
+       <property name="styleSheet">
+        <string>QFrame{background:rgba(255,255,255,235); border:1px solid #c1d7df; border-radius:10px;}</string>
+       </property>
+      <widget class="QLabel" name="checkBoardPreviewGroupLabel">
+       <property name="geometry">
+        <rect>
+         <x>0</x>
+         <y>0</y>
+         <width>337</width>
+         <height>226</height>
+        </rect>
+       </property>
+       <property name="font">
+        <font>
+         <family>Arial</family>
+         <pointsize>13</pointsize>
+        </font>
+       </property>
+       <property name="styleSheet">
+        <string>background:transparent; color:black; border:0px;</string>
+       </property>
+       <property name="text">
+        <string>chèn ảnh mô tả</string>
+       </property>
+       <property name="alignment">
+        <set>Qt::AlignCenter</set>
+       </property>
+      </widget>
+      </widget>
+      </widget>
+      <widget class="QWidget" name="tabRepeatability">
+       <property name="styleSheet">
+        <string>background:transparent; border:0px;</string>
+       </property>
+       <attribute name="title">
+        <string>Repeatability Test</string>
+       </attribute>
+      <widget class="QLabel" name="lblRepeatabilityTitle">
+       <property name="geometry">
+        <rect>
+         <x>0</x>
+         <y>6</y>
+         <width>337</width>
+         <height>42</height>
+        </rect>
+       </property>
+       <property name="font">
+        <font>
+         <family>Arial</family>
+         <pointsize>17</pointsize>
+        </font>
+       </property>
+       <property name="styleSheet">
+        <string>background:transparent; color:#111111; border:0px;</string>
+       </property>
+       <property name="text">
+        <string>Repeatability Test</string>
+       </property>
+       <property name="alignment">
+        <set>Qt::AlignCenter</set>
+       </property>
+      </widget>
+      <widget class="QPushButton" name="btnRepeatStart">
+       <property name="geometry">
+        <rect>
+         <x>15</x>
+         <y>58</y>
+         <width>72</width>
+         <height>34</height>
+        </rect>
+       </property>
+       <property name="font">
+        <font>
+         <family>Arial</family>
+         <pointsize>9</pointsize>
+        </font>
+       </property>
+       <property name="styleSheet">
+        <string>QPushButton{background:qlineargradient(x1:0,y1:0,x2:0,y2:1, stop:0 #ffffff, stop:1 #e6f4f7); color:#102d3d; border:1px solid #b8cfd8; border-radius:4px;} QPushButton:pressed{background:#cdebf0;}</string>
+       </property>
+       <property name="text">
+        <string>Start</string>
+       </property>
+      </widget>
+      <widget class="QPushButton" name="btnRepeatPlan">
+       <property name="geometry">
+        <rect>
+         <x>132</x>
+         <y>58</y>
+         <width>72</width>
+         <height>34</height>
+        </rect>
+       </property>
+       <property name="font">
+        <font>
+         <family>Arial</family>
+         <pointsize>9</pointsize>
+        </font>
+       </property>
+       <property name="styleSheet">
+        <string>QPushButton{background:qlineargradient(x1:0,y1:0,x2:0,y2:1, stop:0 #ffffff, stop:1 #e6f4f7); color:#102d3d; border:1px solid #b8cfd8; border-radius:4px;} QPushButton:pressed{background:#cdebf0;}</string>
+       </property>
+       <property name="text">
+        <string>Plan</string>
+       </property>
+      </widget>
+      <widget class="QPushButton" name="btnRepeatStop">
+       <property name="geometry">
+        <rect>
+         <x>249</x>
+         <y>58</y>
+         <width>72</width>
+         <height>34</height>
+        </rect>
+       </property>
+       <property name="font">
+        <font>
+         <family>Arial</family>
+         <pointsize>9</pointsize>
+        </font>
+       </property>
+       <property name="styleSheet">
+        <string>QPushButton{background:qlineargradient(x1:0,y1:0,x2:0,y2:1, stop:0 #ffffff, stop:1 #e6f4f7); color:#102d3d; border:1px solid #b8cfd8; border-radius:4px;} QPushButton:pressed{background:#cdebf0;}</string>
+       </property>
+       <property name="text">
+        <string>Stop</string>
+       </property>
+      </widget>
+      <widget class="QFrame" name="repeatRetractGroup">
+       <property name="geometry">
+        <rect>
+         <x>0</x>
+         <y>105</y>
+         <width>337</width>
+         <height>58</height>
+        </rect>
+       </property>
+       <property name="styleSheet">
+        <string>QFrame{background:rgba(255,255,255,220); border:1px solid #c1d7df; border-radius:8px;}</string>
+       </property>
+      <widget class="QLabel" name="repeatRetractTitle">
+       <property name="geometry">
+        <rect>
+         <x>8</x>
+         <y>20</y>
+         <width>110</width>
+         <height>24</height>
+        </rect>
+       </property>
+       <property name="font">
+        <font>
+         <family>Arial</family>
+         <pointsize>8</pointsize>
+        </font>
+       </property>
+       <property name="styleSheet">
+        <string>background:transparent; color:#102d3d; border:0px;</string>
+       </property>
+       <property name="text">
+        <string>Retract position</string>
+       </property>
+       <property name="alignment">
+        <set>Qt::AlignCenter</set>
+       </property>
+      </widget>
+      <widget class="QLabel" name="repeatRetractX_label">
+       <property name="geometry">
+        <rect>
+         <x>145</x>
+         <y>4</y>
+         <width>40</width>
+         <height>14</height>
+        </rect>
+       </property>
+       <property name="font">
+        <font>
+         <family>Arial</family>
+         <pointsize>7</pointsize>
+        </font>
+       </property>
+       <property name="styleSheet">
+        <string>background:transparent; color:#102d3d; border:0px;</string>
+       </property>
+       <property name="text">
+        <string>X</string>
+       </property>
+       <property name="alignment">
+        <set>Qt::AlignCenter</set>
+       </property>
+      </widget>
+      <widget class="QLineEdit" name="repeatRetractX">
+       <property name="geometry">
+        <rect>
+         <x>145</x>
+         <y>20</y>
+         <width>40</width>
+         <height>30</height>
+        </rect>
+       </property>
+       <property name="styleSheet">
+        <string>QLineEdit{background:white; color:black; border-radius:3px; border:1px solid #b8cfd8; padding-left:3px; padding-right:3px; selection-background-color:#00a6c7;}</string>
+       </property>
+       <property name="alignment">
+        <set>Qt::AlignCenter</set>
+       </property>
+      </widget>
+      <widget class="QLabel" name="repeatRetractY_label">
+       <property name="geometry">
+        <rect>
+         <x>191</x>
+         <y>4</y>
+         <width>40</width>
+         <height>14</height>
+        </rect>
+       </property>
+       <property name="font">
+        <font>
+         <family>Arial</family>
+         <pointsize>7</pointsize>
+        </font>
+       </property>
+       <property name="styleSheet">
+        <string>background:transparent; color:#102d3d; border:0px;</string>
+       </property>
+       <property name="text">
+        <string>Y</string>
+       </property>
+       <property name="alignment">
+        <set>Qt::AlignCenter</set>
+       </property>
+      </widget>
+      <widget class="QLineEdit" name="repeatRetractY">
+       <property name="geometry">
+        <rect>
+         <x>191</x>
+         <y>20</y>
+         <width>40</width>
+         <height>30</height>
+        </rect>
+       </property>
+       <property name="styleSheet">
+        <string>QLineEdit{background:white; color:black; border-radius:3px; border:1px solid #b8cfd8; padding-left:3px; padding-right:3px; selection-background-color:#00a6c7;}</string>
+       </property>
+       <property name="alignment">
+        <set>Qt::AlignCenter</set>
+       </property>
+      </widget>
+      <widget class="QLabel" name="repeatRetractZ_label">
+       <property name="geometry">
+        <rect>
+         <x>237</x>
+         <y>4</y>
+         <width>40</width>
+         <height>14</height>
+        </rect>
+       </property>
+       <property name="font">
+        <font>
+         <family>Arial</family>
+         <pointsize>7</pointsize>
+        </font>
+       </property>
+       <property name="styleSheet">
+        <string>background:transparent; color:#102d3d; border:0px;</string>
+       </property>
+       <property name="text">
+        <string>Z</string>
+       </property>
+       <property name="alignment">
+        <set>Qt::AlignCenter</set>
+       </property>
+      </widget>
+      <widget class="QLineEdit" name="repeatRetractZ">
+       <property name="geometry">
+        <rect>
+         <x>237</x>
+         <y>20</y>
+         <width>40</width>
+         <height>30</height>
+        </rect>
+       </property>
+       <property name="styleSheet">
+        <string>QLineEdit{background:white; color:black; border-radius:3px; border:1px solid #b8cfd8; padding-left:3px; padding-right:3px; selection-background-color:#00a6c7;}</string>
+       </property>
+       <property name="alignment">
+        <set>Qt::AlignCenter</set>
+       </property>
+      </widget>
+      </widget>
+      <widget class="QFrame" name="repeatDisturb1Group">
+       <property name="geometry">
+        <rect>
+         <x>0</x>
+         <y>170</y>
+         <width>337</width>
+         <height>58</height>
+        </rect>
+       </property>
+       <property name="styleSheet">
+        <string>QFrame{background:rgba(255,255,255,220); border:1px solid #c1d7df; border-radius:8px;}</string>
+       </property>
+      <widget class="QLabel" name="repeatDisturb1Title">
+       <property name="geometry">
+        <rect>
+         <x>8</x>
+         <y>20</y>
+         <width>110</width>
+         <height>24</height>
+        </rect>
+       </property>
+       <property name="font">
+        <font>
+         <family>Arial</family>
+         <pointsize>8</pointsize>
+        </font>
+       </property>
+       <property name="styleSheet">
+        <string>background:transparent; color:#102d3d; border:0px;</string>
+       </property>
+       <property name="text">
+        <string>Disturb position 1</string>
+       </property>
+       <property name="alignment">
+        <set>Qt::AlignCenter</set>
+       </property>
+      </widget>
+      <widget class="QLabel" name="repeatDisturb1X_label">
+       <property name="geometry">
+        <rect>
+         <x>145</x>
+         <y>4</y>
+         <width>40</width>
+         <height>14</height>
+        </rect>
+       </property>
+       <property name="font">
+        <font>
+         <family>Arial</family>
+         <pointsize>7</pointsize>
+        </font>
+       </property>
+       <property name="styleSheet">
+        <string>background:transparent; color:#102d3d; border:0px;</string>
+       </property>
+       <property name="text">
+        <string>X</string>
+       </property>
+       <property name="alignment">
+        <set>Qt::AlignCenter</set>
+       </property>
+      </widget>
+      <widget class="QLineEdit" name="repeatDisturb1X">
+       <property name="geometry">
+        <rect>
+         <x>145</x>
+         <y>20</y>
+         <width>40</width>
+         <height>30</height>
+        </rect>
+       </property>
+       <property name="styleSheet">
+        <string>QLineEdit{background:white; color:black; border-radius:3px; border:1px solid #b8cfd8; padding-left:3px; padding-right:3px; selection-background-color:#00a6c7;}</string>
+       </property>
+       <property name="alignment">
+        <set>Qt::AlignCenter</set>
+       </property>
+      </widget>
+      <widget class="QLabel" name="repeatDisturb1Y_label">
+       <property name="geometry">
+        <rect>
+         <x>191</x>
+         <y>4</y>
+         <width>40</width>
+         <height>14</height>
+        </rect>
+       </property>
+       <property name="font">
+        <font>
+         <family>Arial</family>
+         <pointsize>7</pointsize>
+        </font>
+       </property>
+       <property name="styleSheet">
+        <string>background:transparent; color:#102d3d; border:0px;</string>
+       </property>
+       <property name="text">
+        <string>Y</string>
+       </property>
+       <property name="alignment">
+        <set>Qt::AlignCenter</set>
+       </property>
+      </widget>
+      <widget class="QLineEdit" name="repeatDisturb1Y">
+       <property name="geometry">
+        <rect>
+         <x>191</x>
+         <y>20</y>
+         <width>40</width>
+         <height>30</height>
+        </rect>
+       </property>
+       <property name="styleSheet">
+        <string>QLineEdit{background:white; color:black; border-radius:3px; border:1px solid #b8cfd8; padding-left:3px; padding-right:3px; selection-background-color:#00a6c7;}</string>
+       </property>
+       <property name="alignment">
+        <set>Qt::AlignCenter</set>
+       </property>
+      </widget>
+      <widget class="QLabel" name="repeatDisturb1Z_label">
+       <property name="geometry">
+        <rect>
+         <x>237</x>
+         <y>4</y>
+         <width>40</width>
+         <height>14</height>
+        </rect>
+       </property>
+       <property name="font">
+        <font>
+         <family>Arial</family>
+         <pointsize>7</pointsize>
+        </font>
+       </property>
+       <property name="styleSheet">
+        <string>background:transparent; color:#102d3d; border:0px;</string>
+       </property>
+       <property name="text">
+        <string>Z</string>
+       </property>
+       <property name="alignment">
+        <set>Qt::AlignCenter</set>
+       </property>
+      </widget>
+      <widget class="QLineEdit" name="repeatDisturb1Z">
+       <property name="geometry">
+        <rect>
+         <x>237</x>
+         <y>20</y>
+         <width>40</width>
+         <height>30</height>
+        </rect>
+       </property>
+       <property name="styleSheet">
+        <string>QLineEdit{background:white; color:black; border-radius:3px; border:1px solid #b8cfd8; padding-left:3px; padding-right:3px; selection-background-color:#00a6c7;}</string>
+       </property>
+       <property name="alignment">
+        <set>Qt::AlignCenter</set>
+       </property>
+      </widget>
+      </widget>
+      <widget class="QFrame" name="repeatDisturb2Group">
+       <property name="geometry">
+        <rect>
+         <x>0</x>
+         <y>235</y>
+         <width>337</width>
+         <height>58</height>
+        </rect>
+       </property>
+       <property name="styleSheet">
+        <string>QFrame{background:rgba(255,255,255,220); border:1px solid #c1d7df; border-radius:8px;}</string>
+       </property>
+      <widget class="QLabel" name="repeatDisturb2Title">
+       <property name="geometry">
+        <rect>
+         <x>8</x>
+         <y>20</y>
+         <width>110</width>
+         <height>24</height>
+        </rect>
+       </property>
+       <property name="font">
+        <font>
+         <family>Arial</family>
+         <pointsize>8</pointsize>
+        </font>
+       </property>
+       <property name="styleSheet">
+        <string>background:transparent; color:#102d3d; border:0px;</string>
+       </property>
+       <property name="text">
+        <string>Disturb position 2</string>
+       </property>
+       <property name="alignment">
+        <set>Qt::AlignCenter</set>
+       </property>
+      </widget>
+      <widget class="QLabel" name="repeatDisturb2X_label">
+       <property name="geometry">
+        <rect>
+         <x>145</x>
+         <y>4</y>
+         <width>40</width>
+         <height>14</height>
+        </rect>
+       </property>
+       <property name="font">
+        <font>
+         <family>Arial</family>
+         <pointsize>7</pointsize>
+        </font>
+       </property>
+       <property name="styleSheet">
+        <string>background:transparent; color:#102d3d; border:0px;</string>
+       </property>
+       <property name="text">
+        <string>X</string>
+       </property>
+       <property name="alignment">
+        <set>Qt::AlignCenter</set>
+       </property>
+      </widget>
+      <widget class="QLineEdit" name="repeatDisturb2X">
+       <property name="geometry">
+        <rect>
+         <x>145</x>
+         <y>20</y>
+         <width>40</width>
+         <height>30</height>
+        </rect>
+       </property>
+       <property name="styleSheet">
+        <string>QLineEdit{background:white; color:black; border-radius:3px; border:1px solid #b8cfd8; padding-left:3px; padding-right:3px; selection-background-color:#00a6c7;}</string>
+       </property>
+       <property name="alignment">
+        <set>Qt::AlignCenter</set>
+       </property>
+      </widget>
+      <widget class="QLabel" name="repeatDisturb2Y_label">
+       <property name="geometry">
+        <rect>
+         <x>191</x>
+         <y>4</y>
+         <width>40</width>
+         <height>14</height>
+        </rect>
+       </property>
+       <property name="font">
+        <font>
+         <family>Arial</family>
+         <pointsize>7</pointsize>
+        </font>
+       </property>
+       <property name="styleSheet">
+        <string>background:transparent; color:#102d3d; border:0px;</string>
+       </property>
+       <property name="text">
+        <string>Y</string>
+       </property>
+       <property name="alignment">
+        <set>Qt::AlignCenter</set>
+       </property>
+      </widget>
+      <widget class="QLineEdit" name="repeatDisturb2Y">
+       <property name="geometry">
+        <rect>
+         <x>191</x>
+         <y>20</y>
+         <width>40</width>
+         <height>30</height>
+        </rect>
+       </property>
+       <property name="styleSheet">
+        <string>QLineEdit{background:white; color:black; border-radius:3px; border:1px solid #b8cfd8; padding-left:3px; padding-right:3px; selection-background-color:#00a6c7;}</string>
+       </property>
+       <property name="alignment">
+        <set>Qt::AlignCenter</set>
+       </property>
+      </widget>
+      <widget class="QLabel" name="repeatDisturb2Z_label">
+       <property name="geometry">
+        <rect>
+         <x>237</x>
+         <y>4</y>
+         <width>40</width>
+         <height>14</height>
+        </rect>
+       </property>
+       <property name="font">
+        <font>
+         <family>Arial</family>
+         <pointsize>7</pointsize>
+        </font>
+       </property>
+       <property name="styleSheet">
+        <string>background:transparent; color:#102d3d; border:0px;</string>
+       </property>
+       <property name="text">
+        <string>Z</string>
+       </property>
+       <property name="alignment">
+        <set>Qt::AlignCenter</set>
+       </property>
+      </widget>
+      <widget class="QLineEdit" name="repeatDisturb2Z">
+       <property name="geometry">
+        <rect>
+         <x>237</x>
+         <y>20</y>
+         <width>40</width>
+         <height>30</height>
+        </rect>
+       </property>
+       <property name="styleSheet">
+        <string>QLineEdit{background:white; color:black; border-radius:3px; border:1px solid #b8cfd8; padding-left:3px; padding-right:3px; selection-background-color:#00a6c7;}</string>
+       </property>
+       <property name="alignment">
+        <set>Qt::AlignCenter</set>
+       </property>
+      </widget>
+      </widget>
+      <widget class="QFrame" name="repeatParamGroup">
+       <property name="geometry">
+        <rect>
+         <x>0</x>
+         <y>306</y>
+         <width>337</width>
+         <height>54</height>
+        </rect>
+       </property>
+       <property name="styleSheet">
+        <string>QFrame{background:rgba(255,255,255,220); border:1px solid #c1d7df; border-radius:8px;}</string>
+       </property>
+      <widget class="QLabel" name="lblMeasOffset">
+       <property name="geometry">
+        <rect>
+         <x>12</x>
+         <y>15</y>
+         <width>84</width>
+         <height>24</height>
+        </rect>
+       </property>
+       <property name="font">
+        <font>
+         <family>Arial</family>
+         <pointsize>8</pointsize>
+        </font>
+       </property>
+       <property name="styleSheet">
+        <string>background:transparent; color:#102d3d; border:0px;</string>
+       </property>
+       <property name="text">
+        <string>meas_offset</string>
+       </property>
+       <property name="alignment">
+        <set>Qt::AlignCenter</set>
+       </property>
+      </widget>
+      <widget class="QLineEdit" name="txtMeasOffset">
+       <property name="geometry">
+        <rect>
+         <x>105</x>
+         <y>12</y>
+         <width>58</width>
+         <height>30</height>
+        </rect>
+       </property>
+       <property name="styleSheet">
+        <string>QLineEdit{background:white; color:black; border-radius:3px; border:1px solid #b8cfd8; padding-left:3px; padding-right:3px; selection-background-color:#00a6c7;}</string>
+       </property>
+       <property name="alignment">
+        <set>Qt::AlignCenter</set>
+       </property>
+      </widget>
+      <widget class="QLabel" name="lblRepeatCount">
+       <property name="geometry">
+        <rect>
+         <x>188</x>
+         <y>15</y>
+         <width>84</width>
+         <height>24</height>
+        </rect>
+       </property>
+       <property name="font">
+        <font>
+         <family>Arial</family>
+         <pointsize>8</pointsize>
+        </font>
+       </property>
+       <property name="styleSheet">
+        <string>background:transparent; color:#102d3d; border:0px;</string>
+       </property>
+       <property name="text">
+        <string>repeat_count</string>
+       </property>
+       <property name="alignment">
+        <set>Qt::AlignCenter</set>
+       </property>
+      </widget>
+      <widget class="QLineEdit" name="txtRepeatCount">
+       <property name="geometry">
+        <rect>
+         <x>275</x>
+         <y>12</y>
+         <width>52</width>
+         <height>30</height>
+        </rect>
+       </property>
+       <property name="styleSheet">
+        <string>QLineEdit{background:white; color:black; border-radius:3px; border:1px solid #b8cfd8; padding-left:3px; padding-right:3px; selection-background-color:#00a6c7;}</string>
+       </property>
+       <property name="alignment">
+        <set>Qt::AlignCenter</set>
+       </property>
+      </widget>
+      </widget>
+      <widget class="QFrame" name="repeatPreviewGroup">
+       <property name="geometry">
+        <rect>
+         <x>0</x>
+         <y>368</y>
+         <width>337</width>
+         <height>88</height>
+        </rect>
+       </property>
+       <property name="styleSheet">
+        <string>QFrame{background:rgba(255,255,255,235); border:1px solid #c1d7df; border-radius:10px;}</string>
+       </property>
+      <widget class="QLabel" name="repeatPreviewGroupLabel">
+       <property name="geometry">
+        <rect>
+         <x>0</x>
+         <y>0</y>
+         <width>337</width>
+         <height>88</height>
+        </rect>
+       </property>
+       <property name="font">
+        <font>
+         <family>Arial</family>
+         <pointsize>11</pointsize>
+        </font>
+       </property>
+       <property name="styleSheet">
+        <string>background:transparent; color:black; border:0px;</string>
+       </property>
+       <property name="text">
+        <string>chèn ảnh mô tả</string>
+       </property>
+       <property name="alignment">
+        <set>Qt::AlignCenter</set>
+       </property>
+      </widget>
+      </widget>
+      </widget>
       </widget>
      </widget>
      <widget class="QFrame" name="ShortLogArea">
@@ -9145,5 +12201,22 @@ QPushButton:pressed {
   </widget>
  </widget>
  <resources/>
- <connections/>
+ <connections>
+  <connection>
+   <sender>cbModeControl</sender>
+   <signal>currentIndexChanged(int)</signal>
+   <receiver>taskModeTabs</receiver>
+   <slot>setCurrentIndex(int)</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>0</x>
+     <y>0</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>0</x>
+     <y>0</y>
+    </hint>
+   </hints>
+  </connection>
+ </connections>
 </ui>

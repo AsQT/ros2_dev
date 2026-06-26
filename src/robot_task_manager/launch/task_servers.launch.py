@@ -98,7 +98,9 @@ def generate_launch_description():
         executable="repeatability_test_server",
         name="repeatability_test_action_server",
         output="screen",
-        parameters=common_parameters,
+        parameters=common_parameters + [{
+            "fast_velocity_scale": 0.7,
+        }],
     )
 
     return LaunchDescription([

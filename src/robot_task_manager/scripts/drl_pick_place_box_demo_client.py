@@ -23,6 +23,7 @@ class DrlPickPlaceBoxDemoClient(Node):
         self.declare_parameter("place_z_offset_m", 0.0)
         self.declare_parameter("min_pick_z_m", 0.025)
         self.declare_parameter("gripper_close_width_m", 0.025)
+        self.declare_parameter("execute", True)
         self.declare_parameter("object_timeout_sec", 60.0)
         self.declare_parameter("action_server_timeout_sec", 120.0)
         self.declare_parameter("goal_timeout_sec", 420.0)
@@ -110,12 +111,14 @@ class DrlPickPlaceBoxDemoClient(Node):
         goal.gripper_close_width_m = float(
             self.get_parameter("gripper_close_width_m").value
         )
+        goal.execute = bool(self.get_parameter("execute").value)
         self.get_logger().info(
             "Using sim perception: "
             f"name='{marker.text or 'pick_box'}' "
             f"pose=({marker.pose.position.x:.4f}, {marker.pose.position.y:.4f}, {marker.pose.position.z:.4f}) "
             f"size=({marker.scale.x:.4f}, {marker.scale.y:.4f}, {marker.scale.z:.4f}) "
-            f"pick_z={pick_z:.4f} gripper={goal.gripper_close_width_m:.4f}"
+            f"pick_z={pick_z:.4f} gripper={goal.gripper_close_width_m:.4f} "
+            f"execute={goal.execute}"
         )
         return goal
 

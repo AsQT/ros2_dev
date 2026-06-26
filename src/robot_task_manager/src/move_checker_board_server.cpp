@@ -105,10 +105,6 @@ private:
       return;
     }
 
-    feedback->stage = "Planning to pose";
-    feedback->progress = 30.0f;
-    goal_handle->publish_feedback(feedback);
-
     auto goal = goal_handle->get_goal();
     if (!goal) {
       RCLCPP_ERROR(this->get_logger(), "Goal is null");
@@ -117,6 +113,10 @@ private:
       goal_handle->abort(result);
       return;
     }
+
+    feedback->stage = goal->execute ? "Planning checker board path" : "Planning checker board path (plan-only)";
+    feedback->progress = 30.0f;
+    goal_handle->publish_feedback(feedback);
 
     std::string error_msg;
     bool ok = false;
@@ -128,7 +128,8 @@ private:
         error_msg,
         goal->velocity_scale,
         0.3,
-        5.0);
+        5.0,
+        goal->execute);
       RCLCPP_INFO(this->get_logger(), "Returned from CheckerBoard(), ok=%s", ok ? "true" : "false");
     } catch (const std::exception &e) {
       RCLCPP_ERROR(this->get_logger(), "Exception in CheckerBoard: %s", e.what());
@@ -160,12 +161,14 @@ private:
       return;
     }
 
-    feedback->stage = "Pose reached";
+    feedback->stage = goal->execute ? "Checker board completed" : "Checker board plan validated (execution skipped)";
     feedback->progress = 100.0f;
     goal_handle->publish_feedback(feedback);
 
     result->success = true;
-    result->message = "Robot reached target pose successfully";
+    result->message = goal->execute ?
+      "Checker board motion completed successfully" :
+      "CheckerBoard planning success; execution skipped";
 
     RCLCPP_INFO(this->get_logger(), "Calling goal_handle->succeed()");
     goal_handle->succeed(result);

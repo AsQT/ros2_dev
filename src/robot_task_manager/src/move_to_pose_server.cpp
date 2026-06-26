@@ -71,11 +71,11 @@ private:
     auto feedback = std::make_shared<MoveToPose::Feedback>();
     auto result = std::make_shared<MoveToPose::Result>();
 
-    feedback->stage = "Planning to pose";
+    const auto goal = goal_handle->get_goal();
+
+    feedback->stage = goal->execute ? "Planning to pose" : "Planning to pose (plan-only)";
     feedback->progress = 30.0f;
     goal_handle->publish_feedback(feedback);
-
-    const auto goal = goal_handle->get_goal();
 
     std::string error_msg;
     const bool ok = executor_->moveToPose(
@@ -83,7 +83,8 @@ private:
                                 error_msg,
                                 goal->velocity_scale,
                                 0.3,
-                                5.0);
+                                5.0,
+                                goal->execute);
 
     if (!ok) {
       result->success = false;
@@ -92,12 +93,14 @@ private:
       return;
     }
 
-    feedback->stage = "Pose reached";
+    feedback->stage = goal->execute ? "Pose reached" : "Pose plan validated (execution skipped)";
     feedback->progress = 100.0f;
     goal_handle->publish_feedback(feedback);
 
     result->success = true;
-    result->message = "Robot reached target pose successfully";
+    result->message = goal->execute ?
+      "Robot reached target pose successfully" :
+      "MoveToPose planning success; execution skipped";
     goal_handle->succeed(result);
   }
 };

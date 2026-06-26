@@ -214,6 +214,7 @@ private:
   {
     MoveGripper::Goal goal;
     goal.position = position;
+    goal.execute = true;
 
     auto result_timeout =
       std::chrono::duration_cast<std::chrono::nanoseconds>(
@@ -280,6 +281,7 @@ private:
     MoveToPose::Goal goal;
     goal.target_pose = target_pose;
     goal.velocity_scale = velocity_scale;
+    goal.execute = true;
 
     auto result_timeout =
       std::chrono::duration_cast<std::chrono::nanoseconds>(
@@ -346,6 +348,7 @@ private:
     MoveToPoseCartesian::Goal goal;
     goal.target_pose = target_pose;
     goal.velocity_scale = velocity_scale;
+    goal.execute = true;
 
     auto result_timeout =
       std::chrono::duration_cast<std::chrono::nanoseconds>(

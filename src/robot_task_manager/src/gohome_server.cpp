@@ -80,12 +80,14 @@ private:
       auto feedback   = std::make_shared<GoHome::Feedback>();
       auto result     = std::make_shared<GoHome::Result>();
 
-      feedback->current_step = "Planning to home";
+      const auto goal = goal_handle->get_goal();
+
+      feedback->current_step = goal->execute ? "Planning to home" : "Planning to home (plan-only)";
       feedback->progress = 30.0f;
       goal_handle->publish_feedback(feedback);
 
       std::string error_msg;
-      const bool ok = executor_->goNamedTarget(home_target_, error_msg);
+      const bool ok = executor_->goNamedTarget(home_target_, error_msg, 0.3, 0.3, 5.0, goal->execute);
 
       if (!ok) {
         result->success = false;
@@ -94,12 +96,14 @@ private:
         return;
       }
 
-      feedback->current_step = "Home_reached";
+      feedback->current_step = goal->execute ? "Home_reached" : "Home plan validated (execution skipped)";
       feedback->progress = 100.0f;
       goal_handle->publish_feedback(feedback);
 
       result->success = true;
-      result->message = "Robot moved to home successfully";
+      result->message = goal->execute ?
+        "Robot moved to home successfully" :
+        "GoHome planning success; execution skipped";
       goal_handle->succeed(result);
     }
 };

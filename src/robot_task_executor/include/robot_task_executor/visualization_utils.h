@@ -23,9 +23,9 @@ namespace robot_task_executor
  * then publishes three simultaneous visualizations:
  *
  *   1. nav_msgs/Path         — full smooth TCP path on /planned_tool_path
- *   2. MarkerArray (SPHERE_LIST) — discrete waypoint spheres on /planned_waypoints_marker
+ *   2. MarkerArray (SPHERE_LIST) — discrete dark-purple waypoint spheres on /planned_waypoints_marker
  *   3. Marker (SPHERE, x2)  — green start + red goal on /planned_waypoints_marker
- *   4. Marker (LINE_STRIP)   — golden path line on /planned_path_line_marker
+ *   4. Marker (LINE_STRIP)   — dark-blue path line on /planned_path_line_marker
  *
  * All markers are published with action OVERWRITE so stale paths are replaced.
  * Frame is resolved at publish time: tries viz_frame, falls back to planning_frame.

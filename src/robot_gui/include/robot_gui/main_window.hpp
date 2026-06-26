@@ -29,6 +29,7 @@ namespace robot_gui
 {
 
 class RvizPanel;
+class TaskActionController;
 
 class MainWindow : public QMainWindow
 {
@@ -59,6 +60,7 @@ private Q_SLOTS:
 
 private:
   void setup_defaults();
+  void setup_task_mode_tabs();
   void setup_image_display();
   void setup_navigation();
   void setup_robot_controls();
@@ -86,6 +88,7 @@ private:
   std::unique_ptr<Ui::RobotGUI_MainWindow> ui_;
   std::shared_ptr<RobotGuiNode> node_;
   std::unique_ptr<RvizPanel> rviz_panel_;
+  std::unique_ptr<TaskActionController> task_action_controller_;
   std::array<double, 6> commanded_deg_{};
   std::array<uint32_t, 6> last_flags_{};
   bool robot_servo_on_{false};

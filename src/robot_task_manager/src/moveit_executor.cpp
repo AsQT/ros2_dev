@@ -3,9 +3,16 @@
 #include <Eigen/Geometry>
 #include <exception>
 #include <chrono>
+#include <thread>
 
 namespace robot_task_manager
 {
+
+namespace
+{
+constexpr auto kPathMarkerColor = rviz_visual_tools::DARK_GREY;
+constexpr auto kTextMarkerColor = rviz_visual_tools::BLACK;
+}  // namespace
 
 void MoveItExecutor::initialize(
                       const rclcpp::Node::SharedPtr & node,
@@ -68,7 +75,8 @@ bool MoveItExecutor::goNamedTarget(
                       std::string & error_msg,
                       double velocity_scale,
                       double acceleration_scale,
-                      double planning_time)
+                      double planning_time,
+                      bool execute)
 {
   std::lock_guard<std::mutex> lock(motion_mutex_);
 
@@ -94,8 +102,7 @@ bool MoveItExecutor::goNamedTarget(
 
   moveit::planning_interface::MoveGroupInterface::Plan plan;
 
-  const auto plan_result = move_group_->execute(plan);
-  std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+  const auto plan_result = move_group_->plan(plan);
 
   if (plan_result != moveit::core::MoveItErrorCode::SUCCESS) {
     error_msg = "Planning to named target failed: " + target_name;
@@ -107,9 +114,15 @@ bool MoveItExecutor::goNamedTarget(
 
   if (joint_model_group) {
     visual_tools_->deleteAllMarkers();
-    visual_tools_->publishText(Eigen::Isometry3d::Identity(), "GoHome path", rviz_visual_tools::WHITE, rviz_visual_tools::XLARGE);
-    visual_tools_->publishTrajectoryLine(plan.trajectory, joint_model_group);
+    visual_tools_->publishText(Eigen::Isometry3d::Identity(), "GoHome path", kTextMarkerColor, rviz_visual_tools::XLARGE);
+    visual_tools_->publishTrajectoryLine(plan.trajectory, joint_model_group, kPathMarkerColor);
     visual_tools_->trigger();
+  }
+
+  if (!execute) {
+    publishText("Named target planning succeeded; execution skipped");
+    error_msg.clear();
+    return true;
   }
 
   publishText("Executing named target: " + target_name);
@@ -130,7 +143,8 @@ bool MoveItExecutor::moveToPose(
                       std::string & error_msg,
                       double velocity_scale,
                       double acceleration_scale,
-                      double planning_time)
+                      double planning_time,
+                      bool execute)
 {
   std::lock_guard<std::mutex> lock(motion_mutex_);
 
@@ -166,8 +180,15 @@ bool MoveItExecutor::moveToPose(
     move_group_->getRobotModel()->getJointModelGroup(planning_group_);
 
   if (joint_model_group) {
-    visual_tools_->publishTrajectoryLine(plan.trajectory, joint_model_group);
+    visual_tools_->publishTrajectoryLine(plan.trajectory, joint_model_group, kPathMarkerColor);
     visual_tools_->trigger();
+  }
+
+  if (!execute) {
+    move_group_->clearPoseTargets();
+    publishText("Pose planning succeeded; execution skipped");
+    error_msg.clear();
+    return true;
   }
 
   publishText("Executing_pose_target");
@@ -191,7 +212,8 @@ bool MoveItExecutor::moveToPoseCartesian(
                       std::string & error_msg,
                       double velocity_scale,
                       double acceleration_scale,
-                      double planning_time)
+                      double planning_time,
+                      bool execute)
 {
   std::lock_guard<std::mutex> lock(motion_mutex_);
 
@@ -239,14 +261,20 @@ bool MoveItExecutor::moveToPoseCartesian(
     move_group_->getRobotModel()->getJointModelGroup(planning_group_);
 
   if (joint_model_group) {
-    visual_tools_->publishTrajectoryLine(trajectory, joint_model_group);
+    visual_tools_->publishTrajectoryLine(trajectory, joint_model_group, kPathMarkerColor);
     visual_tools_->trigger();
   }
 
-  publishText("Executing_cartesian_path");
-
   moveit::planning_interface::MoveGroupInterface::Plan plan;
   plan.trajectory = trajectory;
+
+  if (!execute) {
+    publishText("Cartesian planning succeeded; execution skipped");
+    error_msg.clear();
+    return true;
+  }
+
+  publishText("Executing_cartesian_path");
 
   const auto exec_result = move_group_->execute(plan);
 
@@ -264,7 +292,8 @@ bool MoveItExecutor::checkerBoard(
                       std::string & error_msg,
                       double velocity_scale,
                       double acceleration_scale,
-                      double planning_time)
+                      double planning_time,
+                      bool execute)
 {
   std::lock_guard<std::mutex> lock(motion_mutex_);
 
@@ -350,14 +379,20 @@ bool MoveItExecutor::checkerBoard(
     move_group_->getRobotModel()->getJointModelGroup(planning_group_);
 
   if (joint_model_group) {
-    visual_tools_->publishTrajectoryLine(trajectory, joint_model_group);
+    visual_tools_->publishTrajectoryLine(trajectory, joint_model_group, kPathMarkerColor);
     visual_tools_->trigger();
   }
 
-  publishText("Executing_cartesian_path");
-
   moveit::planning_interface::MoveGroupInterface::Plan plan;
   plan.trajectory = trajectory;
+
+  if (!execute) {
+    publishText("Checker board planning succeeded; execution skipped");
+    error_msg.clear();
+    return true;
+  }
+
+  publishText("Executing_cartesian_path");
 
   const auto exec_result = move_group_->execute(plan);
 
@@ -395,7 +430,7 @@ void MoveItExecutor::publishText(const std::string & text)
   visual_tools_->publishText(
                   text_pose,
                   text,
-                  rviz_visual_tools::WHITE,
+                  kTextMarkerColor,
                   rviz_visual_tools::XLARGE);
   visual_tools_->trigger();
 }

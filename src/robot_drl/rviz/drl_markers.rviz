@@ -57,7 +57,7 @@ Visualization Manager:
     - Alpha: 1
       Buffer Length: 1
       Class: rviz_default_plugins/PoseArray
-      Color: 0; 255; 255
+      Color: 0; 26; 153
       Enabled: true
       Head Length: 0.03
       Head Radius: 0.01

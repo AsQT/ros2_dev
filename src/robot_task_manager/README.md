@@ -2,6 +2,10 @@
 
 ROS 2 task manager providing high-level actions (`GoHome`, `MoveToPose`, `MoveGripper`, `PickPlace`, `CheckerBoard`, etc.) built on top of MoveIt 2.
 
+All action goals include `execute`. Use `execute: true` for the previous plan-and-execute behavior, or `execute: false` to plan/validate only and skip motion.
+
+RViz planning markers published through MoveItVisualTools use a dark path color and black text so planned paths remain visible on light RViz backgrounds.
+
 ## Package Structure
 
 ```
@@ -50,7 +54,7 @@ ros2 launch robot_task_manager task_servers_sim.launch.py
 Return robot to home position.
 
 ```bash
-ros2 action send_goal /gohome robot_task_manager/action/GoHome "{start: true}" --feedback
+ros2 action send_goal /gohome robot_task_manager/action/GoHome "{start: true, execute: true}" --feedback
 ```
 
 ### MoveToPose
@@ -59,7 +63,14 @@ Move end-effector to a target pose.
 
 ```bash
 ros2 action send_goal /move_to_pose robot_task_manager/action/MoveToPose \
-  "{target_pose: {position: {x: 0.4, y: 0.1, z: 0.35}, orientation: {x: 1.0, y: 0.0, z: 0.0, w: 0.0}}, velocity_scale: 0.5}" --feedback
+  "{target_pose: {position: {x: 0.4, y: 0.1, z: 0.35}, orientation: {x: 1.0, y: 0.0, z: 0.0, w: 0.0}}, velocity_scale: 0.5, execute: true}" --feedback
+```
+
+Plan only:
+
+```bash
+ros2 action send_goal /move_to_pose robot_task_manager/action/MoveToPose \
+  "{target_pose: {position: {x: 0.4, y: 0.1, z: 0.35}, orientation: {x: 1.0, y: 0.0, z: 0.0, w: 0.0}}, velocity_scale: 0.5, execute: false}" --feedback
 ```
 
 ### MoveGripper
@@ -67,7 +78,7 @@ ros2 action send_goal /move_to_pose robot_task_manager/action/MoveToPose \
 Open/close the gripper.
 
 ```bash
-ros2 action send_goal /move_gripper robot_task_manager/action/MoveGripper "{position: 0.03}" --feedback
+ros2 action send_goal /move_gripper robot_task_manager/action/MoveGripper "{position: 0.03, execute: true}" --feedback
 ```
 
 ### PickPlace
@@ -78,7 +89,7 @@ Pick an object from `pose_pick` and place it at `pose_place`.
 ros2 action send_goal /pickplace robot_task_manager/action/PickPlace \
   "{pose_pick: {position: {x: 0.40, y: 0.10, z: 0.03}, orientation: {x: 1.0, y: 0.0, z: 0.0, w: 0.0}}, \
    pose_place: {position: {x: 0.30, y: -0.10, z: 0.1}, orientation: {x: 1.0, y: 0.0, z: 0.0, w: 0.0}}, \
-   gripper: 0.025, velocity_scale: 0.2}" --feedback
+   gripper: 0.025, velocity_scale: 0.2, execute: true}" --feedback
 ```
 
 ### CheckerBoard
@@ -87,7 +98,7 @@ Scan a grid of positions on the table (useful for calibration / workspace mappin
 
 ```bash
 ros2 action send_goal /move_checker_board robot_task_manager/action/CheckerBoard \
-  "{step: 0.1, velocity_scale: 0.1}" --feedback
+  "{step: 0.1, velocity_scale: 0.1, execute: true}" --feedback
 ```
 
 ### RepeatabilityTest
@@ -99,7 +110,7 @@ Sequence:
 1. `MoveToPose` to `retract_pose`
 2. For each loop: Cartesian move to `meas_pose`, wait 2 seconds, Cartesian back to `retract_pose`, move to `disturb_pose_1`, move to `disturb_pose_2`, move back to `retract_pose`
 
-`meas_pose` is computed from `retract_pose`; `axis=0` adds `meas_offset` to `x`, and `axis=1` adds it to `y`. Orientation is always copied from `retract_pose`. `velocity_scale` is passed to both `MoveToPose` and `MoveToPoseCartesian`.
+`meas_pose` is computed from `retract_pose`; `axis=0` adds `meas_offset` to `x`, `axis=1` adds it to `y`, and `axis=2` adds it to `z`. Orientation is always copied from `retract_pose`. `velocity_scale` is used for the slow measurement segment; other moves use `fast_velocity_scale` default `0.7`.
 
 Build:
 
@@ -119,21 +130,28 @@ Quick X-axis test, 3 loops:
 
 ```bash
 ros2 launch robot_task_manager repeatability_test_client.launch.py \
-  axis:=0 repeat_count:=3 meas_offset:=0.02 velocity_scale:=0.25
+  axis:=0 repeat_count:=3 meas_offset:=0.02 velocity_scale:=0.25 execute:=true
 ```
 
 Quick Y-axis test:
 
 ```bash
 ros2 launch robot_task_manager repeatability_test_client.launch.py \
-  axis:=1 repeat_count:=3 meas_offset:=0.02 velocity_scale:=0.25
+  axis:=1 repeat_count:=3 meas_offset:=0.02 velocity_scale:=0.25 execute:=true
+```
+
+Quick Z-axis plan-only test:
+
+```bash
+ros2 launch robot_task_manager repeatability_test_client.launch.py \
+  axis:=2 repeat_count:=3 meas_offset:=0.02 velocity_scale:=0.25 execute:=false
 ```
 
 Direct action command:
 
 ```bash
 ros2 action send_goal /repeatability_test robot_task_manager/action/RepeatabilityTest \
-  "{retract_pose: {header: {frame_id: 'world'}, pose: {position: {x: 0.40, y: 0.00, z: 0.18}, orientation: {x: 0.7071068, y: 0.7071068, z: 0.0, w: 0.0}}}, disturb_pose_1: {header: {frame_id: 'world'}, pose: {position: {x: 0.35, y: -0.08, z: 0.18}, orientation: {x: 0.7071068, y: 0.7071068, z: 0.0, w: 0.0}}}, disturb_pose_2: {header: {frame_id: 'world'}, pose: {position: {x: 0.45, y: 0.08, z: 0.18}, orientation: {x: 0.7071068, y: 0.7071068, z: 0.0, w: 0.0}}}, axis: 0, meas_offset: 0.02, repeat_count: 3, velocity_scale: 0.25}" --feedback
+  "{retract_pose: {header: {frame_id: 'world'}, pose: {position: {x: 0.40, y: 0.00, z: 0.18}, orientation: {x: 0.7071068, y: 0.7071068, z: 0.0, w: 0.0}}}, disturb_pose_1: {header: {frame_id: 'world'}, pose: {position: {x: 0.35, y: -0.08, z: 0.18}, orientation: {x: 0.7071068, y: 0.7071068, z: 0.0, w: 0.0}}}, disturb_pose_2: {header: {frame_id: 'world'}, pose: {position: {x: 0.45, y: 0.08, z: 0.18}, orientation: {x: 0.7071068, y: 0.7071068, z: 0.0, w: 0.0}}}, axis: 0, meas_offset: 0.02, repeat_count: 3, velocity_scale: 0.25, execute: true}" --feedback
 ```
 
 ## Robot Workspace Limits (approximate)

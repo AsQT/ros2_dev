@@ -39,6 +39,17 @@ public:
     server_wait_timeout_s_ = declare_parameter<double>("server_wait_timeout_s", 5.0);
     action_result_timeout_s_ = declare_parameter<double>("action_result_timeout_s", 120.0);
     measurement_settle_time_s_ = declare_parameter<double>("measurement_settle_time_s", 2.0);
+    fast_velocity_scale_ = declare_parameter<double>("fast_velocity_scale", 0.7);
+    if (!std::isfinite(fast_velocity_scale_) ||
+      fast_velocity_scale_ <= 0.0 ||
+      fast_velocity_scale_ > 1.0)
+    {
+      RCLCPP_WARN(
+        get_logger(),
+        "Invalid fast_velocity_scale=%.3f, clamping to 0.7",
+        fast_velocity_scale_);
+      fast_velocity_scale_ = 0.7;
+    }
 
     move_to_pose_client_ =
       rclcpp_action::create_client<MoveToPose>(this, "move_to_pose");
@@ -60,6 +71,7 @@ private:
   double server_wait_timeout_s_ = 5.0;
   double action_result_timeout_s_ = 120.0;
   double measurement_settle_time_s_ = 2.0;
+  double fast_velocity_scale_ = 0.7;
 
   rclcpp_action::Server<RepeatabilityTest>::SharedPtr action_server_;
   rclcpp_action::Client<MoveToPose>::SharedPtr move_to_pose_client_;
@@ -110,9 +122,10 @@ private:
     }
 
     if (goal->axis != RepeatabilityTest::Goal::AXIS_X &&
-      goal->axis != RepeatabilityTest::Goal::AXIS_Y)
+      goal->axis != RepeatabilityTest::Goal::AXIS_Y &&
+      goal->axis != RepeatabilityTest::Goal::AXIS_Z)
     {
-      error_msg = "axis must be AXIS_X(0) or AXIS_Y(1)";
+      error_msg = "axis must be AXIS_X(0), AXIS_Y(1), or AXIS_Z(2)";
       return false;
     }
 
@@ -270,11 +283,13 @@ private:
   bool call_move_to_pose(
     const geometry_msgs::msg::Pose & target_pose,
     double velocity_scale,
+    bool execute,
     std::string & error_msg)
   {
     MoveToPose::Goal goal;
     goal.target_pose = target_pose;
     goal.velocity_scale = velocity_scale;
+    goal.execute = execute;
 
     auto result_timeout =
       std::chrono::duration_cast<std::chrono::nanoseconds>(
@@ -333,11 +348,13 @@ private:
   bool call_move_to_pose_cartesian(
     const geometry_msgs::msg::Pose & target_pose,
     double velocity_scale,
+    bool execute,
     std::string & error_msg)
   {
     MoveToPoseCartesian::Goal goal;
     goal.target_pose = target_pose;
     goal.velocity_scale = velocity_scale;
+    goal.execute = execute;
 
     auto result_timeout =
       std::chrono::duration_cast<std::chrono::nanoseconds>(
@@ -406,8 +423,12 @@ private:
     const auto goal = goal_handle->get_goal();
     std::string error_msg;
     int32_t completed_count = 0;
+    const bool execute_motion = goal->execute;
 
-    publish_feedback(goal_handle, 0, "Waiting for sub action servers");
+    publish_feedback(
+      goal_handle,
+      0,
+      execute_motion ? "Waiting for sub action servers" : "Waiting for sub action servers (plan-only)");
     if (!wait_for_sub_action_servers(error_msg)) {
       abort_goal(goal_handle, result, error_msg, completed_count);
       return;
@@ -421,20 +442,27 @@ private:
     geometry_msgs::msg::Pose meas_pose = retract_pose;
     if (goal->axis == RepeatabilityTest::Goal::AXIS_X) {
       meas_pose.position.x = retract_pose.position.x + goal->meas_offset;
-    } else {
+    } else if (goal->axis == RepeatabilityTest::Goal::AXIS_Y) {
       meas_pose.position.y = retract_pose.position.y + goal->meas_offset;
+    } else {
+      meas_pose.position.z = retract_pose.position.z + goal->meas_offset;
     }
 
     RCLCPP_INFO(
       get_logger(),
-      "RepeatabilityTest start | axis=%u | offset=%.4f | repeats=%d | vel=%.2f",
+      "RepeatabilityTest start | mode=%s | axis=%u | offset=%.4f | repeats=%d | meas_vel=%.2f | fast_vel=%.2f",
+      execute_motion ? "execute" : "plan-only",
       goal->axis,
       goal->meas_offset,
       goal->repeat_count,
-      goal->velocity_scale);
+      goal->velocity_scale,
+      fast_velocity_scale_);
 
-    publish_feedback(goal_handle, 0, "MoveToPose to retract_pose");
-    if (!call_move_to_pose(retract_pose, goal->velocity_scale, error_msg)) {
+    publish_feedback(
+      goal_handle,
+      0,
+      execute_motion ? "MoveToPose to retract_pose" : "Plan MoveToPose to retract_pose (execution skipped)");
+    if (!call_move_to_pose(retract_pose, fast_velocity_scale_, execute_motion, error_msg)) {
       abort_goal(goal_handle, result, "Initial MoveToPose to retract_pose failed: " + error_msg, completed_count);
       return;
     }
@@ -444,37 +472,54 @@ private:
         return;
       }
 
-      publish_feedback(goal_handle, i, "Cartesian to meas_pose");
-      if (!call_move_to_pose_cartesian(meas_pose, goal->velocity_scale, error_msg)) {
+      publish_feedback(
+        goal_handle,
+        i,
+        execute_motion ? "Cartesian to meas_pose" : "Plan Cartesian to meas_pose (execution skipped)");
+      if (!call_move_to_pose_cartesian(meas_pose, goal->velocity_scale, execute_motion, error_msg)) {
         abort_goal(goal_handle, result, fail_message("Cartesian to meas_pose", i, error_msg), completed_count);
         return;
       }
 
-      publish_feedback(goal_handle, i, "Wait at meas_pose");
-      if (!sleep_with_cancel(goal_handle, result, completed_count)) {
-        return;
+      publish_feedback(goal_handle, i, execute_motion ? "Wait at meas_pose" : "Skip measurement settle wait (plan-only)");
+      if (execute_motion) {
+        if (!sleep_with_cancel(goal_handle, result, completed_count)) {
+          return;
+        }
       }
 
-      publish_feedback(goal_handle, i, "Cartesian back to retract_pose");
-      if (!call_move_to_pose_cartesian(retract_pose, goal->velocity_scale, error_msg)) {
+      publish_feedback(
+        goal_handle,
+        i,
+        execute_motion ? "Cartesian back to retract_pose" : "Plan Cartesian back to retract_pose (execution skipped)");
+      if (!call_move_to_pose_cartesian(retract_pose, fast_velocity_scale_, execute_motion, error_msg)) {
         abort_goal(goal_handle, result, fail_message("Cartesian back to retract_pose", i, error_msg), completed_count);
         return;
       }
 
-      publish_feedback(goal_handle, i, "MoveToPose to disturb_pose_1");
-      if (!call_move_to_pose(goal->disturb_pose_1.pose, goal->velocity_scale, error_msg)) {
+      publish_feedback(
+        goal_handle,
+        i,
+        execute_motion ? "MoveToPose to disturb_pose_1" : "Plan MoveToPose to disturb_pose_1 (execution skipped)");
+      if (!call_move_to_pose(goal->disturb_pose_1.pose, fast_velocity_scale_, execute_motion, error_msg)) {
         abort_goal(goal_handle, result, fail_message("MoveToPose to disturb_pose_1", i, error_msg), completed_count);
         return;
       }
 
-      publish_feedback(goal_handle, i, "MoveToPose to disturb_pose_2");
-      if (!call_move_to_pose(goal->disturb_pose_2.pose, goal->velocity_scale, error_msg)) {
+      publish_feedback(
+        goal_handle,
+        i,
+        execute_motion ? "MoveToPose to disturb_pose_2" : "Plan MoveToPose to disturb_pose_2 (execution skipped)");
+      if (!call_move_to_pose(goal->disturb_pose_2.pose, fast_velocity_scale_, execute_motion, error_msg)) {
         abort_goal(goal_handle, result, fail_message("MoveToPose to disturb_pose_2", i, error_msg), completed_count);
         return;
       }
 
-      publish_feedback(goal_handle, i, "MoveToPose back to retract_pose");
-      if (!call_move_to_pose(retract_pose, goal->velocity_scale, error_msg)) {
+      publish_feedback(
+        goal_handle,
+        i,
+        execute_motion ? "MoveToPose back to retract_pose" : "Plan MoveToPose back to retract_pose (execution skipped)");
+      if (!call_move_to_pose(retract_pose, fast_velocity_scale_, execute_motion, error_msg)) {
         abort_goal(goal_handle, result, fail_message("MoveToPose back to retract_pose", i, error_msg), completed_count);
         return;
       }
@@ -483,10 +528,15 @@ private:
     }
 
     clear_active_goals();
-    publish_feedback(goal_handle, goal->repeat_count, "RepeatabilityTest completed");
+    publish_feedback(
+      goal_handle,
+      goal->repeat_count,
+      execute_motion ? "RepeatabilityTest completed" : "RepeatabilityTest planning completed (execution skipped)");
 
     result->success = true;
-    result->message = "RepeatabilityTest completed successfully";
+    result->message = execute_motion ?
+      "RepeatabilityTest completed successfully" :
+      "RepeatabilityTest planning success; execution skipped";
     result->completed_count = completed_count;
     goal_handle->succeed(result);
 
