@@ -34,8 +34,8 @@ class RepeatabilityTestClient(Node):
         pose.pose.position.x = x
         pose.pose.position.y = y
         pose.pose.position.z = z
-        pose.pose.orientation.x = 0.7071068
-        pose.pose.orientation.y = 0.7071068
+        pose.pose.orientation.x = 1.0
+        pose.pose.orientation.y = 1.0
         pose.pose.orientation.z = 0.0
         pose.pose.orientation.w = 0.0
         return pose

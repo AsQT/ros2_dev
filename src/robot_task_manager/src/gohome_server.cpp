@@ -49,12 +49,8 @@ private:
 
   rclcpp_action::GoalResponse handle_goal(
                                 const rclcpp_action::GoalUUID &,
-                                std::shared_ptr<const GoHome::Goal> goal)
+                                std::shared_ptr<const GoHome::Goal>)
                     {
-                      if (!goal->start) {
-                        RCLCPP_WARN(get_logger(), "Reject goal because start=false");
-                        return rclcpp_action::GoalResponse::REJECT;
-                      }
                       return rclcpp_action::GoalResponse::ACCEPT_AND_EXECUTE;
                     }
 
@@ -81,6 +77,12 @@ private:
       auto result     = std::make_shared<GoHome::Result>();
 
       const auto goal = goal_handle->get_goal();
+      if (!goal->start) {
+        result->success = false;
+        result->message = "GoHome rejected because start=false";
+        goal_handle->abort(result);
+        return;
+      }
 
       feedback->current_step = goal->execute ? "Planning to home" : "Planning to home (plan-only)";
       feedback->progress = 30.0f;
@@ -103,7 +105,7 @@ private:
       result->success = true;
       result->message = goal->execute ?
         "Robot moved to home successfully" :
-        "GoHome planning success; execution skipped";
+        "GoHome plan succeeded; execution skipped because execute=false";
       goal_handle->succeed(result);
     }
 };

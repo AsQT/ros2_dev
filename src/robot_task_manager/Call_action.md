@@ -22,9 +22,28 @@ Simulation trong `task_servers_sim.launch.py`:
 ros2 launch robot_task_manager task_servers_sim.launch.py
 ```
 
+Backend DRL:
+
+- Hai launch trên mặc định chạy thêm `robot_drl/drl_unified_planner_node` để cung cấp `/drl_unified_planner_node/set_parameters`, `/drl/plan`, `/drl/clear_trajectory`, `/drl/execute_forward`, `/drl/get_execution_status` và topic `/drl/forward_trajectory_poses`.
+- Nếu backend DRL đã được chạy ở launch khác, dùng `enable_drl_backend:=false` để tránh trùng node:
+
+```bash
+ros2 launch robot_task_manager task_servers.launch.py enable_drl_backend:=false
+ros2 launch robot_task_manager task_servers_sim.launch.py enable_drl_backend:=false
+```
+
+Kiểm tra backend:
+
+```bash
+ros2 service list | grep drl
+ros2 service list | grep drl_unified_planner_node
+```
+
+Trong `task_servers.launch.py`, backend DRL mặc định tắt phụ thuộc PlanningScene/IK service ngoài launch để `/move_pose_rl execute=false` có thể plan ngay với task servers/mock GUI.
+
 Lưu ý:
 
-- `task_servers.launch.py` hiện comment `gohome_server`, nên nếu cần `/gohome` với launch này thì bỏ comment hoặc chạy riêng `gohome_server`.
+- `task_servers.launch.py` và `task_servers_sim.launch.py` đều chạy `gohome_server`.
 - `task_servers_sim.launch.py` có chạy đủ các server, gồm cả `gohome_server`.
 - `CheckerBoard` server tạo action tên `/move_checker_board`.
 
@@ -39,6 +58,7 @@ Lưu ý:
 | `/move_gripper` | `robot_task_manager/action/MoveGripper` | `move_gripper_server` | `move_gripper_action_server` | Mở/đóng gripper theo width |
 | `/pickplace` | `robot_task_manager/action/PickPlace` | `pickplace_server` | `pickplace_action_server` | Composite pick-place qua MoveToPose, Cartesian, Gripper |
 | `/drl_pickplace` | `robot_task_manager/action/DrlPickPlace` | `drl_pickplace_server` | `drl_pickplace_action_server` | Pick-place có DRL planner |
+| `/move_pose_rl` | `robot_task_manager/action/MovePoseRl` | `move_pose_rl_server` | `move_pose_rl_action_server` | DRL plan/execute tới target pose |
 | `/repeatability_test` | `robot_task_manager/action/RepeatabilityTest` | `repeatability_test_server` | `repeatability_test_action_server` | Test repeatability theo X/Y/Z |
 
 Tất cả action có field goal `execute`.
@@ -60,6 +80,10 @@ Tất cả action có field goal `execute`.
 | Gripper server | `base_frame` | `link_6` |
 | DRL PickPlace thêm | `planning_frame` | `base_link` |
 | DRL PickPlace thêm | `ee_link` | `tcp_link` |
+| DRL PickPlace thêm | `planner_node_name` | `/drl_unified_planner_node` |
+| MovePoseRl thêm | `planning_frame` | `base_link` |
+| MovePoseRl thêm | `ee_link` | `tcp_link` |
+| MovePoseRl thêm | `planner_node_name` | `/drl_unified_planner_node` |
 
 `task_servers_sim.launch.py` giống trên nhưng thêm `use_sim_time: true`.
 
@@ -68,8 +92,8 @@ Tất cả action có field goal `execute`.
 Goal:
 
 ```yaml
-start: true
-execute: true
+start: bool
+execute: bool
 ```
 
 Result:
@@ -96,13 +120,23 @@ Server parameters:
 
 Rule:
 
-- Goal bị reject nếu `start: false`.
+- `start: false`: action fail rõ ràng với message `GoHome rejected because start=false`.
+- `execute: true`: plan và execute về named target `home`.
+- `execute: false`: chỉ plan về `home`, không execute, không làm robot di chuyển.
+- Trước khi plan, server lấy current robot state từ `/joint_states`; nếu timeout thì không plan từ zero/default state.
 
-CLI:
+CLI execute:
 
 ```bash
 ros2 action send_goal /gohome robot_task_manager/action/GoHome \
   "{start: true, execute: true}" --feedback
+```
+
+CLI plan-only:
+
+```bash
+ros2 action send_goal /gohome robot_task_manager/action/GoHome \
+  "{start: true, execute: false}" --feedback
 ```
 
 Chạy bằng `task_manager_client`:
@@ -155,7 +189,7 @@ CLI:
 
 ```bash
 ros2 action send_goal /move_to_pose robot_task_manager/action/MoveToPose \
-  "{target_pose: {position: {x: 0.40, y: 0.10, z: 0.35}, orientation: {x: 0.0, y: 0.0, z: 0.0, w: 1.0}}, velocity_scale: 0.5, execute: true}" \
+  "{target_pose: {position: {x: 0.40, y: 0.10, z: 0.35}, orientation: {x: 1.0, y: 1.0, z: 0.0, w: 0.0}}, velocity_scale: 0.1, execute: true}" \
   --feedback
 ```
 
@@ -163,7 +197,7 @@ Plan only:
 
 ```bash
 ros2 action send_goal /move_to_pose robot_task_manager/action/MoveToPose \
-  "{target_pose: {position: {x: 0.40, y: 0.10, z: 0.35}, orientation: {x: 0.0, y: 0.0, z: 0.0, w: 1.0}}, velocity_scale: 0.5, execute: false}" \
+  "{target_pose: {position: {x: 0.40, y: 0.10, z: 0.35}, orientation: {x: 1.0, y: 1.0, z: 0.0, w: 0.0}}, velocity_scale: 0.1, execute: false}" \
   --feedback
 ```
 
@@ -178,7 +212,7 @@ Default goal trong `task_manager_client`:
 | Field | Default |
 |---|---|
 | `target_pose.position` | `{x: 0.40, y: 0.10, z: 0.35}` |
-| `target_pose.orientation` | `{x: 0.0, y: 0.0, z: 0.0, w: 1.0}` |
+| `target_pose.orientation` | `{x: 1.0, y: 1.0, z: 0.0, w: 0.0}` |
 | `velocity_scale` | `0.5` |
 | `execute` | `true` |
 
@@ -222,7 +256,7 @@ CLI:
 
 ```bash
 ros2 action send_goal /move_to_pose_cartesian robot_task_manager/action/MoveToPoseCartesian \
-  "{target_pose: {position: {x: 0.40, y: 0.10, z: 0.35}, orientation: {x: 0.0, y: 0.0, z: 0.0, w: 1.0}}, velocity_scale: 0.5, execute: true}" \
+  "{target_pose: {position: {x: 0.40, y: 0.10, z: 0.35}, orientation: {x: 1.0, y: 1.0, z: 0.0, w: 0.0}}, velocity_scale: 0.5, execute: true}" \
   --feedback
 ```
 
@@ -230,7 +264,7 @@ Plan only:
 
 ```bash
 ros2 action send_goal /move_to_pose_cartesian robot_task_manager/action/MoveToPoseCartesian \
-  "{target_pose: {position: {x: 0.40, y: 0.10, z: 0.35}, orientation: {x: 0.0, y: 0.0, z: 0.0, w: 1.0}}, velocity_scale: 0.5, execute: false}" \
+  "{target_pose: {position: {x: 0.40, y: 0.10, z: 0.35}, orientation: {x: 1.0, y: 1.0, z: 0.0, w: 0.0}}, velocity_scale: 0.5, execute: false}" \
   --feedback
 ```
 
@@ -245,7 +279,7 @@ Default goal trong `task_manager_client`:
 | Field | Default |
 |---|---|
 | `target_pose.position` | `{x: 0.40, y: 0.10, z: 0.35}` |
-| `target_pose.orientation` | `{x: 0.0, y: 0.0, z: 0.0, w: 1.0}` |
+| `target_pose.orientation` | `{x: 1.0, y: 1.0, z: 0.0, w: 0.0}` |
 | `velocity_scale` | `0.5` |
 | `execute` | `true` |
 
@@ -518,7 +552,7 @@ CLI:
 
 ```bash
 ros2 action send_goal /drl_pickplace robot_task_manager/action/DrlPickPlace \
-  "{target_pick: {header: {frame_id: 'base_link'}, pose: {position: {x: 0.40, y: 0.05, z: 0.08}, orientation: {x: 0.7071068, y: 0.7071068, z: 0.0, w: 0.0}}}, target_place: {header: {frame_id: 'base_link'}, pose: {position: {x: 0.34, y: -0.10, z: 0.08}, orientation: {x: 0.7071068, y: 0.7071068, z: 0.0, w: 0.0}}}, gripper_close_width_m: 0.028, execute: true}" \
+  "{target_pick: {header: {frame_id: 'base_link'}, pose: {position: {x: 0.40, y: 0.05, z: 0.08}, orientation: {x: 1.0, y: 1.0, z: 0.0, w: 0.0}}}, target_place: {header: {frame_id: 'base_link'}, pose: {position: {x: 0.34, y: -0.10, z: 0.08}, orientation: {x: 1.0, y: 1.0, z: 0.0, w: 0.0}}}, gripper_close_width_m: 0.028, execute: true}" \
   --feedback
 ```
 
@@ -526,7 +560,7 @@ Plan only:
 
 ```bash
 ros2 action send_goal /drl_pickplace robot_task_manager/action/DrlPickPlace \
-  "{target_pick: {header: {frame_id: 'base_link'}, pose: {position: {x: 0.40, y: 0.05, z: 0.08}, orientation: {x: 0.7071068, y: 0.7071068, z: 0.0, w: 0.0}}}, target_place: {header: {frame_id: 'base_link'}, pose: {position: {x: 0.34, y: -0.10, z: 0.08}, orientation: {x: 0.7071068, y: 0.7071068, z: 0.0, w: 0.0}}}, gripper_close_width_m: 0.028, execute: false}" \
+  "{target_pick: {header: {frame_id: 'base_link'}, pose: {position: {x: 0.40, y: 0.05, z: 0.08}, orientation: {x: 1.0, y: 1.0, z: 0.0, w: 0.0}}}, target_place: {header: {frame_id: 'base_link'}, pose: {position: {x: 0.34, y: -0.10, z: 0.08}, orientation: {x: 1.0, y: 1.0, z: 0.0, w: 0.0}}}, gripper_close_width_m: 0.028, execute: false}" \
   --feedback
 ```
 
@@ -695,7 +729,7 @@ CLI:
 
 ```bash
 ros2 action send_goal /repeatability_test robot_task_manager/action/RepeatabilityTest \
-  "{retract_pose: {header: {frame_id: 'world'}, pose: {position: {x: 0.40, y: 0.00, z: 0.18}, orientation: {x: 0.7071068, y: 0.7071068, z: 0.0, w: 0.0}}}, disturb_pose_1: {header: {frame_id: 'world'}, pose: {position: {x: 0.35, y: -0.08, z: 0.18}, orientation: {x: 0.7071068, y: 0.7071068, z: 0.0, w: 0.0}}}, disturb_pose_2: {header: {frame_id: 'world'}, pose: {position: {x: 0.45, y: 0.08, z: 0.18}, orientation: {x: 0.7071068, y: 0.7071068, z: 0.0, w: 0.0}}}, axis: 0, meas_offset: 0.02, repeat_count: 3, velocity_scale: 0.25, execute: true}" \
+  "{retract_pose: {header: {frame_id: 'world'}, pose: {position: {x: 0.40, y: 0.00, z: 0.18}, orientation: {x: 1.0, y: 1.0, z: 0.0, w: 0.0}}}, disturb_pose_1: {header: {frame_id: 'world'}, pose: {position: {x: 0.35, y: -0.08, z: 0.18}, orientation: {x: 1.0, y: 1.0, z: 0.0, w: 0.0}}}, disturb_pose_2: {header: {frame_id: 'world'}, pose: {position: {x: 0.45, y: 0.08, z: 0.18}, orientation: {x: 1.0, y: 1.0, z: 0.0, w: 0.0}}}, axis: 0, meas_offset: 0.02, repeat_count: 3, velocity_scale: 0.25, execute: true}" \
   --feedback
 ```
 
@@ -703,7 +737,7 @@ Plan only:
 
 ```bash
 ros2 action send_goal /repeatability_test robot_task_manager/action/RepeatabilityTest \
-  "{retract_pose: {header: {frame_id: 'world'}, pose: {position: {x: 0.40, y: 0.00, z: 0.18}, orientation: {x: 0.7071068, y: 0.7071068, z: 0.0, w: 0.0}}}, disturb_pose_1: {header: {frame_id: 'world'}, pose: {position: {x: 0.35, y: -0.08, z: 0.18}, orientation: {x: 0.7071068, y: 0.7071068, z: 0.0, w: 0.0}}}, disturb_pose_2: {header: {frame_id: 'world'}, pose: {position: {x: 0.45, y: 0.08, z: 0.18}, orientation: {x: 0.7071068, y: 0.7071068, z: 0.0, w: 0.0}}}, axis: 2, meas_offset: 0.02, repeat_count: 3, velocity_scale: 0.25, execute: false}" \
+  "{retract_pose: {header: {frame_id: 'world'}, pose: {position: {x: 0.40, y: 0.00, z: 0.18}, orientation: {x: 1.0, y: 1.0, z: 0.0, w: 0.0}}}, disturb_pose_1: {header: {frame_id: 'world'}, pose: {position: {x: 0.35, y: -0.08, z: 0.18}, orientation: {x: 1.0, y: 1.0, z: 0.0, w: 0.0}}}, disturb_pose_2: {header: {frame_id: 'world'}, pose: {position: {x: 0.45, y: 0.08, z: 0.18}, orientation: {x: 1.0, y: 1.0, z: 0.0, w: 0.0}}}, axis: 2, meas_offset: 0.02, repeat_count: 3, velocity_scale: 0.25, execute: false}" \
   --feedback
 ```
 
@@ -748,7 +782,120 @@ Default goal pose trong `repeatability_test_client.py`:
 | `retract_pose.position` | `{x: 0.40, y: 0.00, z: 0.18}` |
 | `disturb_pose_1.position` | `{x: 0.35, y: -0.08, z: 0.18}` |
 | `disturb_pose_2.position` | `{x: 0.45, y: 0.08, z: 0.18}` |
-| orientation của cả 3 pose | `{x: 0.7071068, y: 0.7071068, z: 0.0, w: 0.0}` |
+| orientation của cả 3 pose | `{x: 1.0, y: 1.0, z: 0.0, w: 0.0}` |
+
+## `/move_pose_rl`
+
+Action mới dùng DRL planner để plan/execute từ TCP hiện tại tới target pose.
+
+| Thuộc tính | Giá trị |
+|---|---|
+| Action name | `/move_pose_rl` |
+| Type | `robot_task_manager/action/MovePoseRl` |
+| Server executable | `move_pose_rl_server` |
+| Node name | `move_pose_rl_action_server` |
+
+Goal:
+
+```yaml
+target_pose: geometry_msgs/Pose
+velocity_scale: float64
+execute: bool
+```
+
+Result:
+
+```yaml
+success: bool
+message: string
+failed_stage: string
+```
+
+Feedback:
+
+```yaml
+current_stage: string
+progress: float32
+current_pose: geometry_msgs/PoseStamped
+```
+
+Server parameters:
+
+| Parameter | Default |
+|---|---|
+| `planning_frame` | `base_link` |
+| `ee_link` | `tcp_link` |
+| `position_tolerance_m` | `0.01` |
+| `orientation_tolerance_rad` | `0.10` |
+| `drl_timeout_sec` | `120.0` |
+| `drl_trajectory_endpoint_tolerance_m` | `0.015` |
+| `drl_plan_attempts` | `3` |
+| `tf_timeout_sec` | `2.0` |
+| `sub_action_timeout_sec` | `60.0` |
+| `planner_node_name` | `/drl_unified_planner_node` |
+
+Rule validation:
+
+- `velocity_scale` phải finite và nằm trong `(0, 1]`.
+- `target_pose` phải finite.
+- Quaternion của `target_pose.orientation` phải hợp lệ, norm > `1e-12`.
+- Server phải nhận được `/joint_states` trước khi plan; nếu không có sẽ abort tại `get_current_pose`.
+- Server phải lấy được TF current TCP từ `planning_frame <- ee_link`; nếu không có sẽ abort tại `get_current_pose`.
+- DRL planner hiện nhận target qua parameter `manual_default_target` dạng `{x, y, z}`, nên endpoint/final check là position-only. Quaternion vẫn được validate để giữ interface đồng bộ với `/move_to_pose`.
+
+Sequence:
+
+1. Validate goal.
+2. Chờ `/joint_states` và lấy current TCP pose qua TF.
+3. Set DRL planner params: `manual_default_target`, `preposition_before_plan=false`, `update_start_tcp_from_tf_before_plan=true`, `auto_execute_after_plan=false`.
+4. Gọi `/drl/clear_trajectory`.
+5. Gọi `/drl/plan`.
+6. Chờ trajectory mới trên `/drl/forward_trajectory_poses`.
+7. Kiểm tra final waypoint gần target theo `drl_trajectory_endpoint_tolerance_m`.
+8. Nếu `execute=false`: succeed, không gọi `/drl/execute_forward`.
+9. Nếu `execute=true`: gọi `/drl/execute_forward`, poll `/drl/get_execution_status`, rồi kiểm tra final TCP position.
+
+Plan only:
+
+```bash
+ros2 action send_goal /move_pose_rl robot_task_manager/action/MovePoseRl \
+  "{target_pose: {position: {x: 0.40, y: 0.10, z: 0.35}, orientation: {x: 0.0, y: 0.0, z: 0.0, w: 1.0}}, velocity_scale: 0.5, execute: false}" \
+  --feedback
+```
+
+Execute:
+
+```bash
+ros2 action send_goal /move_pose_rl robot_task_manager/action/MovePoseRl \
+  "{target_pose: {position: {x: 0.40, y: 0.10, z: 0.35}, orientation: {x: 0.0, y: 0.0, z: 0.0, w: 1.0}}, velocity_scale: 0.5, execute: true}" \
+  --feedback
+```
+
+Chạy bằng `task_manager_client`:
+
+```bash
+ros2 run robot_task_manager task_manager_client --ros-args \
+  -p task_name:=move_pose_rl
+```
+
+Plan-only qua client:
+
+```bash
+ros2 run robot_task_manager task_manager_client --ros-args \
+  -p task_name:=move_pose_rl \
+  -p execute:=false
+```
+
+Default goal trong `task_manager_client`:
+
+| Field | Default |
+|---|---|
+| `target_pose.position` | `{x: 0.40, y: 0.10, z: 0.35}` |
+| `target_pose.orientation` | `{x: 0.0, y: 0.0, z: 0.0, w: 1.0}` |
+| `velocity_scale` | `0.5` |
+| `execute` | `true` |
+
+Có thể override position trong client bằng `target_x`, `target_y`, `target_z`.
 
 ## `task_manager_client`
 
@@ -767,6 +914,7 @@ Các giá trị đang có:
 | `gohome` | `/gohome` |
 | `move_to_pose` | `/move_to_pose` |
 | `move_to_pose_cartesian` | `/move_to_pose_cartesian` |
+| `move_pose_rl` | `/move_pose_rl` |
 | `checker_board` | `/move_checker_board` |
 | `move_gripper` | `/move_gripper` |
 | `pickplace` | `/pickplace` |

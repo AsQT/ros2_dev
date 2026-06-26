@@ -471,7 +471,7 @@ void execute(
   publish_feedback(goal_handle, execute_motion ? "Open gripper" : "Plan open gripper (execution skipped)", 5.0f);
 
   if (!call_move_gripper(open_gripper_position_, execute_motion, error_msg)) {
-    abort_goal(goal_handle, result, "Open gripper failed: " + error_msg);
+    abort_goal(goal_handle, result, "open_gripper: " + error_msg);
     return;
   }
 
@@ -483,7 +483,7 @@ void execute(
   publish_feedback(goal_handle, execute_motion ? "Move to pick approach" : "Plan move to pick approach (execution skipped)", 20.0f);
 
   if (!call_move_to_pose(pick_approach, goal->velocity_scale, execute_motion, error_msg)) {
-    abort_goal(goal_handle, result, "Move to pick approach failed: " + error_msg);
+    abort_goal(goal_handle, result, "move_to_pre_pick: " + error_msg);
     return;
   }
 
@@ -491,11 +491,20 @@ void execute(
     return;
   }
 
+  if (!execute_motion) {
+    abort_goal(
+      goal_handle,
+      result,
+      "cartesian_to_pick: PickPlace plan-only staged composite planning is not fully supported "
+      "without executing intermediate segments; refusing to report fake success.");
+    return;
+  }
+
   // 3. Cartesian down to pick
   publish_feedback(goal_handle, execute_motion ? "Cartesian down to pick" : "Plan Cartesian down to pick (execution skipped)", 35.0f);
 
   if (!call_move_to_pose_cartesian(goal->pose_pick, goal->velocity_scale, execute_motion, error_msg)) {
-    abort_goal(goal_handle, result, "Cartesian down to pick failed: " + error_msg);
+    abort_goal(goal_handle, result, "cartesian_to_pick: " + error_msg);
     return;
   }
 
@@ -507,7 +516,7 @@ void execute(
   publish_feedback(goal_handle, execute_motion ? "Close gripper" : "Plan close gripper (execution skipped)", 50.0f);
 
   if (!call_move_gripper(goal->gripper, execute_motion, error_msg)) {
-    abort_goal(goal_handle, result, "Close gripper failed: " + error_msg);
+    abort_goal(goal_handle, result, "close_gripper: " + error_msg);
     return;
   }
 
@@ -532,7 +541,7 @@ void execute(
   publish_feedback(goal_handle, execute_motion ? "Move directly to place approach" : "Plan move directly to place approach (execution skipped)", 70.0f);
 
   if (!call_move_to_pose(place_approach, goal->velocity_scale, execute_motion, error_msg)) {
-    abort_goal(goal_handle, result, "Move directly to place approach failed: " + error_msg);
+    abort_goal(goal_handle, result, "move_to_pre_place: " + error_msg);
     return;
   }
 
@@ -544,7 +553,7 @@ void execute(
   publish_feedback(goal_handle, execute_motion ? "Cartesian down to place" : "Plan Cartesian down to place (execution skipped)", 85.0f);
 
   if (!call_move_to_pose_cartesian(goal->pose_place, goal->velocity_scale, execute_motion, error_msg)) {
-    abort_goal(goal_handle, result, "Cartesian down to place failed: " + error_msg);
+    abort_goal(goal_handle, result, "cartesian_to_place: " + error_msg);
     return;
   }
 
@@ -556,7 +565,7 @@ void execute(
   publish_feedback(goal_handle, execute_motion ? "Open gripper to release" : "Plan open gripper to release (execution skipped)", 95.0f);
 
   if (!call_move_gripper(open_gripper_position_, execute_motion, error_msg)) {
-    abort_goal(goal_handle, result, "Release object failed: " + error_msg);
+    abort_goal(goal_handle, result, "release_gripper: " + error_msg);
     return;
   }
 

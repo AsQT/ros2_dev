@@ -9,6 +9,7 @@
 
 #include "moveit/move_group_interface/move_group_interface.hpp"
 #include "moveit/planning_scene_interface/planning_scene_interface.hpp"
+#include "moveit/robot_state/robot_state.hpp"
 
 namespace robot_task_manager
 {
@@ -50,6 +51,10 @@ private:
     double velocity_scale,
     double acceleration_scale,
     std::string & error_msg) const;
+
+  moveit::core::RobotStatePtr getCurrentStateForPlanning(
+    double timeout_sec,
+    std::string & error_msg);
 
 private:
   rclcpp::Node::SharedPtr node_;

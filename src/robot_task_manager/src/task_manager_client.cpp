@@ -8,6 +8,7 @@
 #include "robot_task_manager/action/go_home.hpp"
 #include "robot_task_manager/action/move_to_pose.hpp"
 #include "robot_task_manager/action/move_to_pose_cartesian.hpp"
+#include "robot_task_manager/action/move_pose_rl.hpp"
 #include "robot_task_manager/action/checker_board.hpp"
 #include "robot_task_manager/action/move_gripper.hpp"
 #include "robot_task_manager/action/pick_place.hpp"
@@ -24,6 +25,9 @@ public:
 
   using MoveToPoseCartesian             = robot_task_manager::action::MoveToPoseCartesian ;
   using MoveToPoseCartesianGoalHandle   = rclcpp_action::ClientGoalHandle<MoveToPoseCartesian>;
+
+  using MovePoseRl                      = robot_task_manager::action::MovePoseRl;
+  using MovePoseRlGoalHandle            = rclcpp_action::ClientGoalHandle<MovePoseRl>;
   
   using CheckerBoard                    = robot_task_manager::action::CheckerBoard ;
   using CheckerBoardGoalHandle          = rclcpp_action::ClientGoalHandle<CheckerBoard>;
@@ -39,9 +43,13 @@ public:
   {
     declare_parameter<std::string>("task_name", "gohome");
     declare_parameter<bool>("execute", true);
+    declare_parameter<double>("target_x", 0.40);
+    declare_parameter<double>("target_y", 0.10);
+    declare_parameter<double>("target_z", 0.35);
     gohome_client_                  = rclcpp_action::create_client<GoHome>(this, "gohome");
     move_to_pose_client_            = rclcpp_action::create_client<MoveToPose>(this, "move_to_pose");
     move_to_pose_cartesian_client_  = rclcpp_action::create_client<MoveToPoseCartesian>(this, "move_to_pose_cartesian");
+    move_pose_rl_client_            = rclcpp_action::create_client<MovePoseRl>(this, "move_pose_rl");
     move_checker_board_client_      = rclcpp_action::create_client<CheckerBoard>(this, "move_checker_board");
     move_gripper_client_            = rclcpp_action::create_client<MoveGripper>(this, "move_gripper");
     pickplace_client_               = rclcpp_action::create_client<PickPlace>(this, "pickplace");
@@ -60,6 +68,8 @@ public:
       send_move_to_pose();
     } else if (task_name == "move_to_pose_cartesian") {
       send_move_to_pose_cartesian();
+    } else if (task_name == "move_pose_rl") {
+      send_move_pose_rl();
     } else if (task_name == "checker_board") {
       send_checker_board();
     } else if (task_name == "move_gripper") {
@@ -74,6 +84,7 @@ private:
   rclcpp_action::Client<GoHome>::SharedPtr gohome_client_;
   rclcpp_action::Client<MoveToPose>::SharedPtr move_to_pose_client_;
   rclcpp_action::Client<MoveToPoseCartesian>::SharedPtr move_to_pose_cartesian_client_;
+  rclcpp_action::Client<MovePoseRl>::SharedPtr move_pose_rl_client_;
   rclcpp_action::Client<CheckerBoard>::SharedPtr move_checker_board_client_;
   rclcpp_action::Client<MoveGripper>::SharedPtr move_gripper_client_;
   rclcpp_action::Client<PickPlace>::SharedPtr pickplace_client_;
@@ -130,10 +141,10 @@ private:
     goal.target_pose.position.x = 0.40;
     goal.target_pose.position.y = 0.10;
     goal.target_pose.position.z = 0.35;
-    goal.target_pose.orientation.x = 0.0;
-    goal.target_pose.orientation.y = 0.0;
+    goal.target_pose.orientation.x = 1.0;
+    goal.target_pose.orientation.y = 1.0;
     goal.target_pose.orientation.z = 0.0;
-    goal.target_pose.orientation.w = 1.0;
+    goal.target_pose.orientation.w = 0.0;
     goal.velocity_scale = 0.5;
     goal.execute = get_parameter("execute").as_bool();
 
@@ -176,10 +187,10 @@ private:
     goal.target_pose.position.x = 0.40;
     goal.target_pose.position.y = 0.10;
     goal.target_pose.position.z = 0.35;
-    goal.target_pose.orientation.x = 0.0;
-    goal.target_pose.orientation.y = 0.0;
+    goal.target_pose.orientation.x = 1.0;
+    goal.target_pose.orientation.y = 1.0;
     goal.target_pose.orientation.z = 0.0;
-    goal.target_pose.orientation.w = 1.0;
+    goal.target_pose.orientation.w = 0.0;
     goal.velocity_scale = 0.5;
     goal.execute = get_parameter("execute").as_bool();
 
@@ -208,6 +219,66 @@ private:
         }
         rclcpp::shutdown(); };
     move_to_pose_cartesian_client_->async_send_goal(goal, options);
+  }
+
+  /*___________________________________________________________________________*/
+  void send_move_pose_rl()
+  {
+    if (!move_pose_rl_client_->wait_for_action_server(std::chrono::seconds(5))) {
+      RCLCPP_ERROR(get_logger(), "MovePoseRl server not available");
+      rclcpp::shutdown();
+      return;
+    }
+
+    MovePoseRl::Goal goal;
+    goal.target_pose.position.x = get_parameter("target_x").as_double();
+    goal.target_pose.position.y = get_parameter("target_y").as_double();
+    goal.target_pose.position.z = get_parameter("target_z").as_double();
+    goal.target_pose.orientation.x = 0.0;
+    goal.target_pose.orientation.y = 0.0;
+    goal.target_pose.orientation.z = 0.0;
+    goal.target_pose.orientation.w = 1.0;
+    goal.velocity_scale = 0.5;
+    goal.execute = get_parameter("execute").as_bool();
+
+    rclcpp_action::Client<MovePoseRl>::SendGoalOptions options;
+    options.goal_response_callback = [this](const MovePoseRlGoalHandle::SharedPtr & handle)
+      {
+        if (!handle) {
+          RCLCPP_ERROR(get_logger(), "MovePoseRl goal rejected");
+        } else {
+          RCLCPP_INFO(get_logger(), "MovePoseRl goal accepted");
+        }
+      };
+
+    options.feedback_callback =
+      [this](
+        MovePoseRlGoalHandle::SharedPtr,
+        const std::shared_ptr<const MovePoseRl::Feedback> feedback)
+      {
+        RCLCPP_INFO(
+          get_logger(),
+          "[MovePoseRl feedback] %s | %.1f%%",
+          feedback->current_stage.c_str(),
+          feedback->progress);
+      };
+
+    options.result_callback =
+      [this](const MovePoseRlGoalHandle::WrappedResult & result)
+      {
+        RCLCPP_INFO(get_logger(), "MovePoseRl result code = %d", static_cast<int>(result.code));
+        if (result.result) {
+          RCLCPP_INFO(
+            get_logger(),
+            "success: %s | failed_stage: %s | message: %s",
+            result.result->success ? "true" : "false",
+            result.result->failed_stage.c_str(),
+            result.result->message.c_str());
+        }
+        rclcpp::shutdown();
+      };
+
+    move_pose_rl_client_->async_send_goal(goal, options);
   }
 
   /*___________________________________________________________________________*/

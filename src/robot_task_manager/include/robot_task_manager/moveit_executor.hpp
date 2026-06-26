@@ -9,6 +9,7 @@
 #include "geometry_msgs/msg/pose.hpp"
 #include "moveit/move_group_interface/move_group_interface.hpp"
 #include "moveit/planning_scene_interface/planning_scene_interface.hpp"
+#include "moveit/robot_state/robot_state.hpp"
 #include "moveit_msgs/msg/collision_object.hpp"
 #include "moveit_visual_tools/moveit_visual_tools.h"
 
@@ -79,6 +80,10 @@ private:
     double velocity_scale,
     double acceleration_scale,
     std::string & error_msg) const;
+
+  moveit::core::RobotStatePtr getCurrentStateForPlanning(
+    double timeout_sec,
+    std::string & error_msg);
 
   rclcpp::Node::SharedPtr node_;
   std::shared_ptr<moveit::planning_interface::MoveGroupInterface> move_group_;

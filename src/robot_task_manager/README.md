@@ -47,6 +47,24 @@ ros2 launch robot_task_manager task_servers.launch.py
 ros2 launch robot_task_manager task_servers_sim.launch.py
 ```
 
+Hai launch trên tự chạy thêm backend DRL `robot_drl/drl_unified_planner_node` để phục vụ `/move_pose_rl` và `/drl_pickplace`. Nếu đã chạy backend DRL từ launch khác, tắt backend nội bộ để tránh trùng node:
+
+```bash
+ros2 launch robot_task_manager task_servers.launch.py enable_drl_backend:=false
+ros2 launch robot_task_manager task_servers_sim.launch.py enable_drl_backend:=false
+```
+
+Backend mặc định tạo `/drl_unified_planner_node/set_parameters`, `/drl/plan`, `/drl/clear_trajectory`, `/drl/execute_forward`, `/drl/get_execution_status` và topic `/drl/forward_trajectory_poses`. Các action RL dùng `planner_node_name:=/drl_unified_planner_node` mặc định.
+
+Kiểm tra nhanh backend DRL:
+
+```bash
+ros2 service list | grep drl
+ros2 service list | grep drl_unified_planner_node
+```
+
+Trong `task_servers.launch.py`, backend DRL được cấu hình để không bắt buộc `/get_planning_scene` và `/compute_ik`, giúp `/move_pose_rl execute=false` plan được khi chỉ chạy task servers/mock GUI.
+
 ## Actions
 
 ### GoHome
@@ -63,14 +81,14 @@ Move end-effector to a target pose.
 
 ```bash
 ros2 action send_goal /move_to_pose robot_task_manager/action/MoveToPose \
-  "{target_pose: {position: {x: 0.4, y: 0.1, z: 0.35}, orientation: {x: 1.0, y: 0.0, z: 0.0, w: 0.0}}, velocity_scale: 0.5, execute: true}" --feedback
+  "{target_pose: {position: {x: 0.4, y: 0.1, z: 0.35}, orientation: {x: 1.0, y: 1.0, z: 0.0, w: 0.0}}, velocity_scale: 0.5, execute: true}" --feedback
 ```
 
 Plan only:
 
 ```bash
 ros2 action send_goal /move_to_pose robot_task_manager/action/MoveToPose \
-  "{target_pose: {position: {x: 0.4, y: 0.1, z: 0.35}, orientation: {x: 1.0, y: 0.0, z: 0.0, w: 0.0}}, velocity_scale: 0.5, execute: false}" --feedback
+  "{target_pose: {position: {x: 0.4, y: 0.1, z: 0.35}, orientation: {x: 1.0, y: 1.0, z: 0.0, w: 0.0}}, velocity_scale: 0.5, execute: false}" --feedback
 ```
 
 ### MoveGripper
@@ -87,8 +105,8 @@ Pick an object from `pose_pick` and place it at `pose_place`.
 
 ```bash
 ros2 action send_goal /pickplace robot_task_manager/action/PickPlace \
-  "{pose_pick: {position: {x: 0.40, y: 0.10, z: 0.03}, orientation: {x: 1.0, y: 0.0, z: 0.0, w: 0.0}}, \
-   pose_place: {position: {x: 0.30, y: -0.10, z: 0.1}, orientation: {x: 1.0, y: 0.0, z: 0.0, w: 0.0}}, \
+  "{pose_pick: {position: {x: 0.40, y: 0.10, z: 0.03}, orientation: {x: 1.0, y: 1.0, z: 0.0, w: 0.0}}, \
+   pose_place: {position: {x: 0.30, y: -0.10, z: 0.1}, orientation: {x: 1.0, y: 1.0, z: 0.0, w: 0.0}}, \
    gripper: 0.025, velocity_scale: 0.2, execute: true}" --feedback
 ```
 
@@ -151,7 +169,7 @@ Direct action command:
 
 ```bash
 ros2 action send_goal /repeatability_test robot_task_manager/action/RepeatabilityTest \
-  "{retract_pose: {header: {frame_id: 'world'}, pose: {position: {x: 0.40, y: 0.00, z: 0.18}, orientation: {x: 0.7071068, y: 0.7071068, z: 0.0, w: 0.0}}}, disturb_pose_1: {header: {frame_id: 'world'}, pose: {position: {x: 0.35, y: -0.08, z: 0.18}, orientation: {x: 0.7071068, y: 0.7071068, z: 0.0, w: 0.0}}}, disturb_pose_2: {header: {frame_id: 'world'}, pose: {position: {x: 0.45, y: 0.08, z: 0.18}, orientation: {x: 0.7071068, y: 0.7071068, z: 0.0, w: 0.0}}}, axis: 0, meas_offset: 0.02, repeat_count: 3, velocity_scale: 0.25, execute: true}" --feedback
+  "{retract_pose: {header: {frame_id: 'world'}, pose: {position: {x: 0.40, y: 0.00, z: 0.18}, orientation: {x: 1.0, y: 1.0, z: 0.0, w: 0.0}}}, disturb_pose_1: {header: {frame_id: 'world'}, pose: {position: {x: 0.35, y: -0.08, z: 0.18}, orientation: {x: 1.0, y: 1.0, z: 0.0, w: 0.0}}}, disturb_pose_2: {header: {frame_id: 'world'}, pose: {position: {x: 0.45, y: 0.08, z: 0.18}, orientation: {x: 1.0, y: 1.0, z: 0.0, w: 0.0}}}, axis: 0, meas_offset: 0.02, repeat_count: 3, velocity_scale: 0.25, execute: true}" --feedback
 ```
 
 ## Robot Workspace Limits (approximate)
@@ -167,5 +185,6 @@ ros2 action send_goal /repeatability_test robot_task_manager/action/Repeatabilit
 - `moveit_ros_planning_interface` — MoveIt planning and execution
 - `moveit_visual_tools` — Visualization in RViz
 - `moveit_core` — Core MoveIt types
+- `robot_drl` — DRL backend for `/move_pose_rl` and `/drl_pickplace`
 - `rclcpp_action` — Action server/client
 - `tf2` / `tf2_ros` — Transform handling

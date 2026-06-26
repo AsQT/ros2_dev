@@ -216,7 +216,10 @@ private:
       out.pose.orientation = tf.transform.rotation;
     } catch (const std::exception & e) {
       RCLCPP_WARN(get_logger(), "Current EE pose TF unavailable: %s", e.what());
-      out.pose.orientation.w = 1.0;
+      out.pose.orientation.x = 1.0;
+      out.pose.orientation.y = 1.0;
+      out.pose.orientation.z = 0.0;
+      out.pose.orientation.w = 0.0;
     }
     return out;
   }

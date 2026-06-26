@@ -21,6 +21,7 @@ public:
 
 private:
   void configureUi();
+  void updateMovePoseCartesianStyle(bool checked);
   void addPlanButtonIfMissing(const QString & object_name, const QString & tab_name);
   void addRepeatAxisSelectorIfMissing();
   void connectButton(const QString & object_name, const std::function<void()> & callback);
@@ -30,9 +31,10 @@ private:
   void sendPickPlace(bool execute);
   void sendPickPlaceVision(bool execute);
   void sendDrlPickPlace(bool execute);
+  void sendMovePoseRl(bool execute);
   void sendCheckerBoard(bool execute);
   void sendRepeatabilityTest(bool execute);
-  void logMovePoseRlUnavailable();
+  void setMovePoseRlBusy(bool busy);
   void logCancelUnavailable(const QString & label);
   void appendActionLog(const QString & msg);
 

@@ -4,15 +4,19 @@
 #include <chrono>
 #include <limits>
 #include <string>
+#include <thread>
 #include <vector>
 
 #include <QCheckBox>
 #include <QComboBox>
 #include <QDateTime>
 #include <QFrame>
+#include <QFont>
 #include <QLabel>
 #include <QLineEdit>
 #include <QMetaObject>
+#include <QPointer>
+#include <QPlainTextEdit>
 #include <QPushButton>
 #include <QTextEdit>
 #include <QWidget>
@@ -23,6 +27,7 @@
 #include "robot_task_manager/action/checker_board.hpp"
 #include "robot_task_manager/action/drl_pick_place.hpp"
 #include "robot_task_manager/action/move_gripper.hpp"
+#include "robot_task_manager/action/move_pose_rl.hpp"
 #include "robot_task_manager/action/move_to_pose.hpp"
 #include "robot_task_manager/action/move_to_pose_cartesian.hpp"
 #include "robot_task_manager/action/pick_place.hpp"
@@ -35,6 +40,7 @@ namespace
 using CheckerBoard = robot_task_manager::action::CheckerBoard;
 using DrlPickPlace = robot_task_manager::action::DrlPickPlace;
 using MoveGripper = robot_task_manager::action::MoveGripper;
+using MovePoseRl = robot_task_manager::action::MovePoseRl;
 using MoveToPose = robot_task_manager::action::MoveToPose;
 using MoveToPoseCartesian = robot_task_manager::action::MoveToPoseCartesian;
 using PickPlace = robot_task_manager::action::PickPlace;
@@ -47,8 +53,8 @@ constexpr double kDefaultOriX = 1.0;
 constexpr double kDefaultOriY = 1.0;
 constexpr double kDefaultOriZ = 0.0;
 constexpr double kDefaultOriW = 0.0;
-constexpr double kDrlRepeatOriX = 0.7071068;
-constexpr double kDrlRepeatOriY = 0.7071068;
+constexpr double kDrlRepeatOriX = 1.0;
+constexpr double kDrlRepeatOriY = 1.0;
 constexpr double kDrlRepeatOriZ = 0.0;
 constexpr double kDrlRepeatOriW = 0.0;
 constexpr double kDefaultGripperOpen = 0.048;
@@ -336,6 +342,13 @@ QString feedbackString(const DrlPickPlace::Feedback & feedback)
     .arg(feedback.progress, 0, 'f', 2);
 }
 
+QString feedbackString(const MovePoseRl::Feedback & feedback)
+{
+  return QString("[MovePoseRL] %1 | %2%")
+    .arg(QString::fromStdString(feedback.current_stage))
+    .arg(feedback.progress, 0, 'f', 1);
+}
+
 QString feedbackString(const RepeatabilityTest::Feedback & feedback)
 {
   return QString("feedback index=%1 step=%2")
@@ -381,6 +394,40 @@ QString resultString<DrlPickPlace>(
     .arg(result.result->success ? "true" : "false")
     .arg(QString::fromStdString(result.result->failed_stage))
     .arg(QString::fromStdString(result.result->message));
+}
+
+template<>
+QString resultString<MovePoseRl>(
+  const rclcpp_action::ClientGoalHandle<MovePoseRl>::WrappedResult & result)
+{
+  if (!result.result) {
+    return QString("[MovePoseRL] FAILED at result: empty result, code=%1")
+      .arg(resultCodeToString(result.code));
+  }
+  if (result.result->success && result.code == rclcpp_action::ResultCode::SUCCEEDED) {
+    return QString("[MovePoseRL] SUCCESS: %1")
+      .arg(QString::fromStdString(result.result->message));
+  }
+  return QString("[MovePoseRL] FAILED at %1: %2")
+    .arg(QString::fromStdString(result.result->failed_stage))
+    .arg(QString::fromStdString(result.result->message));
+}
+
+bool serviceAvailable(
+  const rclcpp::Node::SharedPtr & node,
+  const std::string & service_name,
+  std::chrono::milliseconds timeout)
+{
+  const auto deadline = std::chrono::steady_clock::now() + timeout;
+  while (std::chrono::steady_clock::now() < deadline) {
+    const auto services = node->get_service_names_and_types();
+    if (services.find(service_name) != services.end()) {
+      return true;
+    }
+    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+  }
+  const auto services = node->get_service_names_and_types();
+  return services.find(service_name) != services.end();
 }
 
 template<typename ActionT>
@@ -445,8 +492,8 @@ void TaskActionController::connectUiSignals()
   connectButton("btnResetTask", [this]() {sendMovePose(true);});
   connectButton("btnStopTask", [this]() {logCancelUnavailable("Move Pose");});
 
-  connectButton("btnRLPlan", [this]() {logMovePoseRlUnavailable();});
-  connectButton("btnRLExecute", [this]() {logMovePoseRlUnavailable();});
+  connectButton("btnRLPlan", [this]() {sendMovePoseRl(false);});
+  connectButton("btnRLExecute", [this]() {sendMovePoseRl(true);});
   connectButton("btnRLStop", [this]() {logCancelUnavailable("Move Pose RL");});
 
   connectButton("btnTaskGripperOpen", [this]() {
@@ -484,12 +531,61 @@ void TaskActionController::connectUiSignals()
 
 void TaskActionController::configureUi()
 {
+  auto * action_log = root_->findChild<QPlainTextEdit *>("txtActionLog");
+  if (action_log == nullptr) {
+    auto * log_frame = root_->findChild<QFrame *>("ShortLogArea");
+    auto * old_large_label = root_->findChild<QLabel *>("txtMainLog");
+    if (log_frame != nullptr && old_large_label != nullptr) {
+      action_log = new QPlainTextEdit(log_frame);
+      action_log->setObjectName("txtActionLog");
+      action_log->setGeometry(old_large_label->geometry());
+      action_log->show();
+      old_large_label->hide();
+    }
+  }
+  if (action_log != nullptr) {
+    action_log->setReadOnly(true);
+    action_log->setLineWrapMode(QPlainTextEdit::NoWrap);
+    QFont log_font("DejaVu Sans Mono");
+    log_font.setPointSize(8);
+    action_log->setFont(log_font);
+    action_log->setStyleSheet(
+      "QPlainTextEdit#txtActionLog {"
+      "font-family: 'DejaVu Sans Mono';"
+      "font-size: 8pt;"
+      "color: #111111;"
+      "background-color: white;"
+      "border: 1px solid #b8c6d1;"
+      "border-radius: 5px;"
+      "padding: 4px;"
+      "}");
+    action_log->setPlainText("[Action Log] ready");
+  } else if (auto * fallback_label = root_->findChild<QLabel *>("txtMainLog")) {
+    fallback_label->setWordWrap(true);
+    fallback_label->setAlignment(Qt::AlignLeft | Qt::AlignTop);
+    QFont log_font("DejaVu Sans Mono");
+    log_font.setPointSize(8);
+    fallback_label->setFont(log_font);
+    fallback_label->setStyleSheet(
+      "QLabel#txtMainLog {"
+      "font-family: 'DejaVu Sans Mono';"
+      "font-size: 8pt;"
+      "color: #111111;"
+      "background-color: white;"
+      "padding: 6px;"
+      "}");
+  }
+
   if (auto * label = root_->findChild<QLabel *>("lblMovePoseCartesian")) {
     label->hide();
   }
   if (auto * checkbox = root_->findChild<QCheckBox *>("chkMovePoseCartesian")) {
     checkbox->setText("Move Pose Cartesian");
     checkbox->setGeometry(0, 54, 337, 30);
+    updateMovePoseCartesianStyle(checkbox->isChecked());
+    connect(checkbox, &QCheckBox::toggled, this, [this](bool checked) {
+      updateMovePoseCartesianStyle(checked);
+    });
   }
 
   addPlanButtonIfMissing("btnPickPlacePlan", "tabPickPlace");
@@ -497,6 +593,52 @@ void TaskActionController::configureUi()
   addPlanButtonIfMissing("btnPickPlaceRLPlan", "tabPickPlaceRL");
   addPlanButtonIfMissing("btnCheckBoardPlan", "tabCheckBoard");
   addRepeatAxisSelectorIfMissing();
+}
+
+void TaskActionController::updateMovePoseCartesianStyle(bool checked)
+{
+  auto * checkbox = root_->findChild<QCheckBox *>("chkMovePoseCartesian");
+  if (checkbox == nullptr) {
+    return;
+  }
+
+  if (checked) {
+    checkbox->setStyleSheet(
+      "QCheckBox {"
+      "color: #005A70;"
+      "font-weight: 600;"
+      "background-color: #D9F4F7;"
+      "border: 1px solid #01BABE;"
+      "border-radius: 4px;"
+      "padding: 3px 6px;"
+      "spacing: 8px;"
+      "}"
+      "QCheckBox::indicator {"
+      "width: 18px;"
+      "height: 18px;"
+      "border: 1px solid #01BABE;"
+      "border-radius: 3px;"
+      "background-color: #01BABE;"
+      "}");
+    return;
+  }
+
+  checkbox->setStyleSheet(
+    "QCheckBox {"
+    "color: #333333;"
+    "background-color: transparent;"
+    "border: 1px solid transparent;"
+    "border-radius: 4px;"
+    "padding: 3px 6px;"
+    "spacing: 8px;"
+    "}"
+    "QCheckBox::indicator {"
+    "width: 18px;"
+    "height: 18px;"
+    "border: 1px solid #b8cfd8;"
+    "border-radius: 3px;"
+    "background-color: white;"
+    "}");
 }
 
 void TaskActionController::addPlanButtonIfMissing(const QString & object_name, const QString & tab_name)
@@ -563,11 +705,11 @@ void TaskActionController::appendActionLog(const QString & msg)
       const QString line = QString("[%1] %2")
         .arg(QDateTime::currentDateTime().toString("HH:mm:ss"))
         .arg(msg);
-      auto * log = root_->findChild<QTextEdit *>("txtActionLog");
-      if (log == nullptr) {
-        log = root_->findChild<QTextEdit *>("txtROS2Log");
+      if (auto * action_log = root_->findChild<QPlainTextEdit *>("txtActionLog")) {
+        action_log->appendPlainText(line);
+        return;
       }
-      if (log != nullptr) {
+      if (auto * log = root_->findChild<QTextEdit *>("txtROS2Log")) {
         log->append(line);
       }
       if (auto * short_log = root_->findChild<QLabel *>("txtMainLog")) {
@@ -577,10 +719,19 @@ void TaskActionController::appendActionLog(const QString & msg)
     Qt::QueuedConnection);
 }
 
-void TaskActionController::logMovePoseRlUnavailable()
+void TaskActionController::setMovePoseRlBusy(bool busy)
 {
-  appendActionLog(QString::fromUtf8(
-    u8"Move Pose RL action chưa có mapping backend, chưa gửi goal."));
+  QMetaObject::invokeMethod(
+    root_,
+    [this, busy]() {
+      if (auto * plan = root_->findChild<QPushButton *>("btnRLPlan")) {
+        plan->setEnabled(!busy);
+      }
+      if (auto * execute = root_->findChild<QPushButton *>("btnRLExecute")) {
+        execute->setEnabled(!busy);
+      }
+    },
+    Qt::QueuedConnection);
 }
 
 void TaskActionController::logCancelUnavailable(const QString & label)
@@ -766,6 +917,137 @@ void TaskActionController::sendDrlPickPlace(bool execute)
   goal.execute = execute;
   sendGoal<DrlPickPlace>(
     node_, "/drl_pickplace", execute ? "Pick Place RL Start" : "Pick Place RL Plan", goal, log);
+}
+
+void TaskActionController::sendMovePoseRl(bool execute)
+{
+  const LogFn log = [this](const QString & msg) {appendActionLog(msg);};
+  double x = 0.40;
+  double y = 0.10;
+  double z = 0.35;
+  double velocity = kDefaultVelocityScale;
+  if (!readDouble(root_, "rlPosePositionX", x, "MovePoseRL X", log, &x) ||
+    !readDouble(root_, "rlPosePositionY", y, "MovePoseRL Y", log, &y) ||
+    !readDouble(root_, "rlPosePositionZ", z, "MovePoseRL Z", log, &z) ||
+    !readVelocity(root_, "txtVelocityScale", velocity, "MovePoseRL velocity_scale", log, &velocity))
+  {
+    return;
+  }
+
+  bool ok = true;
+  const auto orientation = orientationFromRpyFields(
+    root_,
+    "rlPoseOrientationRoll",
+    "rlPoseOrientationPitch",
+    "rlPoseOrientationYaw",
+    log,
+    &ok);
+  if (!ok) {
+    return;
+  }
+
+  MovePoseRl::Goal goal;
+  goal.target_pose = makePose(x, y, z, orientation);
+  goal.velocity_scale = velocity;
+  goal.execute = execute;
+
+  appendActionLog(execute ?
+    "[MovePoseRL] Sending execute goal..." :
+    "[MovePoseRL] Sending plan-only goal...");
+  setMovePoseRlBusy(true);
+
+  auto node = node_;
+  QPointer<TaskActionController> self(this);
+  std::thread([self, node, goal, execute]() {
+    using GoalHandle = rclcpp_action::ClientGoalHandle<MovePoseRl>;
+    using Client = rclcpp_action::Client<MovePoseRl>;
+    static std::vector<std::shared_ptr<void>> keep_clients_alive;
+
+    if (!self) {
+      return;
+    }
+
+    auto client = rclcpp_action::create_client<MovePoseRl>(node, "/move_pose_rl");
+    keep_clients_alive.push_back(client);
+
+    auto fail_preflight = [self](const QString & missing) {
+      if (!self) {
+        return;
+      }
+      self->appendActionLog(QString("[MovePoseRL] Backend not ready: missing %1.").arg(missing));
+      self->setMovePoseRlBusy(false);
+    };
+
+    if (!client->wait_for_action_server(std::chrono::seconds(2))) {
+      fail_preflight("/move_pose_rl action server");
+      return;
+    }
+
+    const std::vector<std::string> required_services = execute ?
+      std::vector<std::string>{
+        "/drl_unified_planner_node/set_parameters",
+        "/drl/clear_trajectory",
+        "/drl/plan",
+        "/drl/execute_forward",
+        "/drl/get_execution_status"} :
+      std::vector<std::string>{
+        "/drl_unified_planner_node/set_parameters",
+        "/drl/clear_trajectory",
+        "/drl/plan"};
+
+    for (const auto & service : required_services) {
+      if (!serviceAvailable(node, service, std::chrono::seconds(1))) {
+        if (service == "/drl_unified_planner_node/set_parameters") {
+          if (!self) {
+            return;
+          }
+          self->appendActionLog(QString(
+            "[MovePoseRL] Backend not ready: missing %1. "
+            "Please launch DRL planner node before using move_pose_rl.")
+            .arg(QString::fromStdString(service)));
+          self->setMovePoseRlBusy(false);
+          return;
+        }
+        fail_preflight(QString::fromStdString(service));
+        return;
+      }
+    }
+
+    typename Client::SendGoalOptions options;
+    options.goal_response_callback =
+      [self](const GoalHandle::SharedPtr & goal_handle) {
+        if (!self) {
+          return;
+        }
+        if (goal_handle) {
+          self->appendActionLog("[MovePoseRL] goal accepted.");
+          return;
+        }
+        self->appendActionLog("[MovePoseRL] FAILED at goal_response: goal rejected");
+        self->setMovePoseRlBusy(false);
+      };
+    options.feedback_callback =
+      [self](
+        GoalHandle::SharedPtr,
+        const std::shared_ptr<const MovePoseRl::Feedback> feedback) {
+        if (!self) {
+          return;
+        }
+        if (feedback) {
+          self->appendActionLog(feedbackString(*feedback));
+        }
+      };
+    options.result_callback =
+      [self](const GoalHandle::WrappedResult & result) {
+        if (!self) {
+          return;
+        }
+        self->appendActionLog(resultString<MovePoseRl>(result));
+        self->setMovePoseRlBusy(false);
+      };
+
+    client->async_send_goal(goal, options);
+  }).detach();
 }
 
 void TaskActionController::sendCheckerBoard(bool execute)

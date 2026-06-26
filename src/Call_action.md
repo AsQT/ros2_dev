@@ -518,7 +518,7 @@ CLI:
 
 ```bash
 ros2 action send_goal /drl_pickplace robot_task_manager/action/DrlPickPlace \
-  "{target_pick: {header: {frame_id: 'base_link'}, pose: {position: {x: 0.40, y: 0.05, z: 0.08}, orientation: {x: 0.7071068, y: 0.7071068, z: 0.0, w: 0.0}}}, target_place: {header: {frame_id: 'base_link'}, pose: {position: {x: 0.34, y: -0.10, z: 0.08}, orientation: {x: 0.7071068, y: 0.7071068, z: 0.0, w: 0.0}}}, gripper_close_width_m: 0.028, execute: true}" \
+  "{target_pick: {header: {frame_id: 'base_link'}, pose: {position: {x: 0.40, y: 0.05, z: 0.08}, orientation: {x: 1.0, y: 1.0, z: 0.0, w: 0.0}}}, target_place: {header: {frame_id: 'base_link'}, pose: {position: {x: 0.34, y: -0.10, z: 0.08}, orientation: {x: 1.0, y: 1.0, z: 0.0, w: 0.0}}}, gripper_close_width_m: 0.028, execute: true}" \
   --feedback
 ```
 
@@ -526,7 +526,7 @@ Plan only:
 
 ```bash
 ros2 action send_goal /drl_pickplace robot_task_manager/action/DrlPickPlace \
-  "{target_pick: {header: {frame_id: 'base_link'}, pose: {position: {x: 0.40, y: 0.05, z: 0.08}, orientation: {x: 0.7071068, y: 0.7071068, z: 0.0, w: 0.0}}}, target_place: {header: {frame_id: 'base_link'}, pose: {position: {x: 0.34, y: -0.10, z: 0.08}, orientation: {x: 0.7071068, y: 0.7071068, z: 0.0, w: 0.0}}}, gripper_close_width_m: 0.028, execute: false}" \
+  "{target_pick: {header: {frame_id: 'base_link'}, pose: {position: {x: 0.40, y: 0.05, z: 0.08}, orientation: {x: 1.0, y: 1.0, z: 0.0, w: 0.0}}}, target_place: {header: {frame_id: 'base_link'}, pose: {position: {x: 0.34, y: -0.10, z: 0.08}, orientation: {x: 1.0, y: 1.0, z: 0.0, w: 0.0}}}, gripper_close_width_m: 0.028, execute: false}" \
   --feedback
 ```
 
@@ -695,7 +695,7 @@ CLI:
 
 ```bash
 ros2 action send_goal /repeatability_test robot_task_manager/action/RepeatabilityTest \
-  "{retract_pose: {header: {frame_id: 'world'}, pose: {position: {x: 0.40, y: 0.00, z: 0.18}, orientation: {x: 0.7071068, y: 0.7071068, z: 0.0, w: 0.0}}}, disturb_pose_1: {header: {frame_id: 'world'}, pose: {position: {x: 0.35, y: -0.08, z: 0.18}, orientation: {x: 0.7071068, y: 0.7071068, z: 0.0, w: 0.0}}}, disturb_pose_2: {header: {frame_id: 'world'}, pose: {position: {x: 0.45, y: 0.08, z: 0.18}, orientation: {x: 0.7071068, y: 0.7071068, z: 0.0, w: 0.0}}}, axis: 0, meas_offset: 0.02, repeat_count: 3, velocity_scale: 0.25, execute: true}" \
+  "{retract_pose: {header: {frame_id: 'world'}, pose: {position: {x: 0.40, y: 0.00, z: 0.18}, orientation: {x: 1.0, y: 1.0, z: 0.0, w: 0.0}}}, disturb_pose_1: {header: {frame_id: 'world'}, pose: {position: {x: 0.35, y: -0.08, z: 0.18}, orientation: {x: 1.0, y: 1.0, z: 0.0, w: 0.0}}}, disturb_pose_2: {header: {frame_id: 'world'}, pose: {position: {x: 0.45, y: 0.08, z: 0.18}, orientation: {x: 1.0, y: 1.0, z: 0.0, w: 0.0}}}, axis: 0, meas_offset: 0.02, repeat_count: 3, velocity_scale: 0.25, execute: true}" \
   --feedback
 ```
 
@@ -703,7 +703,7 @@ Plan only:
 
 ```bash
 ros2 action send_goal /repeatability_test robot_task_manager/action/RepeatabilityTest \
-  "{retract_pose: {header: {frame_id: 'world'}, pose: {position: {x: 0.40, y: 0.00, z: 0.18}, orientation: {x: 0.7071068, y: 0.7071068, z: 0.0, w: 0.0}}}, disturb_pose_1: {header: {frame_id: 'world'}, pose: {position: {x: 0.35, y: -0.08, z: 0.18}, orientation: {x: 0.7071068, y: 0.7071068, z: 0.0, w: 0.0}}}, disturb_pose_2: {header: {frame_id: 'world'}, pose: {position: {x: 0.45, y: 0.08, z: 0.18}, orientation: {x: 0.7071068, y: 0.7071068, z: 0.0, w: 0.0}}}, axis: 2, meas_offset: 0.02, repeat_count: 3, velocity_scale: 0.25, execute: false}" \
+  "{retract_pose: {header: {frame_id: 'world'}, pose: {position: {x: 0.40, y: 0.00, z: 0.18}, orientation: {x: 1.0, y: 1.0, z: 0.0, w: 0.0}}}, disturb_pose_1: {header: {frame_id: 'world'}, pose: {position: {x: 0.35, y: -0.08, z: 0.18}, orientation: {x: 1.0, y: 1.0, z: 0.0, w: 0.0}}}, disturb_pose_2: {header: {frame_id: 'world'}, pose: {position: {x: 0.45, y: 0.08, z: 0.18}, orientation: {x: 1.0, y: 1.0, z: 0.0, w: 0.0}}}, axis: 2, meas_offset: 0.02, repeat_count: 3, velocity_scale: 0.25, execute: false}" \
   --feedback
 ```
 
@@ -748,7 +748,7 @@ Default goal pose trong `repeatability_test_client.py`:
 | `retract_pose.position` | `{x: 0.40, y: 0.00, z: 0.18}` |
 | `disturb_pose_1.position` | `{x: 0.35, y: -0.08, z: 0.18}` |
 | `disturb_pose_2.position` | `{x: 0.45, y: 0.08, z: 0.18}` |
-| orientation của cả 3 pose | `{x: 0.7071068, y: 0.7071068, z: 0.0, w: 0.0}` |
+| orientation của cả 3 pose | `{x: 1.0, y: 1.0, z: 0.0, w: 0.0}` |
 
 ## `task_manager_client`
 

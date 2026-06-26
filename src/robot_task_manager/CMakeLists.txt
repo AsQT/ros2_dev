@@ -33,6 +33,7 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   "action/MoveGripper.action"
   "action/PickPlace.action"
   "action/DrlPickPlace.action"
+  "action/MovePoseRl.action"
   "action/RepeatabilityTest.action"
   DEPENDENCIES geometry_msgs
 )
@@ -168,6 +169,22 @@ target_link_libraries(drl_pickplace_server
   "${cpp_typesupport_target}"
 )
 
+add_executable(move_pose_rl_server src/move_pose_rl_server.cpp)
+ament_target_dependencies(move_pose_rl_server
+  rclcpp
+  rclcpp_action
+  geometry_msgs
+  sensor_msgs
+  std_srvs
+  rcl_interfaces
+  tf2
+  tf2_ros
+  tf2_geometry_msgs
+)
+target_link_libraries(move_pose_rl_server
+  "${cpp_typesupport_target}"
+)
+
 add_executable(repeatability_test_server src/repeatability_test_server.cpp)
 ament_target_dependencies(repeatability_test_server
   rclcpp
@@ -205,6 +222,7 @@ install(TARGETS
   move_gripper_server
   pickplace_server
   drl_pickplace_server
+  move_pose_rl_server
   repeatability_test_server
 
   task_manager_client

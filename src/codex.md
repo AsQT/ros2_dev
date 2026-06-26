@@ -1,672 +1,305 @@
-Yêu cầu cập nhật pkg `robot_gui` để các nút trong các tab `TaskControlPanel` gọi đúng các ROS2 action tương ứng.
+Trong pkg `robot_gui`, sửa triệt để lỗi **font khu vực action log phía dưới màn hình vẫn quá lớn**.
 
-## 1. Bối cảnh
+## Hiện tượng
 
-Layout `robot_gui.ui` đã có khu vực `TaskControlPanel` gồm:
-
-* `cbModeControl`: chọn mode/task.
-* `taskModeTabs`: chứa các tab chức năng.
-* Các tab dự kiến:
+Khi chạy GUI và gọi action, khu vực log nằm dưới RViz và TaskControlPanel hiển thị chữ cực lớn, ví dụ:
 
 ```text
-0. Move Pose
-1. Move Pose RL
-2. Gripper
-3. Pick Place
-4. Pick Place Vision
-5. Pick Place RL
-6. Check Board
-7. Repeatability Test
+feedback stage=Move directly to place ...
 ```
 
-Tài liệu hướng dẫn gọi action nằm trong file:
+Chữ quá to nên bị cắt, không đọc được đầy đủ log.
 
-```text
-Call_action.md
+Lần sửa trước chưa đúng, có thể đã sửa nhầm widget hoặc style trong `.ui` bị code runtime ghi đè.
+
+## Yêu cầu chính
+
+Phải tìm đúng widget thực tế đang được dùng để hiển thị log action, rồi giảm font về `8pt` hoặc `9pt`.
+
+Không chỉ sửa theo suy đoán objectName `txtActionLog`. Phải trace từ code nơi append/set log action.
+
+---
+
+## 1. Tìm đúng widget đang hiển thị log
+
+Trong pkg `robot_gui`, tìm toàn bộ code liên quan log action:
+
+```bash
+cd ~/ros2_dev/src/robot_gui
+grep -R "feedback stage" -n .
+grep -R "appendActionLog" -n .
+grep -R "txtActionLog" -n .
+grep -R "setText" -n src include
+grep -R "appendPlainText" -n src include
+grep -R "append" -n src include
+grep -R "ActionLog" -n .
+grep -R "action log" -ni .
 ```
 
-Cần đọc kỹ file này trước khi code.
+Mục tiêu là xác định chính xác widget nào đang nhận text log.
 
-Hiện tại đã làm phần chuyển tab bằng `cbModeControl`. Bước này cần cập nhật chức năng các nút trong từng tab để gọi action.
-
-## 2. Mục tiêu chính
-
-Cập nhật `robot_gui` để:
-
-* Nút `Start` gọi action tương ứng với `execute=true`.
-* Nút `Plan` gọi action tương ứng với `execute=false`.
-* Nút `Stop` hiện tại chỉ cần log/cancel nếu đã có cancel action client; nếu chưa có cancel thì log rõ “cancel chưa implement”.
-* Khi gọi action, hiển thị feedback/result/status vào ô thông tin phía dưới màn hình.
-* Chỉ tập trung gọi action từ GUI, không sửa server action.
-* Phải test được trên `mock_hardware`.
-
-## 3. Khuyến nghị tổ chức code
-
-Có thể viết riêng file mới để dễ chỉnh sửa, ví dụ:
-
-```text
-robot_gui/include/robot_gui/task_action_controller.hpp
-robot_gui/src/task_action_controller.cpp
-```
-
-Class đề xuất:
+Có thể là một trong các loại:
 
 ```cpp
-class TaskActionController : public QObject
-{
-    Q_OBJECT
-public:
-    TaskActionController(rclcpp::Node::SharedPtr node, Ui::MainWindow *ui, QObject *parent = nullptr);
-
-    void connectUiSignals();
-
-private:
-    void sendMovePose(bool execute);
-    void sendMovePoseCartesian(bool execute);
-    void sendGripper(bool execute);
-    void sendPickPlace(bool execute);
-    void sendDrlPickPlace(bool execute);
-    void sendCheckerBoard(bool execute);
-    void sendRepeatabilityTest(bool execute);
-
-    void appendActionLog(const QString &msg);
-};
+QLabel
+QTextEdit
+QPlainTextEdit
+QTextBrowser
 ```
 
-Nếu project hiện tại không dùng `Ui::MainWindow` trực tiếp thì điều chỉnh theo class GUI hiện có, nhưng vẫn nên tách logic action ra file riêng.
+Nếu widget đang là `QLabel` thì không đủ phù hợp cho log nhiều dòng. Nên đổi sang `QPlainTextEdit` hoặc đảm bảo QLabel có font nhỏ và word wrap.
 
-## 4. Action cần hỗ trợ
+---
 
-Theo `Call_action.md`, cần dùng các action sau:
+## 2. Sửa bằng code runtime, không chỉ sửa `.ui`
 
-```text
-/move_to_pose
-robot_task_manager/action/MoveToPose
+Sau `setupUi(this)` hoặc sau khi tạo `TaskActionController`, set trực tiếp font/style cho widget log thực tế.
 
-/move_to_pose_cartesian
-robot_task_manager/action/MoveToPoseCartesian
-
-/move_gripper
-robot_task_manager/action/MoveGripper
-
-/pickplace
-robot_task_manager/action/PickPlace
-
-/drl_pickplace
-robot_task_manager/action/DrlPickPlace
-
-/move_checker_board
-robot_task_manager/action/CheckerBoard
-
-/repeatability_test
-robot_task_manager/action/RepeatabilityTest
-```
-
-Nếu tab `Move Pose RL` hiện chưa có action riêng trong backend thì chưa tự chế action mới. Chỉ log rõ:
-
-```text
-Move Pose RL action chưa có mapping backend, chưa gửi goal.
-```
-
-Không sửa `robot_task_manager` ở bước này.
-
-## 5. Quy tắc Plan / Start
-
-Tất cả action đã có field `execute`.
-
-Quy tắc bắt buộc:
-
-```text
-Nút Plan  -> execute = false
-Nút Start -> execute = true
-```
-
-Không được dùng nút `Plan` để chạy thật robot.
-
-Khi `execute=false`, action server vẫn phải planning/validate và đường plan phải hiển thị trên RViz nếu backend MoveIt đang publish trajectory như hiện tại.
-
-## 6. Tab Move Pose
-
-Tab `Move Pose` có ô tick chọn Cartesian.
-
-Yêu cầu sửa đúng logic:
-
-* Nếu checkbox **không tick**:
-
-  * `Plan` gọi `/move_to_pose` với `execute=false`.
-  * `Start` gọi `/move_to_pose` với `execute=true`.
-
-* Nếu checkbox **có tick**:
-
-  * `Plan` gọi `/move_to_pose_cartesian` với `execute=false`.
-  * `Start` gọi `/move_to_pose_cartesian` với `execute=true`.
-
-Checkbox nên có text rõ:
-
-```text
-Move Pose Cartesian
-```
-
-Goal:
-
-```yaml
-target_pose:
-  position:
-    x: <x nhập từ GUI>
-    y: <y nhập từ GUI>
-    z: <z nhập từ GUI>
-  orientation:
-    x: <quaternion.x>
-    y: <quaternion.y>
-    z: <quaternion.z>
-    w: <quaternion.w>
-velocity_scale: <velocity nhập từ GUI hoặc default>
-execute: true/false
-```
-
-Nếu chưa có ô velocity trong tab, dùng hằng số default:
+Ví dụ nếu widget là `QPlainTextEdit`:
 
 ```cpp
-static constexpr double DEFAULT_VELOCITY_SCALE = 0.5;
+ui->txtActionLog->setReadOnly(true);
+ui->txtActionLog->setLineWrapMode(QPlainTextEdit::NoWrap);
+
+QFont logFont("DejaVu Sans Mono");
+logFont.setPointSize(8);
+ui->txtActionLog->setFont(logFont);
+
+ui->txtActionLog->setStyleSheet(
+    "QPlainTextEdit#txtActionLog {"
+    " font-family: 'DejaVu Sans Mono';"
+    " font-size: 8pt;"
+    " color: #111111;"
+    " background-color: white;"
+    "}"
+);
 ```
 
-## 7. Xử lý Orientation
-
-Các ô nhập hướng trong GUI là dạng Euler:
-
-```text
-Roll
-Pitch
-Yaw
-```
-
-Quy tắc:
-
-* Nếu người dùng có nhập Roll/Pitch/Yaw:
-
-  * Parse sang `double`.
-  * Quy ước đơn vị phải rõ ràng.
-  * Nếu UI đang ghi `deg`, chuyển degree sang radian trước.
-  * Nếu UI không ghi đơn vị, mặc định dùng degree và ghi rõ trong report.
-  * Convert RPY sang quaternion trước khi gửi action.
-
-* Nếu người dùng không nhập orientation:
-
-  * Dùng orientation mặc định dạng hằng số dễ chỉnh:
+Nếu widget là `QTextEdit`:
 
 ```cpp
-static constexpr double DEFAULT_ORI_X = 1.0;
-static constexpr double DEFAULT_ORI_Y = 1.0;
-static constexpr double DEFAULT_ORI_Z = 0.0;
-static constexpr double DEFAULT_ORI_W = 0.0;
+ui->txtActionLog->setReadOnly(true);
+
+QFont logFont("DejaVu Sans Mono");
+logFont.setPointSize(8);
+ui->txtActionLog->setFont(logFont);
+
+ui->txtActionLog->setStyleSheet(
+    "QTextEdit#txtActionLog {"
+    " font-family: 'DejaVu Sans Mono';"
+    " font-size: 8pt;"
+    " color: #111111;"
+    " background-color: white;"
+    "}"
+);
 ```
 
-Lưu ý: giữ đúng default trên theo yêu cầu hiện tại, không tự đổi sang `{0,0,0,1}`.
-
-Nên gom logic thành hàm dùng chung:
+Nếu widget thực tế là `QLabel`:
 
 ```cpp
-geometry_msgs::msg::Quaternion makeQuaternionFromUi(
-    QLineEdit *rollEdit,
-    QLineEdit *pitchEdit,
-    QLineEdit *yawEdit);
+ui->txtActionLog->setWordWrap(true);
+ui->txtActionLog->setAlignment(Qt::AlignLeft | Qt::AlignTop);
+
+QFont logFont("DejaVu Sans Mono");
+logFont.setPointSize(8);
+ui->txtActionLog->setFont(logFont);
+
+ui->txtActionLog->setStyleSheet(
+    "QLabel#txtActionLog {"
+    " font-family: 'DejaVu Sans Mono';"
+    " font-size: 8pt;"
+    " color: #111111;"
+    " background-color: white;"
+    " padding: 6px;"
+    "}"
+);
 ```
 
-hoặc hàm tương đương.
+Quan trọng: dùng đúng objectName thực tế, không bắt buộc phải là `txtActionLog` nếu file đang dùng tên khác.
 
-## 8. Tab Gripper
+---
 
-Tab `Gripper` gọi action:
+## 3. Nếu hiện tại log đang dùng QLabel thì nên đổi sang QPlainTextEdit
 
-```text
-/move_gripper
-robot_task_manager/action/MoveGripper
-```
-
-Goal:
-
-```yaml
-position: <width/position nhập từ GUI>
-execute: true/false
-```
-
-Nếu chỉ có nút Open/Close:
-
-* Open dùng default:
-
-```cpp
-static constexpr double DEFAULT_GRIPPER_OPEN = 0.048;
-```
-
-* Close dùng default hoặc ô nhập:
-
-```cpp
-static constexpr double DEFAULT_GRIPPER_CLOSE = 0.028;
-```
-
-Nếu tab có nút Plan thì `execute=false`. Nếu không có Plan thì chỉ cần Start/Open/Close execute=true theo UI hiện có.
-
-## 9. Tab Pick Place
-
-Tab `Pick Place` gọi:
-
-```text
-/pickplace
-robot_task_manager/action/PickPlace
-```
-
-Goal:
-
-```yaml
-pose_pick:
-  position: {x, y, z}
-  orientation: <quaternion>
-pose_place:
-  position: {x, y, z}
-  orientation: <quaternion>
-gripper: <gripper width>
-velocity_scale: <velocity>
-execute: true/false
-```
-
-Quy tắc:
-
-* `Plan` -> `execute=false`.
-* `Start` -> `execute=true`.
-* Nếu orientation pick/place không nhập thì dùng default quaternion hằng số ở mục 7.
-* Nếu chỉ có một cụm orientation dùng chung thì dùng chung cho cả pick và place.
-* Nếu có 2 cụm orientation riêng thì parse riêng.
-
-Default nếu ô trống:
-
-```cpp
-static constexpr double DEFAULT_PICK_X = 0.40;
-static constexpr double DEFAULT_PICK_Y = 0.10;
-static constexpr double DEFAULT_PICK_Z = 0.25;
-
-static constexpr double DEFAULT_PLACE_X = 0.30;
-static constexpr double DEFAULT_PLACE_Y = 0.00;
-static constexpr double DEFAULT_PLACE_Z = 0.25;
-
-static constexpr double DEFAULT_PICKPLACE_GRIPPER = 0.01;
-static constexpr double DEFAULT_PICKPLACE_VELOCITY = 0.5;
-```
-
-## 10. Tab Pick Place Vision
-
-Tab `Pick Place Vision` hiện có khung ảnh/preview.
-
-Ở bước này:
-
-* Không cần implement xử lý vision.
-* Nếu nút Start/Plan cần gọi action mà chưa có mapping rõ thì có thể gọi `/pickplace` bằng tọa độ đang nhập tay.
-* Nếu tọa độ lấy từ vision chưa có topic/data thì log rõ:
-
-```text
-Vision pose chưa có dữ liệu, dùng pose nhập tay hoặc không gửi goal.
-```
-
-Không tự thêm pipeline YOLO/vision mới.
-
-## 11. Tab Pick Place RL
-
-Tab `Pick Place RL` gọi:
-
-```text
-/drl_pickplace
-robot_task_manager/action/DrlPickPlace
-```
-
-Goal:
-
-```yaml
-target_pick:
-  header:
-    frame_id: <frame_id>
-  pose:
-    position: {x, y, z}
-    orientation: <quaternion>
-target_place:
-  header:
-    frame_id: <frame_id>
-  pose:
-    position: {x, y, z}
-    orientation: <quaternion>
-gripper_close_width_m: <width>
-execute: true/false
-```
-
-Default:
-
-```cpp
-static const QString DEFAULT_DRL_FRAME_ID = "base_link";
-static constexpr double DEFAULT_DRL_GRIPPER_CLOSE = 0.028;
-```
-
-Quy tắc:
-
-* `Plan` -> `execute=false`.
-* `Start` -> `execute=true`.
-
-Ngoài ra, cập nhật layout:
-
-* Sao chép y nguyên khung ảnh/preview từ tab `PickPlaceVision` sang tab `PickPlace_RL`.
-* Hai tab cùng thể hiện chung nội dung ảnh/preview.
-* Không làm mất objectName hiện có ở tab `PickPlaceVision`.
-* Với tab `PickPlace_RL`, objectName mới nên có suffix `_RL` để tránh duplicate objectName.
-
-Ví dụ:
-
-```text
-yoloPreviewWidget      -> yoloPreviewWidget_RL
-rawImageFrame          -> rawImageFrame_RL
-detectionImageFrame    -> detectionImageFrame_RL
-```
-
-Nếu code hiện tại đang publish ảnh vào widget cũ, chưa cần nối ảnh cho tab RL ở bước này; chỉ cần layout có khung ảnh giống nhau và không làm hỏng tab Vision.
-
-## 12. Tab Check Board
-
-Tab `Check Board` gọi:
-
-```text
-/move_checker_board
-robot_task_manager/action/CheckerBoard
-```
-
-Goal:
-
-```yaml
-step: <step nhập từ GUI>
-velocity_scale: <velocity>
-execute: true/false
-```
-
-Yêu cầu layout:
-
-* Thêm nút `Plan` cho tab `Check Board`.
-* `Plan` gọi `/move_checker_board` với `execute=false`.
-* `Start` gọi `/move_checker_board` với `execute=true`.
-
-Default:
-
-```cpp
-static constexpr double DEFAULT_CHECKER_STEP = 0.10;
-static constexpr double DEFAULT_CHECKER_VELOCITY = 0.5;
-```
-
-## 13. Tab Repeatability Test
-
-Tab `Repeatability Test` gọi:
-
-```text
-/repeatability_test
-robot_task_manager/action/RepeatabilityTest
-```
-
-Goal:
-
-```yaml
-retract_pose:
-  header:
-    frame_id: <frame_id>
-  pose:
-    position: {x, y, z}
-    orientation: <quaternion>
-
-disturb_pose_1:
-  header:
-    frame_id: <frame_id>
-  pose:
-    position: {x, y, z}
-    orientation: <quaternion>
-
-disturb_pose_2:
-  header:
-    frame_id: <frame_id>
-  pose:
-    position: {x, y, z}
-    orientation: <quaternion>
-
-axis: 0/1/2
-meas_offset: <offset>
-repeat_count: <N>
-velocity_scale: <velocity chậm lúc đo>
-execute: true/false
-```
-
-Axis mapping:
-
-```text
-X -> 0
-Y -> 1
-Z -> 2
-```
-
-Default:
-
-```cpp
-static const QString DEFAULT_REPEAT_FRAME_ID = "world";
-static constexpr double DEFAULT_REPEAT_RETRACT_X = 0.40;
-static constexpr double DEFAULT_REPEAT_RETRACT_Y = 0.00;
-static constexpr double DEFAULT_REPEAT_RETRACT_Z = 0.18;
-
-static constexpr double DEFAULT_REPEAT_DISTURB1_X = 0.35;
-static constexpr double DEFAULT_REPEAT_DISTURB1_Y = -0.08;
-static constexpr double DEFAULT_REPEAT_DISTURB1_Z = 0.18;
-
-static constexpr double DEFAULT_REPEAT_DISTURB2_X = 0.45;
-static constexpr double DEFAULT_REPEAT_DISTURB2_Y = 0.08;
-static constexpr double DEFAULT_REPEAT_DISTURB2_Z = 0.18;
-
-static constexpr double DEFAULT_REPEAT_MEAS_OFFSET = 0.02;
-static constexpr int DEFAULT_REPEAT_COUNT = 3;
-static constexpr double DEFAULT_REPEAT_VELOCITY = 0.25;
-```
-
-Quy tắc:
-
-* `Plan` -> `execute=false`.
-* `Start` -> `execute=true`.
-
-## 14. Ô thông tin action phía dưới màn hình
-
-Khu vực ô dưới cùng, nằm bên dưới vùng RViz và các tab, hiện chưa dùng.
+Nếu khu vực dưới cùng đang là `QLabel` và dùng `setText()` để hiển thị log, cần cân nhắc sửa lại thành `QPlainTextEdit` để log nhiều dòng dễ đọc.
 
 Yêu cầu:
 
-* Dùng khu vực này để hiển thị trạng thái action.
-* Nếu đã có widget dạng `QTextEdit`, `QPlainTextEdit`, `QLabel`, `QFrame` thì tận dụng.
-* Nếu chưa có widget text bên trong, thêm `QPlainTextEdit` hoặc `QTextEdit` vào đúng khu vực đó.
-* Không làm thay đổi layout các phần khác.
-
-ObjectName đề xuất:
+* ObjectName nên là:
 
 ```text
 txtActionLog
 ```
 
-Nội dung cần hiển thị:
+* Font `8pt`.
+* ReadOnly.
+* Có scroll.
+* Append log từng dòng, không phóng to chữ.
 
-* Khi bấm Plan/Start:
-
-```text
-[Move Pose] Sending goal to /move_to_pose, execute=false
-```
-
-* Khi action server available/unavailable.
-* Feedback action.
-* Result success/fail.
-* Message result.
-* Lỗi parse input.
-* Lỗi timeout.
-* Lỗi cancel nếu có.
-
-Log nên append, không ghi đè toàn bộ.
-
-## 15. Action client implementation
-
-Dùng `rclcpp_action`.
-
-Cần đảm bảo GUI không bị block.
-
-Không được dùng kiểu chờ blocking dài trong thread UI.
-
-Nếu cần chờ action server, dùng timeout ngắn và log lỗi:
+Trong code, thay vì:
 
 ```cpp
-if (!client->wait_for_action_server(std::chrono::seconds(2))) {
-    appendActionLog("Action server not available: /move_to_pose");
-    return;
+ui->xxxLabel->setText(log);
+```
+
+nên dùng:
+
+```cpp
+ui->txtActionLog->appendPlainText(log);
+```
+
+Nếu không muốn đổi layout nhiều, chỉ cần set font runtime cho QLabel hiện có, nhưng phải đảm bảo chữ không còn to.
+
+---
+
+## 4. Kiểm tra stylesheet global đang ghi đè
+
+Tìm trong `.ui`, `.qss`, `.cpp` các style font lớn:
+
+```bash
+grep -R "font-size" -n ~/ros2_dev/src/robot_gui
+grep -R "pointsize" -n ~/ros2_dev/src/robot_gui
+grep -R "setPointSize" -n ~/ros2_dev/src/robot_gui
+grep -R "setStyleSheet" -n ~/ros2_dev/src/robot_gui
+```
+
+Nếu có style global kiểu:
+
+```css
+QLabel {
+    font-size: 48px;
 }
 ```
 
-Feedback callback phải append log an toàn với Qt thread. Nếu callback chạy ngoài UI thread, dùng:
+hoặc:
 
-```cpp
-QMetaObject::invokeMethod(...)
+```css
+QFrame QLabel {
+    font-size: 48px;
+}
 ```
 
-hoặc signal/slot queued connection.
+thì phải override riêng cho widget log bằng selector objectName cụ thể:
 
-## 16. Validate input
+```css
+QLabel#txtActionLog {
+    font-size: 8pt;
+}
+```
 
-Tất cả ô nhập số phải parse an toàn:
+hoặc:
 
-* Nếu rỗng thì dùng default.
-* Nếu nhập sai kiểu số thì log lỗi và không gửi goal.
-* `velocity_scale` phải nằm trong `(0, 1]`.
-* `gripper` không âm.
-* `repeat_count > 0`.
-* `axis` chỉ là X/Y/Z.
-* `meas_offset` không được bằng 0.
+```css
+QPlainTextEdit#txtActionLog {
+    font-size: 8pt;
+}
+```
 
-Không để GUI crash vì input sai.
+Không sửa font toàn bộ GUI.
 
-## 17. Không được làm
+---
 
-Không sửa action server.
+## 5. Đảm bảo `appendActionLog()` không làm mất style
 
-Không sửa `robot_task_manager` nếu không bắt buộc.
+Kiểm tra hàm log, ví dụ:
 
-Không sửa `mock_hardware`.
+```cpp
+appendActionLog(...)
+```
 
-Không đổi tên action.
+Không được dùng HTML với size lớn kiểu:
 
-Không đổi type action.
+```cpp
+"<span style='font-size:48px'>...</span>"
+```
 
-Không đổi objectName cũ nếu code đang dùng.
+Không được dùng `setText()` với rich text có font lớn.
 
-Không phá chức năng chuyển tab `cbModeControl -> taskModeTabs`.
+Nếu đang dùng `QTextEdit`, có thể append plain text:
 
-Không tự thêm thuật toán vision hoặc RL mới.
+```cpp
+ui->txtActionLog->append(message);
+```
 
-Không làm blocking GUI khi action đang chạy.
+Nhưng phải đảm bảo không insert HTML font-size lớn.
 
-## 18. Build và test bắt buộc trên mock_hardware
+Ưu tiên dùng `QPlainTextEdit`:
 
-Phải build:
+```cpp
+ui->txtActionLog->appendPlainText(message);
+```
+
+---
+
+## 6. Kết quả mong muốn
+
+Sau khi sửa, khu vực log phía dưới phải hiển thị dạng nhỏ gọn, ví dụ:
+
+```text
+[Pick Place] Sending goal to /pickplace, execute=true
+[Pick Place] feedback stage=Open gripper, progress=5%
+[Pick Place] feedback stage=Move directly to place approach, progress=70%
+[Pick Place] result success=true, message=...
+```
+
+Font khoảng `8pt` hoặc `9pt`, đọc được nhiều dòng, không bị phóng to và không bị cắt như hiện tại.
+
+---
+
+## 7. Build và test
+
+Build lại:
 
 ```bash
 cd ~/ros2_dev
-colcon build --packages-select robot_gui robot_task_manager --symlink-install
+colcon build --packages-select robot_gui --symlink-install
 source install/setup.bash
 ```
 
-Chạy mock stack/action server theo project hiện có, ví dụ:
+Chạy task servers:
 
 ```bash
 ros2 launch robot_task_manager task_servers.launch.py
 ```
 
-Nếu cần mock hardware/bringup thì dùng launch mock hiện có của repo.
+Chạy GUI.
 
-Kiểm tra action server:
+Test:
 
-```bash
-ros2 action list
-```
+1. Vào tab `Pick Place`.
+2. Bấm `Start` hoặc `Plan`.
+3. Quan sát khu vực log phía dưới.
+4. Xác nhận font đã nhỏ.
+5. Xác nhận log không bị cắt.
+6. Xác nhận GUI không crash.
+7. Xác nhận các vùng khác không bị đổi font ngoài ý muốn.
 
-Phải thấy tối thiểu:
+---
 
-```text
-/move_to_pose
-/move_to_pose_cartesian
-/move_gripper
-/pickplace
-/move_checker_board
-/repeatability_test
-```
+## 8. Báo cáo
 
-Nếu test `/drl_pickplace` cần chạy đủ DRL planner/mock stack tương ứng. Nếu chưa đủ dependency thì báo cáo rõ điều kiện còn thiếu, không được giả vờ pass.
-
-## 19. Checklist test thủ công
-
-### Move Pose
-
-* Nhập X/Y/Z.
-* Không tick Cartesian.
-* Bấm Plan -> gửi `/move_to_pose`, `execute=false`.
-* Bấm Start -> gửi `/move_to_pose`, `execute=true`.
-* Tick Cartesian.
-* Bấm Plan -> gửi `/move_to_pose_cartesian`, `execute=false`.
-* Bấm Start -> gửi `/move_to_pose_cartesian`, `execute=true`.
-
-### Gripper
-
-* Nhập width.
-* Bấm Start/Open/Close.
-* Xác nhận gọi `/move_gripper`.
-
-### Pick Place
-
-* Nhập pick/place pose.
-* Bấm Plan -> `/pickplace`, `execute=false`.
-* Bấm Start -> `/pickplace`, `execute=true`.
-
-### Pick Place RL
-
-* Xác nhận có khung ảnh giống Pick Place Vision.
-* Bấm Plan -> `/drl_pickplace`, `execute=false`, nếu server đủ.
-* Bấm Start -> `/drl_pickplace`, `execute=true`, nếu server đủ.
-
-### Check Board
-
-* Xác nhận đã có nút Plan.
-* Bấm Plan -> `/move_checker_board`, `execute=false`.
-* Bấm Start -> `/move_checker_board`, `execute=true`.
-
-### Repeatability Test
-
-* Chọn X/Y/Z.
-* Nhập retract/disturb poses, offset, repeat count, velocity.
-* Bấm Plan -> `/repeatability_test`, `execute=false`.
-* Bấm Start -> `/repeatability_test`, `execute=true`.
-
-### Action log
-
-* Mọi lần bấm nút đều có log ở ô dưới cùng.
-* Feedback/result hiện rõ.
-* Input sai phải hiện lỗi, không crash.
-
-## 20. Báo cáo sau khi hoàn thành
-
-Tạo file:
+Cập nhật file:
 
 ```text
-robot_gui/task_action_gui_report.md
+src/robot_gui/task_action_gui_report.md
 ```
 
-Nội dung gồm:
+Thêm rõ:
 
-* File đã sửa/thêm.
-* Mapping từng nút sang action.
-* Quy tắc Plan/Start execute false/true.
-* Cách xử lý orientation Euler -> quaternion.
-* Hằng số orientation mặc định đang dùng.
-* Widget log action đang dùng.
-* Kết quả build.
-* Kết quả test trên mock_hardware.
-* Action nào chưa test được và lý do cụ thể nếu có.
+```text
+## Fix action log font
 
-Chỉ xem là hoàn thành khi build thành công và các nút Plan/Start trong các tab gọi đúng action tương ứng trên mock_hardware.
+- Nguyên nhân font log vẫn to:
+  - <ghi rõ do widget nào / stylesheet nào / code nào ghi đè>
+- Widget thực tế hiển thị log:
+  - <objectName>
+  - <class: QLabel/QPlainTextEdit/QTextEdit/...>
+- File đã sửa:
+  - <danh sách file>
+- Font sau sửa:
+  - 8pt hoặc 9pt
+- Kết quả test:
+  - Log action đã hiển thị nhỏ, đọc được nhiều dòng.
+```
+
+Chỉ xem là hoàn thành khi ảnh/log thực tế trong GUI không còn chữ lớn như hiện tại.

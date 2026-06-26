@@ -70,8 +70,8 @@ class DrlPickPlaceBoxDemoClient(Node):
         pose.pose.position.x = float(xyz[0])
         pose.pose.position.y = float(xyz[1])
         pose.pose.position.z = float(xyz[2])
-        pose.pose.orientation.x = 0.7071068
-        pose.pose.orientation.y = 0.7071068
+        pose.pose.orientation.x = 1.0
+        pose.pose.orientation.y = 1.0
         pose.pose.orientation.z = 0.0
         pose.pose.orientation.w = 0.0
         return pose

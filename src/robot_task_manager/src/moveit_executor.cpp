@@ -12,6 +12,7 @@ namespace
 {
 constexpr auto kPathMarkerColor = rviz_visual_tools::DARK_GREY;
 constexpr auto kTextMarkerColor = rviz_visual_tools::BLACK;
+constexpr double kCurrentStateTimeoutSec = 2.0;
 }  // namespace
 
 void MoveItExecutor::initialize(
@@ -69,6 +70,30 @@ bool MoveItExecutor::validateScalingFactors(
     }
     return true;
   }
+/*---------- getCurrentStateForPlanning ----------------------------------------------*/
+moveit::core::RobotStatePtr MoveItExecutor::getCurrentStateForPlanning(
+  double timeout_sec,
+  std::string & error_msg)
+{
+  if (!move_group_) {
+    error_msg = "MoveGroupInterface not initialized";
+    return nullptr;
+  }
+
+  move_group_->startStateMonitor();
+  auto current_state = move_group_->getCurrentState(timeout_sec);
+
+  if (!current_state) {
+    error_msg =
+      "Failed to get current robot state from /joint_states. "
+      "Refusing to plan from zero/default state.";
+    RCLCPP_ERROR(node_->get_logger(), "%s", error_msg.c_str());
+    return nullptr;
+  }
+
+  move_group_->setStartState(*current_state);
+  return current_state;
+}
 /*----------- goNamedTarget -------------------------------------------------------*/
 bool MoveItExecutor::goNamedTarget(
                       const std::string & target_name,
@@ -91,7 +116,11 @@ bool MoveItExecutor::goNamedTarget(
   move_group_->setPlanningTime(planning_time);
   move_group_->setMaxVelocityScalingFactor(velocity_scale);
   move_group_->setMaxAccelerationScalingFactor(acceleration_scale);
-  move_group_->setStartStateToCurrentState();
+  const auto current_state =
+    getCurrentStateForPlanning(kCurrentStateTimeoutSec, error_msg);
+  if (!current_state) {
+    return false;
+  }
 
   if (!move_group_->setNamedTarget(target_name)) {
     error_msg = "Named target not found: " + target_name;
@@ -160,7 +189,11 @@ bool MoveItExecutor::moveToPose(
   move_group_->setPlanningTime(planning_time);
   move_group_->setMaxVelocityScalingFactor(velocity_scale);
   move_group_->setMaxAccelerationScalingFactor(acceleration_scale);
-  move_group_->setStartStateToCurrentState();
+  const auto current_state =
+    getCurrentStateForPlanning(kCurrentStateTimeoutSec, error_msg);
+  if (!current_state) {
+    return false;
+  }
   move_group_->setPoseTarget(target_pose);
 
   visual_tools_->deleteAllMarkers();
@@ -229,7 +262,11 @@ bool MoveItExecutor::moveToPoseCartesian(
   move_group_->setPlanningTime(planning_time);
   move_group_->setMaxVelocityScalingFactor(velocity_scale);
   move_group_->setMaxAccelerationScalingFactor(acceleration_scale);
-  move_group_->setStartStateToCurrentState();
+  const auto current_state =
+    getCurrentStateForPlanning(kCurrentStateTimeoutSec, error_msg);
+  if (!current_state) {
+    return false;
+  }
 
   visual_tools_->deleteAllMarkers();
   publishTargetAxis(target_pose, "goal_axis");
@@ -309,7 +346,11 @@ bool MoveItExecutor::checkerBoard(
   move_group_->setPlanningTime(planning_time);
   move_group_->setMaxVelocityScalingFactor(velocity_scale);
   move_group_->setMaxAccelerationScalingFactor(acceleration_scale);
-  move_group_->setStartStateToCurrentState();
+  const auto current_state =
+    getCurrentStateForPlanning(kCurrentStateTimeoutSec, error_msg);
+  if (!current_state) {
+    return false;
+  }
 
   geometry_msgs::msg::Pose start_pose = move_group_->getCurrentPose().pose;
 

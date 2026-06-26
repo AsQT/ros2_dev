@@ -5,6 +5,10 @@
 
 namespace robot_task_manager
 {
+namespace
+{
+constexpr double kCurrentStateTimeoutSec = 2.0;
+}  // namespace
 
 void GripperExecutor::initialize(
                         const rclcpp::Node::SharedPtr & node,
@@ -68,6 +72,29 @@ bool GripperExecutor::validateScalingFactors(
   return true;
 }
 
+moveit::core::RobotStatePtr GripperExecutor::getCurrentStateForPlanning(
+  double timeout_sec,
+  std::string & error_msg)
+{
+  if (!move_group_) {
+    error_msg = "MoveGroupInterface not initialized";
+    return nullptr;
+  }
+
+  move_group_->startStateMonitor();
+  auto current_state = move_group_->getCurrentState(timeout_sec);
+  if (!current_state) {
+    error_msg =
+      "Failed to get current robot state from /joint_states. "
+      "Refusing to plan from zero/default state.";
+    RCLCPP_ERROR(node_->get_logger(), "%s", error_msg.c_str());
+    return nullptr;
+  }
+
+  move_group_->setStartState(*current_state);
+  return current_state;
+}
+
 bool GripperExecutor::moveToOpening(
                         double opening,
                         std::string & error_msg,
@@ -104,6 +131,12 @@ bool GripperExecutor::moveToOpening(
 
   move_group_->setMaxVelocityScalingFactor(velocity_scale);
   move_group_->setMaxAccelerationScalingFactor(acceleration_scale);
+
+  const auto current_state =
+    getCurrentStateForPlanning(kCurrentStateTimeoutSec, error_msg);
+  if (!current_state) {
+    return false;
+  }
 
   std::vector<double> joint_values = move_group_->getCurrentJointValues();
 
