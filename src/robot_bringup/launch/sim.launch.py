@@ -103,11 +103,11 @@ def generate_launch_description():
     return LaunchDescription([
         spawn_demo_woods_arg,
         enable_drl_backend_arg,
-        LogInfo(msg="[sim.launch] Starting: Gazebo + robot spawn + bridges"),
+        LogInfo(msg="[timing] sim.launch start: Gazebo + robot spawn + bridges"),
         gazebo,
 
         TimerAction(period=4.0, actions=[
-            LogInfo(msg="[sim.launch] Starting: MoveIt + controller spawners"),
+            LogInfo(msg="[timing] +4.0s starting MoveIt + controller spawners"),
             moveit,
             joint_state_broadcaster,
             start_arm_after_broadcaster,
@@ -115,7 +115,7 @@ def generate_launch_description():
         ]),
 
         TimerAction(period=6.0, actions=[
-            LogInfo(msg="[sim.launch] Starting: Task servers"),
+            LogInfo(msg="[timing] +6.0s starting task servers"),
             task_servers,
         ]),
     ])

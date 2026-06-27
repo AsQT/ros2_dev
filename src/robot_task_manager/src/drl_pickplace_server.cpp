@@ -93,6 +93,8 @@ public:
     drl_trajectory_endpoint_tolerance_m_ =
       declare_parameter<double>("drl_trajectory_endpoint_tolerance_m", 0.015);
     drl_plan_attempts_ = declare_parameter<int>("drl_plan_attempts", 3);
+    pose_verify_attempts_ = declare_parameter<int>("pose_verify_attempts", 10);
+    pose_verify_retry_delay_sec_ = declare_parameter<double>("pose_verify_retry_delay_sec", 0.2);
     gripper_open_width_m_ = declare_parameter<double>("gripper_open_width_m", 0.05);
     gripper_default_close_width_m_ = declare_parameter<double>("gripper_default_close_width_m", 0.028);
     pick_approach_height_m_ = declare_parameter<double>("pick_approach_height_m", 0.05);
@@ -143,6 +145,8 @@ private:
   double drl_timeout_sec_{120.0};
   double drl_trajectory_endpoint_tolerance_m_{0.015};
   int drl_plan_attempts_{3};
+  int pose_verify_attempts_{10};
+  double pose_verify_retry_delay_sec_{0.2};
   double gripper_open_width_m_{0.05};
   double gripper_default_close_width_m_{0.028};
   double pick_approach_height_m_{0.05};
@@ -623,30 +627,63 @@ private:
     const geometry_msgs::msg::Pose & target,
     std::string & error_msg)
   {
-    const auto actual = current_pose();
-    const double pos_err = position_error(actual.pose, target);
-    const double ori_err = orientation_error_rad(actual.pose.orientation, target.orientation);
-    RCLCPP_INFO(
-      get_logger(),
-      "%s pose check | requested=(%.4f %.4f %.4f) actual=(%.4f %.4f %.4f) pos_err=%.5f ori_err=%.5f",
-      label.c_str(),
-      target.position.x,
-      target.position.y,
-      target.position.z,
-      actual.pose.position.x,
-      actual.pose.position.y,
-      actual.pose.position.z,
-      pos_err,
-      ori_err);
-    if (pos_err > position_tolerance_m_) {
-      error_msg = label + " position tolerance failed: " + std::to_string(pos_err);
+    const int attempts = std::max(1, pose_verify_attempts_);
+    const auto retry_delay = std::chrono::duration<double>(
+      std::max(0.0, pose_verify_retry_delay_sec_));
+
+    double best_pos_err = 1e9;
+    double best_ori_err = 1e9;
+    geometry_msgs::msg::PoseStamped best_actual;
+
+    for (int attempt = 1; attempt <= attempts; ++attempt) {
+      const auto actual = current_pose();
+      const double pos_err = position_error(actual.pose, target);
+      const double ori_err = orientation_error_rad(actual.pose.orientation, target.orientation);
+      if (pos_err < best_pos_err) {
+        best_pos_err = pos_err;
+        best_ori_err = ori_err;
+        best_actual = actual;
+      }
+
+      RCLCPP_INFO(
+        get_logger(),
+        "%s pose check %d/%d | requested=(%.4f %.4f %.4f) actual=(%.4f %.4f %.4f) pos_err=%.5f ori_err=%.5f",
+        label.c_str(),
+        attempt,
+        attempts,
+        target.position.x,
+        target.position.y,
+        target.position.z,
+        actual.pose.position.x,
+        actual.pose.position.y,
+        actual.pose.position.z,
+        pos_err,
+        ori_err);
+
+      if (pos_err <= position_tolerance_m_ && ori_err <= orientation_tolerance_rad_) {
+        return true;
+      }
+
+      if (attempt < attempts) {
+        std::this_thread::sleep_for(retry_delay);
+      }
+    }
+
+    if (best_pos_err > position_tolerance_m_) {
+      error_msg = label + " position tolerance failed: " + std::to_string(best_pos_err);
+      RCLCPP_ERROR(
+        get_logger(),
+        "%s best pose after retries | actual=(%.4f %.4f %.4f) best_pos_err=%.5f best_ori_err=%.5f",
+        label.c_str(),
+        best_actual.pose.position.x,
+        best_actual.pose.position.y,
+        best_actual.pose.position.z,
+        best_pos_err,
+        best_ori_err);
       return false;
     }
-    if (ori_err > orientation_tolerance_rad_) {
-      error_msg = label + " orientation tolerance failed: " + std::to_string(ori_err);
-      return false;
-    }
-    return true;
+    error_msg = label + " orientation tolerance failed: " + std::to_string(best_ori_err);
+    return false;
   }
 
   double sanitize_close_width(double requested) const
@@ -686,6 +723,10 @@ private:
       target_place.pose.position.z,
       pick_approach_height_m_,
       close_width_m);
+    RCLCPP_INFO(
+      get_logger(),
+      "execution_velocity_scale=%.3f",
+      cartesian_velocity_scale_);
 
     publish_feedback(goal_handle, "WAIT_FOR_SERVERS", 3.0f);
     if (!wait_for_servers(error_msg)) {

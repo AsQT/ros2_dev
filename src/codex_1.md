@@ -1,345 +1,150 @@
-Hiện tại package `robot_task_executor` đang chứa nhiều service, nhưng thực tế chỉ một phần service phục vụ cho DRL/RL đang được dùng. Mục tiêu là **không rename trực tiếp ngay**, mà tạo package mới tên:
+Bổ sung thêm các yêu cầu sau cho demo RL pick_place trong Gazebo.
+
+## 1. Thêm ràng buộc wood không được sát mép vùng thao tác / mép bàn
+
+Hiện tại nếu wood random quá sát mép thì RL có thể không plan ra được. 
+Cần thêm ràng buộc vị trí wood cách mép ít nhất 5 cm theo cả 2 trục X và Y.
+
+Quy ước kiểm tra khoảng cách mép phải tính cả kích thước thực của wood:
 
 ```text
-robot_drl_executor
-```
+wood_x_min_edge_distance = wood_x - wood_size_x / 2 - region_x_min
+wood_x_max_edge_distance = region_x_max - (wood_x + wood_size_x / 2)
 
-Sau đó migrate dần những thành phần thật sự liên quan tới DRL/RL từ `robot_task_executor` sang package mới, rồi cập nhật các package đang gọi như:
+wood_y_min_edge_distance = wood_y - wood_size_y / 2 - region_y_min
+wood_y_max_edge_distance = region_y_max - (wood_y + wood_size_y / 2)
 
-```text
-robot_drl
-robot_task_manager
-```
+Điều kiện bắt buộc:
 
-để dùng package mới.
+wood_x_min_edge_distance >= 0.08
+wood_x_max_edge_distance >= 0.08
+wood_y_min_edge_distance >= 0.08
+wood_y_max_edge_distance >= 0.08
 
-Yêu cầu làm việc nghiêm ngặt:
+Tương đương với điều kiện random hợp lệ:
 
----
+region_x_min + 0.08 + wood_size_x / 2 <= wood_x <= region_x_max - 0.08 - wood_size_x / 2
 
-## 1. Không được phá package cũ ngay
+region_y_min + 0.08 + wood_size_y / 2 <= wood_y <= region_y_max - 0.08 - wood_size_y / 2
 
-Không xóa, không rename trực tiếp `robot_task_executor`.
+Nếu random ra wood không đạt điều kiện này thì phải random lại.
 
-Package cũ phải được giữ nguyên trong giai đoạn đầu để có thể rollback.
+Lưu ý:
 
-Không được sửa hàng loạt kiểu search/replace mù quáng từ `robot_task_executor` sang `robot_drl_executor`.
+region_x_min, region_x_max, region_y_min, region_y_max phải lấy theo vùng spawn hợp lệ hiện tại của demo hoặc theo mép bàn nếu code hiện tại đã có thông tin này.
+Không hard-code bừa nếu trong code đã có biến workspace/table boundary.
+Không làm thay đổi logic pick/place chính.
+Không đổi kích thước wood nếu hiện tại đang đúng.
+Chỉ thêm kiểm tra hợp lệ trước khi spawn / trước khi truyền pose vào task.
 
-Phải audit trước rồi mới sửa.
+Log bắt buộc:
 
----
+wood_pose
+wood_size
+region_x_min, region_x_max
+region_y_min, region_y_max
+wood_edge_distance_x_min
+wood_edge_distance_x_max
+wood_edge_distance_y_min
+wood_edge_distance_y_max
 
-## 2. Đọc toàn bộ report trước khi sửa
+Nếu không đạt thì in rõ:
 
-Trước khi chỉnh code, bắt buộc đọc các file:
+Rejected wood pose: too close to edge
 
-```text
-*report*.md
-```
+và random lại.
 
-trong các package liên quan, đặc biệt:
+2. Giữ logic random trái dấu Y như yêu cầu trước
 
-```text
-robot_task_executor
-robot_task_manager
-robot_drl
-robot_bringup
-robot_description
-```
+Vẫn phải giữ nguyên nguyên tắc:
 
-Mục tiêu đọc report:
+wood_y nằm một phía: khoảng +0.08 đến +0.13 m hoặc -0.08 đến -0.13 m
+start_y trái dấu với wood_y
+place_y trái dấu với wood_y
+box_y gần 0
 
-* Xác định flow DRL/RL nào hiện đang chạy được.
-* Xác định launch/test nào đang dùng `robot_task_executor`.
-* Xác định service/action/topic nào thật sự cần cho DRL.
-* Xác định những service không dùng hoặc không liên quan để không đưa sang package mới.
-* Xác định các lệnh build/test đã từng chạy được.
+Nhưng khi random wood_y phải đồng thời thỏa điều kiện cách mép 5 cm.
 
-Sau khi đọc report, tạo file báo cáo audit trước khi sửa:
+Nếu vùng spawn không đủ rộng để vừa thỏa wood_y = ±0.08 -> ±0.13 vừa cách mép 5 cm thì phải báo rõ trong log, không được im lặng clamp sai.
 
-```text
-robot_drl_executor_migration_audit_report.md
-```
+3. Kiểm tra nguyên nhân lúc mới khởi động demo chạy chậm
 
-Nội dung báo cáo phải có:
+Khi mới launch demo Gazebo pick_place RL, hệ thống đang chạy khá chậm.
+Codex cần kiểm tra nguyên nhân là do máy bị đơ, Gazebo/MoveIt khởi động nặng, hay do code đang có delay/sleep/wait service quá lâu.
 
-```text
-1. Danh sách file report đã đọc
-2. Flow DRL/RL hiện đang chạy được
-3. Các service/action/topic đang được dùng bởi DRL
-4. Các file đang import/gọi robot_task_executor
-5. Các thành phần không dùng hoặc nghi ngờ không dùng
-6. Kế hoạch migrate cụ thể
-```
+Chỉ kiểm tra và báo cáo trước, không refactor lớn.
 
----
+Cần audit các điểm sau:
 
-## 3. Tạo package mới `robot_drl_executor`
+- Thời gian khởi động Gazebo
+- Thời gian spawn robot
+- Thời gian spawn wood/box
+- Thời gian load controller
+- Thời gian MoveIt ready
+- Thời gian load model RL
+- Thời gian chờ TF
+- Thời gian chờ service/action server
+- Các sleep cố định trong launch/node
+- Các vòng while wait không timeout rõ ràng
+- Có đoạn nào đang retry quá nhiều hoặc polling quá dày không
 
-Tạo package mới song song với package cũ:
+Thêm log timestamp theo từng phase nếu cần, ví dụ:
 
-```text
-src/robot_drl_executor
-```
+[timing] gazebo ready: ... s
+[timing] controllers ready: ... s
+[timing] moveit ready: ... s
+[timing] rl model loaded: ... s
+[timing] scene spawned: ... s
+[timing] first plan started: ... s
+[timing] first execution started: ... s
 
-Package mới phải có cấu trúc ROS2 chuẩn, bao gồm tối thiểu:
+Mục tiêu là xác định rõ:
 
-```text
-robot_drl_executor/
-├── package.xml
-├── CMakeLists.txt hoặc setup.py/setup.cfg tùy package gốc
-├── robot_drl_executor/
-│   └── ...
-├── launch/
-├── config/
-├── README.md
-└── robot_drl_executor_migration_report.md
-```
+- Chậm do máy/Gazebo startup nặng
+- Hay chậm do code có delay cố định
+- Hay chậm do đang wait service/action/TF
+- Hay chậm do RL model load / planning
 
-Tên node, executable, namespace, parameter phải ưu tiên dùng tên mới:
+Nếu phát hiện delay cố định không cần thiết, chỉ đề xuất cách sửa trong báo cáo.
+Chỉ sửa nếu đó là lỗi rõ ràng, nhỏ, an toàn, không ảnh hưởng pipeline.
 
-```text
-robot_drl_executor
-robot_drl_executor_node
-```
+4. Trong sim, scale vận tốc execute đặt bằng 1.0
 
-Không dùng tên mới nửa vời như `robot_task_executor_node` trong package mới, trừ khi cần giữ compatibility tạm thời và phải ghi rõ trong report.
+Vì đây là demo trong Gazebo sim nên lúc execute quỹ đạo cần chạy nhanh hơn.
+Set velocity scale cho execution trong demo sim là:
 
----
+velocity_scale = 1.0
 
-## 4. Chỉ migrate thành phần DRL/RL thật sự cần
+Áp dụng cho các action/client liên quan trong demo pick_place RL nếu hiện tại đang truyền scale thấp hơn.
 
-Không copy toàn bộ `robot_task_executor` sang package mới.
+Yêu cầu:
 
-Chỉ đưa sang `robot_drl_executor` những phần đang phục vụ cho các action/flow DRL trong `robot_task_manager` và `robot_drl`.
+Chỉ áp dụng cho demo Gazebo sim này.
+Không đổi default global của các action thật / hardware thật nếu có nguy cơ ảnh hưởng robot thật.
+Không đổi logic planner lớn.
+Nếu launch có parameter velocity_scale thì set mặc định của launch demo này thành 1.0.
+Nếu node demo truyền goal có velocity_scale thì truyền 1.0.
+Nếu có nhiều đoạn pick/pregrasp/place/retract dùng scale riêng, trong sim demo đều ưu tiên 1.0 trừ khi có đoạn bắt buộc phải chậm để tránh lỗi gripper.
 
-Cần kiểm tra các thành phần như:
+Log khi execute:
 
-```text
-service clients
-service servers
-action clients
-action servers
-launch files
-config files
-params
-Python modules
-C++ nodes nếu có
-```
+execution_velocity_scale = 1.0
+5. Tiêu chí nghiệm thu bổ sung
 
-Phải trace dependency bằng các lệnh kiểu:
+Sau khi chỉnh, chạy lại demo hiện tại và báo cáo:
 
-```bash
-grep -R "robot_task_executor" -n src/
-grep -R "task_executor" -n src/
-grep -R "drl" -n src/robot_task_manager src/robot_drl src/robot_task_executor
-grep -R "rl" -n src/robot_task_manager src/robot_drl src/robot_task_executor
-```
+- Wood có cách mép tối thiểu 5 cm theo cả X/Y không.
+- Wood/start/place/box có giữ đúng quy tắc trái dấu Y và box gần y=0 không.
+- Box có nằm gần đường đi nominal không.
+- Velocity scale khi execute trong Gazebo có đúng 1.0 không.
+- Thời gian từng phase khởi động là bao nhiêu.
+- Kết luận chậm lúc mới khởi động là do máy/Gazebo hay do delay trong code.
+- Có phát sinh lỗi plan, execute, spawn, Z, gripper không.
 
-Nếu một service không được gọi bởi DRL/RL flow thì không đưa sang package mới.
+Không được refactor lớn.
+Ưu tiên chỉnh nhỏ, đúng trọng tâm:
 
-Nếu chưa chắc có dùng hay không, giữ ở package cũ và ghi vào report là “chưa migrate vì chưa xác nhận dependency”.
-
----
-
-## 5. Cập nhật các package đang gọi
-
-Sau khi package mới đã có đủ service/node cần thiết, cập nhật các package đang gọi từ:
-
-```text
-robot_task_executor
-```
-
-sang:
-
-```text
-robot_drl_executor
-```
-
-Tối thiểu cần kiểm tra và cập nhật trong:
-
-```text
-robot_drl
-robot_task_manager
-robot_bringup nếu có launch liên quan
-```
-
-Các nơi cần kiểm tra:
-
-```text
-package.xml
-CMakeLists.txt
-setup.py
-setup.cfg
-launch/*.launch.py
-config/*.yaml
-README.md
-source code import
-service client names
-node executable names
-```
-
-Không được để sót dependency cũ nếu flow DRL đã chuyển sang package mới.
-
-Tuy nhiên không được xóa `robot_task_executor` khỏi workspace nếu vẫn còn flow khác phụ thuộc.
-
----
-
-## 6. Giữ nguyên hành vi chạy như cũ
-
-Mục tiêu là đổi package executor cho DRL, không thay đổi logic DRL.
-
-Không tự ý sửa:
-
-```text
-reward
-observation
-action space
-MoveIt planning logic
-Gazebo spawn logic
-pick/place pose logic
-robot trajectory logic
-```
-
-Trừ khi bắt buộc do dependency package đổi tên, và phải giải thích rõ trong report.
-
-Flow sau migration phải chạy tương đương như trước.
-
----
-
-## 7. Build bắt buộc đến khi sạch lỗi
-
-Sau khi sửa, bắt buộc build workspace:
-
-```bash
-cd ~/ros2_dev
-source /opt/ros/jazzy/setup.bash
-colcon build --symlink-install
-source install/setup.bash
-```
-
-Nếu build lỗi, không được dừng lại ở báo cáo lỗi. Phải tự sửa tiếp cho đến khi build được.
-
-Nếu build toàn workspace quá lâu hoặc lỗi do package không liên quan, phải build tối thiểu các package liên quan:
-
-```bash
-colcon build --symlink-install --packages-select robot_drl_executor robot_drl robot_task_manager robot_bringup
-```
-
-Sau đó tiếp tục xử lý dependency còn thiếu.
-
----
-
-## 8. Test bắt buộc đến khi chạy được như cũ
-
-Sau khi build, phải test lại các flow DRL/RL đã được xác định từ report.
-
-Không được tự chọn test tùy tiện. Phải dựa trên các launch/test đã ghi trong các file `*report*.md`.
-
-Cần kiểm tra tối thiểu:
-
-```text
-1. Package robot_drl_executor được build và source thành công
-2. Node/service của robot_drl_executor chạy được
-3. robot_drl gọi được executor mới
-4. robot_task_manager action liên quan DRL gọi được executor mới
-5. Launch DRL/RL cũ chạy được như trước
-6. Không còn lỗi import robot_task_executor trong flow DRL đã migrate
-```
-
-Nếu có mock hardware thì ưu tiên test bằng mock hardware trước.
-
-Nếu report cũ có flow Gazebo DRL đang chạy được thì test lại Gazebo sau khi mock chạy ổn.
-
-Không được dừng giữa chừng chỉ vì gặp lỗi launch/runtime. Phải sửa đến khi chạy được tương đương trạng thái cũ.
-
----
-
-## 9. Không xóa package cũ sau migration
-
-Sau khi `robot_drl_executor` chạy được, vẫn không xóa `robot_task_executor`.
-
-Chỉ cập nhật DRL flow sang package mới.
-
-Nếu muốn loại bỏ package cũ thì để thành task riêng sau.
-
----
-
-## 10. Cập nhật tài liệu
-
-Sau khi hoàn tất, cập nhật hoặc tạo các file:
-
-```text
-src/robot_drl_executor/README.md
-src/robot_drl_executor/robot_drl_executor_migration_report.md
-```
-
-Nếu các package khác có README liên quan tới DRL/RL executor thì cập nhật lại tên package mới:
-
-```text
-robot_drl
-robot_task_manager
-robot_bringup
-```
-
-README phải mô tả rõ:
-
-```text
-- Package robot_drl_executor dùng để làm gì
-- Nó thay thế phần nào của robot_task_executor
-- Các service/action/topic chính
-- Package nào gọi nó
-- Lệnh build
-- Lệnh chạy/test
-- Những thành phần chưa migrate và lý do
-```
-
----
-
-## 11. Báo cáo cuối cùng bắt buộc
-
-Tạo file:
-
-```text
-robot_drl_executor_migration_report.md
-```
-
-Nội dung gồm:
-
-```text
-1. Mục tiêu migration
-2. Các report đã đọc
-3. Các file đã tạo mới
-4. Các file đã sửa
-5. Các service/action/topic đã migrate
-6. Các dependency đã đổi từ robot_task_executor sang robot_drl_executor
-7. Các thành phần cố ý chưa migrate
-8. Lệnh build đã chạy
-9. Kết quả build
-10. Lệnh test đã chạy
-11. Kết quả test
-12. Lỗi gặp phải và cách đã sửa
-13. Trạng thái cuối cùng: chạy được/chưa chạy được
-```
-
-Không được báo cáo chung chung. Phải ghi rõ đường dẫn file và kết quả thực tế.
-
----
-
-## 12. Tiêu chí hoàn thành
-
-Chỉ được coi là hoàn thành khi đạt đủ:
-
-```text
-- Có package mới robot_drl_executor
-- robot_task_executor vẫn còn nguyên, không bị xóa
-- Các thành phần DRL/RL cần thiết đã được migrate sang robot_drl_executor
-- robot_drl và robot_task_manager đã gọi package mới trong flow DRL
-- Workspace build được
-- Flow DRL/RL chạy được như trước
-- Có report audit trước khi sửa
-- Có report migration sau khi sửa
-- Có README cho robot_drl_executor
-```
-
-Nếu chưa đạt đủ các tiêu chí trên, phải tiếp tục sửa, build và test.
+Random scene hợp lý hơn.
+Wood không sát mép.
+Sim execute nhanh với velocity_scale = 1.0.
+Có timing log để biết startup chậm do đâu.

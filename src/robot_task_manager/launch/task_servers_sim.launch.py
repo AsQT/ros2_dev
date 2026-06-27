@@ -43,7 +43,10 @@ def generate_launch_description():
         {
             "use_sim_time": True,
             "planning_group": "gripper",
-            "base_frame": "link_6"
+            "base_frame": "link_6",
+            "velocity_scale": 1.0,
+            "acceleration_scale": 1.0,
+            "gripper_max_open": 0.0381,
         },
     ]
 
@@ -161,6 +164,10 @@ def generate_launch_description():
             "planning_frame": "base_link",
             "ee_link": "tcp_link",
             "sub_action_timeout_sec": 180.0,
+            "drl_timeout_sec": 300.0,
+            "cartesian_velocity_scale": 1.0,
+            "gripper_open_width_m": 0.0381,
+            "gripper_default_close_width_m": 0.025,
             "planner_node_name": LaunchConfiguration("planner_node_name"),
         }],
     )
@@ -175,7 +182,7 @@ def generate_launch_description():
             "ee_link": "tcp_link",
             "position_tolerance_m": 0.01,
             "orientation_tolerance_rad": 0.10,
-            "drl_timeout_sec": 120.0,
+            "drl_timeout_sec": 300.0,
             "drl_trajectory_endpoint_tolerance_m": 0.015,
             "drl_plan_attempts": 3,
             "tf_timeout_sec": 2.0,

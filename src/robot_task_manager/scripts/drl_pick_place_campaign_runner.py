@@ -15,6 +15,8 @@ import rclpy.time
 from geometry_msgs.msg import Pose, PoseStamped
 from moveit_msgs.msg import CollisionObject, PlanningScene
 from moveit_msgs.srv import ApplyPlanningScene, GetPlanningScene
+from rcl_interfaces.msg import Parameter, ParameterType
+from rcl_interfaces.srv import SetParameters
 from rclpy.action import ActionClient
 from rclpy.node import Node
 from rclpy.qos import DurabilityPolicy, QoSProfile, ReliabilityPolicy
@@ -47,7 +49,12 @@ class DrlPickPlaceCampaignRunner(Node):
         self.declare_parameter("frame_id", "base_link")
         self.declare_parameter("wood_info_topic", "/sim/pick_wood_info")
         self.declare_parameter("box_info_topic", "/sim/obstacle_box_info")
+        self.declare_parameter("start_info_topic", "/sim/start_pose_info")
+        self.declare_parameter("place_info_topic", "/sim/place_pose_info")
+        self.declare_parameter("use_scene_start_pose", True)
+        self.declare_parameter("use_scene_place_pose", True)
         self.declare_parameter("action_name", "drl_pickplace")
+        self.declare_parameter("planner_node_name", "/drl_unified_planner_node")
         self.declare_parameter("obstacle_id", "obstacle_box")
         self.declare_parameter("object_timeout_sec", 30.0)
         self.declare_parameter("action_server_timeout_sec", 120.0)
@@ -56,6 +63,8 @@ class DrlPickPlaceCampaignRunner(Node):
 
         self._wood_marker: Optional[Marker] = None
         self._box_marker: Optional[Marker] = None
+        self._start_marker: Optional[Marker] = None
+        self._place_marker: Optional[Marker] = None
         self._obstacle_object: Optional[CollisionObject] = None
         self._current_plan_stats: list[dict] = []
         self._plan_stats_lock = threading.Lock()
@@ -75,6 +84,14 @@ class DrlPickPlaceCampaignRunner(Node):
             Marker, str(self.get_parameter("box_info_topic").value),
             self._on_box_marker, qos,
         )
+        self._start_sub = self.create_subscription(
+            Marker, str(self.get_parameter("start_info_topic").value),
+            self._on_start_marker, qos,
+        )
+        self._place_sub = self.create_subscription(
+            Marker, str(self.get_parameter("place_info_topic").value),
+            self._on_place_marker, qos,
+        )
         self._plan_stats_sub = self.create_subscription(
             String, "/drl/plan_stats", self._on_plan_stats, 10,
         )
@@ -85,6 +102,11 @@ class DrlPickPlaceCampaignRunner(Node):
         self._apply_scene_client = self.create_client(ApplyPlanningScene, "/apply_planning_scene")
         self._get_scene_client = self.create_client(GetPlanningScene, "/get_planning_scene")
         self._respawn_client = self.create_client(Trigger, "/sim/respawn_objects")
+        planner_node = str(self.get_parameter("planner_node_name").value)
+        self._set_planner_params_client = self.create_client(
+            SetParameters,
+            planner_node.rstrip("/") + "/set_parameters",
+        )
         self._collision_object_pub = self.create_publisher(CollisionObject, "/collision_object", 10)
         self._obstacle_timer = self.create_timer(0.2, self._republish_obstacle)
 
@@ -102,6 +124,14 @@ class DrlPickPlaceCampaignRunner(Node):
     def _on_box_marker(self, msg: Marker) -> None:
         if msg.type == Marker.CUBE and msg.scale.x > 0.0:
             self._box_marker = msg
+
+    def _on_start_marker(self, msg: Marker) -> None:
+        if msg.scale.x > 0.0 and math.isfinite(msg.pose.position.y):
+            self._start_marker = msg
+
+    def _on_place_marker(self, msg: Marker) -> None:
+        if msg.scale.x > 0.0 and math.isfinite(msg.pose.position.y):
+            self._place_marker = msg
 
     def _on_plan_stats(self, msg: String) -> None:
         try:
@@ -145,15 +175,76 @@ class DrlPickPlaceCampaignRunner(Node):
     def _wait_for_fresh_markers(self) -> tuple[Marker, Marker]:
         self._wood_marker = None
         self._box_marker = None
+        self._start_marker = None
+        self._place_marker = None
         timeout = float(self.get_parameter("object_timeout_sec").value)
         deadline = time.monotonic() + timeout
-        while rclpy.ok() and (self._wood_marker is None or self._box_marker is None):
+        use_start = bool(self.get_parameter("use_scene_start_pose").value)
+        use_place = bool(self.get_parameter("use_scene_place_pose").value)
+        while rclpy.ok() and (
+            self._wood_marker is None
+            or self._box_marker is None
+            or (use_start and self._start_marker is None)
+            or (use_place and self._place_marker is None)
+        ):
             if time.monotonic() > deadline:
-                raise TimeoutError("Timed out waiting for fresh markers")
+                missing = []
+                if self._wood_marker is None:
+                    missing.append(str(self.get_parameter("wood_info_topic").value))
+                if self._box_marker is None:
+                    missing.append(str(self.get_parameter("box_info_topic").value))
+                if use_start and self._start_marker is None:
+                    missing.append(str(self.get_parameter("start_info_topic").value))
+                if use_place and self._place_marker is None:
+                    missing.append(str(self.get_parameter("place_info_topic").value))
+                raise TimeoutError("Timed out waiting for fresh markers: " + ", ".join(missing))
             rclpy.spin_once(self, timeout_sec=0.1)
         assert self._wood_marker is not None
         assert self._box_marker is not None
         return self._wood_marker, self._box_marker
+
+    def _marker_xyz(self, marker: Marker) -> list[float]:
+        return [
+            float(marker.pose.position.x),
+            float(marker.pose.position.y),
+            float(marker.pose.position.z),
+        ]
+
+    def _make_double_array_param(self, name: str, values: list[float]) -> Parameter:
+        param = Parameter()
+        param.name = name
+        param.value.type = ParameterType.PARAMETER_DOUBLE_ARRAY
+        param.value.double_array_value = [float(v) for v in values]
+        return param
+
+    def _set_planner_start(self) -> None:
+        if not bool(self.get_parameter("use_scene_start_pose").value) or self._start_marker is None:
+            return
+        timeout = float(self.get_parameter("planning_scene_timeout_sec").value)
+        if not self._set_planner_params_client.wait_for_service(timeout_sec=timeout):
+            raise RuntimeError("Planner parameter service is not available")
+        start_xyz = self._marker_xyz(self._start_marker)
+        req = SetParameters.Request()
+        req.parameters = [
+            self._make_double_array_param("preposition_tcp_base", start_xyz),
+            self._make_double_array_param("calibrated_start_tcp_base", start_xyz),
+        ]
+        future = self._set_planner_params_client.call_async(req)
+        self._spin_until(future, "set planner start pose", timeout)
+        resp = future.result()
+        if resp is None:
+            raise RuntimeError("Planner parameter service returned no response")
+        failures = [
+            result.reason or req.parameters[idx].name
+            for idx, result in enumerate(resp.results)
+            if not result.successful
+        ]
+        if failures:
+            raise RuntimeError("Failed to set planner start pose: " + "; ".join(failures))
+        self.get_logger().info(
+            f"[CORRIDOR_SCENE] planner_start_pose=({start_xyz[0]:.4f}, "
+            f"{start_xyz[1]:.4f}, {start_xyz[2]:.4f})"
+        )
 
     def _clear_obstacle(self) -> None:
         frame_id = str(self.get_parameter("frame_id").value)
@@ -213,7 +304,10 @@ class DrlPickPlaceCampaignRunner(Node):
             wood_center_z + grasp_tcp_offset_z,
             float(self.get_parameter("min_pick_z_m").value),
         )
-        place_xyz = [float(v) for v in self.get_parameter("place_xyz").value]
+        if bool(self.get_parameter("use_scene_place_pose").value) and self._place_marker is not None:
+            place_xyz = self._marker_xyz(self._place_marker)
+        else:
+            place_xyz = [float(v) for v in self.get_parameter("place_xyz").value]
         place_xyz[2] += float(self.get_parameter("place_z_offset_m").value)
 
         def _ps(xyz):
@@ -319,6 +413,7 @@ class DrlPickPlaceCampaignRunner(Node):
             self._call_respawn()
             wood_marker, box_marker = self._wait_for_fresh_markers()
             self._add_obstacle(box_marker)
+            self._set_planner_start()
             goal = self._build_goal(wood_marker)
 
             m.update({
