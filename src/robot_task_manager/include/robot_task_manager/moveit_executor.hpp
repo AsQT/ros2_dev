@@ -1,6 +1,7 @@
 #pragma once
 
 #include <memory>
+#include <functional>
 #include <mutex>
 #include <string>
 #include <vector>
@@ -19,6 +20,8 @@ namespace robot_task_manager
 class MoveItExecutor
 {
 public:
+  using FeedbackCallback = std::function<void(const std::string &, float)>;
+
   MoveItExecutor() = default;
 
   void initialize(
@@ -55,7 +58,9 @@ public:
           double velocity_scale = 0.3,
           double acceleration_scale = 0.3,
           double planning_time = 5.0,
-          bool execute = true);
+          bool execute = true,
+          double measurement_settle_time_s = 2.0,
+          FeedbackCallback feedback_cb = nullptr);
 
   void stop();
 
@@ -84,6 +89,15 @@ private:
   moveit::core::RobotStatePtr getCurrentStateForPlanning(
     double timeout_sec,
     std::string & error_msg);
+
+  bool executeCartesianSegment(
+    const geometry_msgs::msg::Pose & target_pose,
+    std::string & error_msg,
+    double velocity_scale,
+    double acceleration_scale,
+    double planning_time,
+    bool execute,
+    const geometry_msgs::msg::Pose * planned_start_pose = nullptr);
 
   rclcpp::Node::SharedPtr node_;
   std::shared_ptr<moveit::planning_interface::MoveGroupInterface> move_group_;

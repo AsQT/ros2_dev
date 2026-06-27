@@ -1,8 +1,10 @@
 #include "robot_task_manager/moveit_executor.hpp"
 
 #include <Eigen/Geometry>
-#include <exception>
 #include <chrono>
+#include <cmath>
+#include <exception>
+#include <sstream>
 #include <thread>
 
 namespace robot_task_manager
@@ -323,6 +325,83 @@ bool MoveItExecutor::moveToPoseCartesian(
   publishText("Reached_cartesian_target");
   return true;
 }
+/*------------ executeCartesianSegment -----------------------------------------------------------*/
+bool MoveItExecutor::executeCartesianSegment(
+                      const geometry_msgs::msg::Pose & target_pose,
+                      std::string & error_msg,
+                      double velocity_scale,
+                      double acceleration_scale,
+                      double planning_time,
+                      bool execute,
+                      const geometry_msgs::msg::Pose * planned_start_pose)
+{
+  if (!initialized_) {
+    error_msg = "MoveItExecutor not initialized";
+    return false;
+  }
+
+  if (!validateScalingFactors(velocity_scale, acceleration_scale, error_msg)) {
+    return false;
+  }
+
+  move_group_->setPlanningTime(planning_time);
+  move_group_->setMaxVelocityScalingFactor(velocity_scale);
+  move_group_->setMaxAccelerationScalingFactor(acceleration_scale);
+
+  const auto current_state =
+    getCurrentStateForPlanning(kCurrentStateTimeoutSec, error_msg);
+  if (!current_state) {
+    return false;
+  }
+
+  geometry_msgs::msg::Pose start_pose = planned_start_pose ?
+    *planned_start_pose : move_group_->getCurrentPose().pose;
+
+  std::vector<geometry_msgs::msg::Pose> waypoints;
+  waypoints.push_back(start_pose);
+  waypoints.push_back(target_pose);
+
+  moveit_msgs::msg::RobotTrajectory trajectory;
+
+  const double eef_step = 0.01;
+  const bool avoid_collisions = true;
+
+  const double fraction = move_group_->computeCartesianPath(
+      waypoints,
+      eef_step,
+      trajectory,
+      avoid_collisions);
+
+  if (fraction < 0.99) {
+    error_msg = "Cartesian segment planning failed, fraction = " + std::to_string(fraction);
+    return false;
+  }
+
+  const auto * joint_model_group =
+    move_group_->getRobotModel()->getJointModelGroup(planning_group_);
+
+  if (joint_model_group) {
+    visual_tools_->publishTrajectoryLine(trajectory, joint_model_group, kPathMarkerColor);
+    visual_tools_->trigger();
+  }
+
+  moveit::planning_interface::MoveGroupInterface::Plan plan;
+  plan.trajectory = trajectory;
+
+  if (!execute) {
+    error_msg.clear();
+    return true;
+  }
+
+  const auto exec_result = move_group_->execute(plan);
+
+  if (exec_result != moveit::core::MoveItErrorCode::SUCCESS) {
+    error_msg = "Execution of Cartesian segment failed";
+    return false;
+  }
+
+  return true;
+}
 /*------------ checkerBoard -----------------------------------------------------------*/
 bool MoveItExecutor::checkerBoard(
                       double step,
@@ -330,12 +409,24 @@ bool MoveItExecutor::checkerBoard(
                       double velocity_scale,
                       double acceleration_scale,
                       double planning_time,
-                      bool execute)
+                      bool execute,
+                      double measurement_settle_time_s,
+                      FeedbackCallback feedback_cb)
 {
   std::lock_guard<std::mutex> lock(motion_mutex_);
 
   if (!initialized_) {
     error_msg = "MoveItExecutor not initialized";
+    return false;
+  }
+
+  if (!std::isfinite(step) || step <= 0.0) {
+    error_msg = "CheckerBoard step must be finite and > 0.0";
+    return false;
+  }
+
+  if (!std::isfinite(measurement_settle_time_s) || measurement_settle_time_s < 0.0) {
+    error_msg = "measurement_settle_time_s must be finite and >= 0.0";
     return false;
   }
 
@@ -352,6 +443,10 @@ bool MoveItExecutor::checkerBoard(
     return false;
   }
 
+  if (feedback_cb) {
+    feedback_cb("CheckerBoard current pose acquired", 5.0f);
+  }
+
   geometry_msgs::msg::Pose start_pose = move_group_->getCurrentPose().pose;
 
   visual_tools_->deleteAllMarkers();
@@ -359,7 +454,6 @@ bool MoveItExecutor::checkerBoard(
 
   std::vector<geometry_msgs::msg::Pose> targets;
 
-  // 9 điểm, start_pose là tâm, quét zig-zag
   for (int row = 1; row >= -1; --row) {
     if ((1 - row) % 2 == 0) {
       for (int col = -1; col <= 1; ++col) {
@@ -378,71 +472,96 @@ bool MoveItExecutor::checkerBoard(
     }
   }
 
-  std::vector<geometry_msgs::msg::Pose> waypoints;
-  geometry_msgs::msg::Pose current_pose = start_pose;
+  if (feedback_cb) {
+    feedback_cb("CheckerBoard generated 3x3 zig-zag grid", 10.0f);
+  }
+
+  geometry_msgs::msg::Pose planned_pose = start_pose;
   const double lift_height = step / 2.0;
+  const float progress_start = 10.0f;
+  const float progress_span = 85.0f;
+  const float segment_count = static_cast<float>(targets.size() * 2);
 
-  // bắt đầu từ tâm hiện tại
-  waypoints.push_back(current_pose);
-
+  size_t completed_segments = 0;
   for (size_t i = 0; i < targets.size(); ++i) {
     const auto & target = targets[i];
+    const size_t target_number = i + 1;
 
-    // đi tới điểm mới đồng thời nâng Z
     geometry_msgs::msg::Pose travel_pose = target;
     travel_pose.position.z = target.position.z + lift_height;
-    waypoints.push_back(travel_pose);
 
-    // hạ xuống tại điểm đích
+    std::ostringstream travel_stage;
+    travel_stage << "Target " << target_number << "/" << targets.size()
+                 << ": move to travel pose";
+    if (feedback_cb) {
+      feedback_cb(
+        travel_stage.str(),
+        progress_start + progress_span * (static_cast<float>(completed_segments) / segment_count));
+    }
+    publishText(travel_stage.str());
+
+    if (!executeCartesianSegment(
+        travel_pose,
+        error_msg,
+        velocity_scale,
+        acceleration_scale,
+        planning_time,
+        execute,
+        execute ? nullptr : &planned_pose))
+    {
+      error_msg = travel_stage.str() + " failed: " + error_msg;
+      return false;
+    }
+    planned_pose = travel_pose;
+    ++completed_segments;
+
     geometry_msgs::msg::Pose drop_pose = target;
-    waypoints.push_back(drop_pose);
+    std::ostringstream drop_stage;
+    drop_stage << "Target " << target_number << "/" << targets.size()
+               << ": move down to measurement pose";
+    if (feedback_cb) {
+      feedback_cb(
+        drop_stage.str(),
+        progress_start + progress_span * (static_cast<float>(completed_segments) / segment_count));
+    }
+    publishText(drop_stage.str());
 
-    current_pose = target;
+    if (!executeCartesianSegment(
+        drop_pose,
+        error_msg,
+        velocity_scale,
+        acceleration_scale,
+        planning_time,
+        execute,
+        execute ? nullptr : &planned_pose))
+    {
+      error_msg = drop_stage.str() + " failed: " + error_msg;
+      return false;
+    }
+    planned_pose = drop_pose;
+    ++completed_segments;
+
+    if (execute) {
+      std::ostringstream wait_stage;
+      wait_stage << "CheckerBoard target " << target_number << "/" << targets.size()
+                 << " measurement wait " << measurement_settle_time_s << "s";
+      if (feedback_cb) {
+        feedback_cb(
+          wait_stage.str(),
+          progress_start + progress_span * (static_cast<float>(completed_segments) / segment_count));
+      }
+      publishText(wait_stage.str());
+      std::this_thread::sleep_for(
+        std::chrono::duration<double>(measurement_settle_time_s));
+    }
   }
 
-  moveit_msgs::msg::RobotTrajectory trajectory;
+  publishText(
+    execute ?
+    "CheckerBoard segmented motion completed successfully" :
+    "CheckerBoard segmented planning succeeded; execution skipped");
 
-  const double eef_step = 0.01;
-  const bool avoid_collisions = true;
-
-  double fraction = move_group_->computeCartesianPath(
-      waypoints,
-      eef_step,
-      trajectory,
-      avoid_collisions);
-
-  if (fraction < 0.99) {
-    error_msg = "Cartesian path planning failed, fraction = " + std::to_string(fraction);
-    return false;
-  }
-
-  const auto * joint_model_group =
-    move_group_->getRobotModel()->getJointModelGroup(planning_group_);
-
-  if (joint_model_group) {
-    visual_tools_->publishTrajectoryLine(trajectory, joint_model_group, kPathMarkerColor);
-    visual_tools_->trigger();
-  }
-
-  moveit::planning_interface::MoveGroupInterface::Plan plan;
-  plan.trajectory = trajectory;
-
-  if (!execute) {
-    publishText("Checker board planning succeeded; execution skipped");
-    error_msg.clear();
-    return true;
-  }
-
-  publishText("Executing_cartesian_path");
-
-  const auto exec_result = move_group_->execute(plan);
-
-  if (exec_result != moveit::core::MoveItErrorCode::SUCCESS) {
-    error_msg = "Execution of Cartesian path failed";
-    return false;
-  }
-
-  publishText("Reached_cartesian_target");
+  error_msg.clear();
   return true;
 }
 /*-------------------------------------------------------------------------------------*/

@@ -7,7 +7,7 @@
             default ="$(find robot_control)/config/initial_positions.yaml" />
 
     <xacro:include filename ="$(find robot_description)/urdf/materials.xacro" />
-    <xacro:include filename ="$(find robot_description)/urdf/robot.xacro" />
+    <xacro:include filename ="$(find robot_description)/urdf/robot_tcp_xy.xacro" /> <!-- robot.xacro  |robot_tcp_z.xacro | robot_tcp_xy.xacro-->
     <xacro:include filename ="$(find robot_description)/urdf/sensors.xacro"/>
     <xacro:include filename ="$(find robot_description)/urdf/ros2_control.xacro" />
     <xacro:include filename ="$(find robot_description)/urdf/gazebo.xacro" />
@@ -25,3 +25,4 @@
             use_mock                ="$(arg use_mock_hardware)" />
 
 </robot>
+

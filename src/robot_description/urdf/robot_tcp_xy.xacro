@@ -181,16 +181,16 @@
               izz ="6.20472722814015E-05" />
     </inertial>
     <visual>
-      <origin xyz ="0 0 0" rpy  ="0 0 0" />
+      <origin xyz ="0 0 0" rpy  ="0 0 ${pi}" />
       <geometry>
-        <mesh filename  ="package://robot_description/meshes/link_6.stl" />
+        <mesh filename  ="package://robot_description/meshes/tcp_xy.stl" />
       </geometry>
       <material   name  ="tool_flange"></material>
     </visual>
     <collision>
       <origin xyz ="0 0 0" rpy ="0 0 0" />
       <geometry>
-        <mesh filename  ="package://robot_description/meshes/dae/link_6.dae" />
+        <mesh filename  ="package://robot_description/meshes/tcp_xy.stl" />
       </geometry>
     </collision>
   </link>
@@ -213,7 +213,7 @@
       <geometry>
         <mesh filename  ="package://robot_description/meshes/gripper_l.stl" />
       </geometry>
-      <material   name  ="tool"></material>
+      <material   name  ="gripper_l"></material>
     </visual>
     <collision>
       <origin xyz ="0 0 0" rpy ="0 0 0" />
@@ -240,7 +240,7 @@
       <geometry>
         <mesh filename  ="package://robot_description/meshes/gripper_r.stl" />
       </geometry>
-      <material   name  ="tool"></material>
+      <material   name  ="gripper_r"></material>
     </visual>
     <collision>
       <origin xyz ="0 0 0" rpy ="0 0 0" />
@@ -257,7 +257,7 @@
     <child  link  ="base_link"/>
   </joint>
   <joint    name  ="tcp_joint"             type      ="fixed">
-    <origin xyz   ="0 0 0.08"              rpy       ="0 0 0"/> 
+    <origin xyz   ="0 0.036 0.021"              rpy       ="0 0 0"/> 
     <parent link  ="link_6"/>
     <child  link  ="tcp_link"/>
   </joint>
@@ -317,7 +317,7 @@
   </joint>
   <!-- joint_gl -->
   <joint    name  ="joint_gl"              type      ="prismatic">
-    <origin xyz   ="0.0021 0 0.0668"       rpy       ="0 0 0" />
+    <origin xyz   ="0.0021 0 -0.0668"       rpy       ="0 0 0" />
     <parent link  ="link_6" />
     <child  link  ="gripper_l" />
     <axis   xyz   ="1 0 0" />
@@ -326,7 +326,7 @@
   </joint>
   <!-- joint_gr -->
   <joint    name  ="joint_gr"              type      ="prismatic">
-    <origin xyz   ="-0.0021 0 0.0668"      rpy       ="0 0 ${pi}" />
+    <origin xyz   ="-0.0021 0 -0.0668"      rpy       ="0 0 ${pi}" />
     <parent link  ="link_6" />
     <child  link  ="gripper_r" />
     <axis   xyz   ="1 0 0" />

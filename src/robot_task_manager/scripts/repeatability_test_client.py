@@ -49,7 +49,6 @@ class RepeatabilityTestClient(Node):
         goal = RepeatabilityTest.Goal()
         goal.retract_pose = self._pose(0.40, 0.00, 0.18)
         goal.disturb_pose_1 = self._pose(0.35, -0.08, 0.18)
-        goal.disturb_pose_2 = self._pose(0.45, 0.08, 0.18)
         goal.axis = int(self.get_parameter("axis").value)
         goal.meas_offset = float(self.get_parameter("meas_offset").value)
         goal.repeat_count = int(self.get_parameter("repeat_count").value)

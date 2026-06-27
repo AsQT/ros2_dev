@@ -127,7 +127,9 @@ def generate_launch_description():
         executable="checker_board_server",
         name="checker_board_server",
         output="screen",
-        parameters=common_moveit_params,
+        parameters=common_moveit_params + [{
+            "measurement_settle_time_s": 2.0,
+        }],
     )
 
     move_gripper = Node(

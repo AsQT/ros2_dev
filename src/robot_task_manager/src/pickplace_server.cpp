@@ -85,9 +85,9 @@ private:
   {
     if (!std::isfinite(goal->velocity_scale) ||
         goal->velocity_scale <= 0.0 ||
-        goal->velocity_scale > 1.0)
+        goal->velocity_scale > 0.2)
     {
-      RCLCPP_WARN(get_logger(), "Reject PickPlace goal: velocity_scale must be in (0, 1]");
+      RCLCPP_WARN(get_logger(), "Reject PickPlace goal: velocity_scale must be in (0, 0.2]");
       return rclcpp_action::GoalResponse::REJECT;
     }
 

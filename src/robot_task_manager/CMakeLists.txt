@@ -190,6 +190,8 @@ ament_target_dependencies(repeatability_test_server
   rclcpp
   rclcpp_action
   geometry_msgs
+  tf2
+  tf2_geometry_msgs
 )
 target_link_libraries(repeatability_test_server
   "${cpp_typesupport_target}"

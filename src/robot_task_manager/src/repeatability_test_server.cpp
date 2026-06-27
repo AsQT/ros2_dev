@@ -18,6 +18,9 @@
 #include "robot_task_manager/action/move_to_pose_cartesian.hpp"
 #include "robot_task_manager/action/repeatability_test.hpp"
 
+#include "tf2/LinearMath/Quaternion.h"
+#include "tf2_geometry_msgs/tf2_geometry_msgs.hpp"
+
 using namespace std::chrono_literals;
 
 class RepeatabilityTestActionServer : public rclcpp::Node
@@ -40,15 +43,24 @@ public:
     action_result_timeout_s_ = declare_parameter<double>("action_result_timeout_s", 120.0);
     measurement_settle_time_s_ = declare_parameter<double>("measurement_settle_time_s", 2.0);
     fast_velocity_scale_ = declare_parameter<double>("fast_velocity_scale", 0.7);
+    axis_y_tool_yaw_offset_rad_ =
+      declare_parameter<double>("axis_y_tool_yaw_offset_rad", kDefaultAxisYToolYawOffsetRad);
     if (!std::isfinite(fast_velocity_scale_) ||
       fast_velocity_scale_ <= 0.0 ||
       fast_velocity_scale_ > 1.0)
     {
       RCLCPP_WARN(
         get_logger(),
-        "Invalid fast_velocity_scale=%.3f, clamping to 0.7",
+        "Invalid fast_velocity_scale=%.3f, clamping to 0.7 ",
         fast_velocity_scale_);
       fast_velocity_scale_ = 0.7;
+    }
+    if (!std::isfinite(axis_y_tool_yaw_offset_rad_)) {
+      RCLCPP_WARN(
+        get_logger(),
+        "Invalid axis_y_tool_yaw_offset_rad, using %.16f",
+        kDefaultAxisYToolYawOffsetRad);
+      axis_y_tool_yaw_offset_rad_ = kDefaultAxisYToolYawOffsetRad;
     }
 
     move_to_pose_client_ =
@@ -68,10 +80,13 @@ public:
   }
 
 private:
+  static constexpr double kDefaultAxisYToolYawOffsetRad = -1.5707963267948966;
+
   double server_wait_timeout_s_ = 5.0;
   double action_result_timeout_s_ = 120.0;
   double measurement_settle_time_s_ = 2.0;
   double fast_velocity_scale_ = 0.7;
+  double axis_y_tool_yaw_offset_rad_ = kDefaultAxisYToolYawOffsetRad;
 
   rclcpp_action::Server<RepeatabilityTest>::SharedPtr action_server_;
   rclcpp_action::Client<MoveToPose>::SharedPtr move_to_pose_client_;
@@ -92,6 +107,21 @@ private:
       std::isfinite(p.x) && std::isfinite(p.y) && std::isfinite(p.z) &&
       std::isfinite(q.x) && std::isfinite(q.y) && std::isfinite(q.z) && std::isfinite(q.w) &&
       q_norm > 1e-12;
+  }
+
+  geometry_msgs::msg::Quaternion rotate_tool_yaw(
+    const geometry_msgs::msg::Quaternion & input,
+    double yaw_offset_rad) const
+  {
+    tf2::Quaternion q_input;
+    tf2::fromMsg(input, q_input);
+
+    tf2::Quaternion q_yaw_offset;
+    q_yaw_offset.setRPY(0.0, 0.0, yaw_offset_rad);
+
+    tf2::Quaternion q_result = q_input * q_yaw_offset;
+    q_result.normalize();
+    return tf2::toMsg(q_result);
   }
 
   rclcpp_action::GoalResponse handle_goal(
@@ -149,11 +179,6 @@ private:
 
     if (!is_pose_valid(goal->disturb_pose_1)) {
       error_msg = "disturb_pose_1 is invalid";
-      return false;
-    }
-
-    if (!is_pose_valid(goal->disturb_pose_2)) {
-      error_msg = "disturb_pose_2 is invalid";
       return false;
     }
 
@@ -439,31 +464,74 @@ private:
     }
 
     geometry_msgs::msg::Pose retract_pose = goal->retract_pose.pose;
-    geometry_msgs::msg::Pose meas_pose = retract_pose;
+    geometry_msgs::msg::Pose disturb_pose_1 = goal->disturb_pose_1.pose;
+    geometry_msgs::msg::Pose working_retract_pose = retract_pose;
+    geometry_msgs::msg::Pose working_disturb_pose_1 = disturb_pose_1;
+
+    if (goal->axis == RepeatabilityTest::Goal::AXIS_Y) {
+      const auto rotated_orientation =
+        rotate_tool_yaw(retract_pose.orientation, axis_y_tool_yaw_offset_rad_);
+      working_retract_pose.orientation = rotated_orientation;
+      working_disturb_pose_1.orientation = rotated_orientation;
+    }
+
+    geometry_msgs::msg::Pose meas_pose = working_retract_pose;
+
     if (goal->axis == RepeatabilityTest::Goal::AXIS_X) {
-      meas_pose.position.x = retract_pose.position.x + goal->meas_offset;
+      meas_pose.position.x = working_retract_pose.position.x + goal->meas_offset;
     } else if (goal->axis == RepeatabilityTest::Goal::AXIS_Y) {
-      meas_pose.position.y = retract_pose.position.y + goal->meas_offset;
+      meas_pose.position.y = working_retract_pose.position.y + goal->meas_offset;
     } else {
-      meas_pose.position.z = retract_pose.position.z + goal->meas_offset;
+      meas_pose.position.z = working_retract_pose.position.z - goal->meas_offset;
     }
 
     RCLCPP_INFO(
       get_logger(),
-      "RepeatabilityTest start | mode=%s | axis=%u | offset=%.4f | repeats=%d | meas_vel=%.2f | fast_vel=%.2f",
+      "RepeatabilityTest start | mode=%s | axis=%u | offset=%.4f | repeats=%d | meas_vel=%.2f | fast_vel=%.2f | axis_y_yaw_offset=%.6f",
       execute_motion ? "execute" : "plan-only",
       goal->axis,
       goal->meas_offset,
       goal->repeat_count,
       goal->velocity_scale,
-      fast_velocity_scale_);
+      fast_velocity_scale_,
+      axis_y_tool_yaw_offset_rad_);
+    RCLCPP_INFO(
+      get_logger(),
+      "RepeatabilityTest working_retract_pose | position=(%.4f, %.4f, %.4f) | orientation=(%.7f, %.7f, %.7f, %.7f)",
+      working_retract_pose.position.x,
+      working_retract_pose.position.y,
+      working_retract_pose.position.z,
+      working_retract_pose.orientation.x,
+      working_retract_pose.orientation.y,
+      working_retract_pose.orientation.z,
+      working_retract_pose.orientation.w);
+    RCLCPP_INFO(
+      get_logger(),
+      "RepeatabilityTest meas_pose | position=(%.4f, %.4f, %.4f) | orientation=(%.7f, %.7f, %.7f, %.7f)",
+      meas_pose.position.x,
+      meas_pose.position.y,
+      meas_pose.position.z,
+      meas_pose.orientation.x,
+      meas_pose.orientation.y,
+      meas_pose.orientation.z,
+      meas_pose.orientation.w);
+    RCLCPP_INFO(
+      get_logger(),
+      "RepeatabilityTest working_disturb_pose_1 | position=(%.4f, %.4f, %.4f) | orientation=(%.7f, %.7f, %.7f, %.7f)",
+      working_disturb_pose_1.position.x,
+      working_disturb_pose_1.position.y,
+      working_disturb_pose_1.position.z,
+      working_disturb_pose_1.orientation.x,
+      working_disturb_pose_1.orientation.y,
+      working_disturb_pose_1.orientation.z,
+      working_disturb_pose_1.orientation.w);
 
     publish_feedback(
       goal_handle,
       0,
-      execute_motion ? "MoveToPose to retract_pose" : "Plan MoveToPose to retract_pose (execution skipped)");
-    if (!call_move_to_pose(retract_pose, fast_velocity_scale_, execute_motion, error_msg)) {
-      abort_goal(goal_handle, result, "Initial MoveToPose to retract_pose failed: " + error_msg, completed_count);
+      execute_motion ? "MoveToPose to working_retract_pose" : "Plan MoveToPose to working_retract_pose (execution skipped)");
+    if (!call_move_to_pose(working_retract_pose, fast_velocity_scale_, execute_motion, error_msg)) {
+      abort_goal(goal_handle, result, "Initial MoveToPose to working_retract_pose failed: " + error_msg, completed_count);
       return;
     }
 
@@ -491,36 +559,27 @@ private:
       publish_feedback(
         goal_handle,
         i,
-        execute_motion ? "Cartesian back to retract_pose" : "Plan Cartesian back to retract_pose (execution skipped)");
-      if (!call_move_to_pose_cartesian(retract_pose, fast_velocity_scale_, execute_motion, error_msg)) {
-        abort_goal(goal_handle, result, fail_message("Cartesian back to retract_pose", i, error_msg), completed_count);
+        execute_motion ? "Cartesian back to working_retract_pose" : "Plan Cartesian back to working_retract_pose (execution skipped)");
+      if (!call_move_to_pose_cartesian(working_retract_pose, fast_velocity_scale_, execute_motion, error_msg)) {
+        abort_goal(goal_handle, result, fail_message("Cartesian back to working_retract_pose", i, error_msg), completed_count);
         return;
       }
 
       publish_feedback(
         goal_handle,
         i,
-        execute_motion ? "MoveToPose to disturb_pose_1" : "Plan MoveToPose to disturb_pose_1 (execution skipped)");
-      if (!call_move_to_pose(goal->disturb_pose_1.pose, fast_velocity_scale_, execute_motion, error_msg)) {
-        abort_goal(goal_handle, result, fail_message("MoveToPose to disturb_pose_1", i, error_msg), completed_count);
+        execute_motion ? "MoveToPose to working_disturb_pose_1" : "Plan MoveToPose to working_disturb_pose_1 (execution skipped)");
+      if (!call_move_to_pose(working_disturb_pose_1, fast_velocity_scale_, execute_motion, error_msg)) {
+        abort_goal(goal_handle, result, fail_message("MoveToPose to working_disturb_pose_1", i, error_msg), completed_count);
         return;
       }
 
       publish_feedback(
         goal_handle,
         i,
-        execute_motion ? "MoveToPose to disturb_pose_2" : "Plan MoveToPose to disturb_pose_2 (execution skipped)");
-      if (!call_move_to_pose(goal->disturb_pose_2.pose, fast_velocity_scale_, execute_motion, error_msg)) {
-        abort_goal(goal_handle, result, fail_message("MoveToPose to disturb_pose_2", i, error_msg), completed_count);
-        return;
-      }
-
-      publish_feedback(
-        goal_handle,
-        i,
-        execute_motion ? "MoveToPose back to retract_pose" : "Plan MoveToPose back to retract_pose (execution skipped)");
-      if (!call_move_to_pose(retract_pose, fast_velocity_scale_, execute_motion, error_msg)) {
-        abort_goal(goal_handle, result, fail_message("MoveToPose back to retract_pose", i, error_msg), completed_count);
+        execute_motion ? "MoveToPose back to working_retract_pose" : "Plan MoveToPose back to working_retract_pose (execution skipped)");
+      if (!call_move_to_pose(working_retract_pose, fast_velocity_scale_, execute_motion, error_msg)) {
+        abort_goal(goal_handle, result, fail_message("MoveToPose back to working_retract_pose", i, error_msg), completed_count);
         return;
       }
 

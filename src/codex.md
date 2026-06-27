@@ -1,305 +1,286 @@
-Trong pkg `robot_gui`, sửa triệt để lỗi **font khu vực action log phía dưới màn hình vẫn quá lớn**.
+Yêu cầu sửa tiếp action `RepeatabilityTest` trong `robot_task_manager`.
 
-## Hiện tượng
+Hiện tượng:
+Sau khi sửa `axis=Y` để `meas_pose` xoay tool thêm 90 độ, khi chọn trục Y vẫn plan Cartesian lỗi. Trục X thì plan đúng.
 
-Khi chạy GUI và gọi action, khu vực log nằm dưới RViz và TaskControlPanel hiển thị chữ cực lớn, ví dụ:
-
-```text
-feedback stage=Move directly to place ...
-```
-
-Chữ quá to nên bị cắt, không đọc được đầy đủ log.
-
-Lần sửa trước chưa đúng, có thể đã sửa nhầm widget hoặc style trong `.ui` bị code runtime ghi đè.
-
-## Yêu cầu chính
-
-Phải tìm đúng widget thực tế đang được dùng để hiển thị log action, rồi giảm font về `8pt` hoặc `9pt`.
-
-Không chỉ sửa theo suy đoán objectName `txtActionLog`. Phải trace từ code nơi append/set log action.
-
----
-
-## 1. Tìm đúng widget đang hiển thị log
-
-Trong pkg `robot_gui`, tìm toàn bộ code liên quan log action:
-
-```bash
-cd ~/ros2_dev/src/robot_gui
-grep -R "feedback stage" -n .
-grep -R "appendActionLog" -n .
-grep -R "txtActionLog" -n .
-grep -R "setText" -n src include
-grep -R "appendPlainText" -n src include
-grep -R "append" -n src include
-grep -R "ActionLog" -n .
-grep -R "action log" -ni .
-```
-
-Mục tiêu là xác định chính xác widget nào đang nhận text log.
-
-Có thể là một trong các loại:
-
-```cpp
-QLabel
-QTextEdit
-QPlainTextEdit
-QTextBrowser
-```
-
-Nếu widget đang là `QLabel` thì không đủ phù hợp cho log nhiều dòng. Nên đổi sang `QPlainTextEdit` hoặc đảm bảo QLabel có font nhỏ và word wrap.
-
----
-
-## 2. Sửa bằng code runtime, không chỉ sửa `.ui`
-
-Sau `setupUi(this)` hoặc sau khi tạo `TaskActionController`, set trực tiếp font/style cho widget log thực tế.
-
-Ví dụ nếu widget là `QPlainTextEdit`:
-
-```cpp
-ui->txtActionLog->setReadOnly(true);
-ui->txtActionLog->setLineWrapMode(QPlainTextEdit::NoWrap);
-
-QFont logFont("DejaVu Sans Mono");
-logFont.setPointSize(8);
-ui->txtActionLog->setFont(logFont);
-
-ui->txtActionLog->setStyleSheet(
-    "QPlainTextEdit#txtActionLog {"
-    " font-family: 'DejaVu Sans Mono';"
-    " font-size: 8pt;"
-    " color: #111111;"
-    " background-color: white;"
-    "}"
-);
-```
-
-Nếu widget là `QTextEdit`:
-
-```cpp
-ui->txtActionLog->setReadOnly(true);
-
-QFont logFont("DejaVu Sans Mono");
-logFont.setPointSize(8);
-ui->txtActionLog->setFont(logFont);
-
-ui->txtActionLog->setStyleSheet(
-    "QTextEdit#txtActionLog {"
-    " font-family: 'DejaVu Sans Mono';"
-    " font-size: 8pt;"
-    " color: #111111;"
-    " background-color: white;"
-    "}"
-);
-```
-
-Nếu widget thực tế là `QLabel`:
-
-```cpp
-ui->txtActionLog->setWordWrap(true);
-ui->txtActionLog->setAlignment(Qt::AlignLeft | Qt::AlignTop);
-
-QFont logFont("DejaVu Sans Mono");
-logFont.setPointSize(8);
-ui->txtActionLog->setFont(logFont);
-
-ui->txtActionLog->setStyleSheet(
-    "QLabel#txtActionLog {"
-    " font-family: 'DejaVu Sans Mono';"
-    " font-size: 8pt;"
-    " color: #111111;"
-    " background-color: white;"
-    " padding: 6px;"
-    "}"
-);
-```
-
-Quan trọng: dùng đúng objectName thực tế, không bắt buộc phải là `txtActionLog` nếu file đang dùng tên khác.
-
----
-
-## 3. Nếu hiện tại log đang dùng QLabel thì nên đổi sang QPlainTextEdit
-
-Nếu khu vực dưới cùng đang là `QLabel` và dùng `setText()` để hiển thị log, cần cân nhắc sửa lại thành `QPlainTextEdit` để log nhiều dòng dễ đọc.
-
-Yêu cầu:
-
-* ObjectName nên là:
+Nguyên nhân:
+Hiện mới chỉ đổi orientation của `meas_pose`, còn `retract_pose` và `disturb_pose_1` vẫn giữ orientation cũ. Flow repeatability có đoạn Cartesian:
 
 ```text
-txtActionLog
+retract_pose -> meas_pose -> retract_pose
 ```
 
-* Font `8pt`.
-* ReadOnly.
-* Có scroll.
-* Append log từng dòng, không phóng to chữ.
+Nếu `meas_pose` xoay 90 độ nhưng `retract_pose` không xoay, Cartesian segment phải vừa dịch chuyển vừa đổi orientation 90 độ trong đoạn ngắn, dễ làm `computeCartesianPath()` fail.
 
-Trong code, thay vì:
+Mục tiêu:
+Khi `axis == AXIS_Y`, không chỉ `meas_pose`, mà cả các pose dùng trong flow phải đổi sang cùng hướng tool xoay 90 độ:
+
+* `retract_pose`
+* `meas_pose`
+* `disturb_pose_1`
+
+Tức là với trục Y, toàn bộ chu trình đo phải dùng orientation đã xoay 90 độ, để các đoạn Cartesian có orientation nhất quán.
+
+============================================================
+
+1. LOGIC MONG MUỐN
+   ============================================================
+
+Hiện tại có thể đang có logic kiểu:
 
 ```cpp
-ui->xxxLabel->setText(log);
-```
+auto retract_pose = goal->retract_pose.pose;
+auto disturb_pose_1 = goal->disturb_pose_1.pose;
+auto meas_pose = retract_pose;
 
-nên dùng:
-
-```cpp
-ui->txtActionLog->appendPlainText(log);
-```
-
-Nếu không muốn đổi layout nhiều, chỉ cần set font runtime cho QLabel hiện có, nhưng phải đảm bảo chữ không còn to.
-
----
-
-## 4. Kiểm tra stylesheet global đang ghi đè
-
-Tìm trong `.ui`, `.qss`, `.cpp` các style font lớn:
-
-```bash
-grep -R "font-size" -n ~/ros2_dev/src/robot_gui
-grep -R "pointsize" -n ~/ros2_dev/src/robot_gui
-grep -R "setPointSize" -n ~/ros2_dev/src/robot_gui
-grep -R "setStyleSheet" -n ~/ros2_dev/src/robot_gui
-```
-
-Nếu có style global kiểu:
-
-```css
-QLabel {
-    font-size: 48px;
+if (goal->axis == RepeatabilityTest::Goal::AXIS_X) {
+  meas_pose.position.x = retract_pose.position.x + goal->meas_offset;
+} else if (goal->axis == RepeatabilityTest::Goal::AXIS_Y) {
+  meas_pose.position.y = retract_pose.position.y + goal->meas_offset;
+  // mới chỉ xoay meas_pose ở đây
+} else {
+  meas_pose.position.z = retract_pose.position.z + goal->meas_offset;
 }
 ```
 
-hoặc:
+Cần đổi thành:
 
-```css
-QFrame QLabel {
-    font-size: 48px;
+```cpp
+auto retract_pose = goal->retract_pose.pose;
+auto disturb_pose_1 = goal->disturb_pose_1.pose;
+
+auto working_retract_pose = retract_pose;
+auto working_disturb_pose_1 = disturb_pose_1;
+auto meas_pose = working_retract_pose;
+
+if (goal->axis == RepeatabilityTest::Goal::AXIS_Y) {
+  const auto rotated_orientation = rotateYaw90(retract_pose.orientation);
+
+  working_retract_pose.orientation = rotated_orientation;
+  working_disturb_pose_1.orientation = rotated_orientation;
+  meas_pose.orientation = rotated_orientation;
 }
 ```
 
-thì phải override riêng cho widget log bằng selector objectName cụ thể:
+Sau đó mới tính vị trí đo:
 
-```css
-QLabel#txtActionLog {
-    font-size: 8pt;
+```cpp
+if (goal->axis == RepeatabilityTest::Goal::AXIS_X) {
+  meas_pose.position.x = working_retract_pose.position.x + goal->meas_offset;
+} else if (goal->axis == RepeatabilityTest::Goal::AXIS_Y) {
+  meas_pose.position.y = working_retract_pose.position.y + goal->meas_offset;
+} else {
+  meas_pose.position.z = working_retract_pose.position.z + goal->meas_offset;
 }
 ```
 
-hoặc:
-
-```css
-QPlainTextEdit#txtActionLog {
-    font-size: 8pt;
-}
-```
-
-Không sửa font toàn bộ GUI.
-
----
-
-## 5. Đảm bảo `appendActionLog()` không làm mất style
-
-Kiểm tra hàm log, ví dụ:
-
-```cpp
-appendActionLog(...)
-```
-
-Không được dùng HTML với size lớn kiểu:
-
-```cpp
-"<span style='font-size:48px'>...</span>"
-```
-
-Không được dùng `setText()` với rich text có font lớn.
-
-Nếu đang dùng `QTextEdit`, có thể append plain text:
-
-```cpp
-ui->txtActionLog->append(message);
-```
-
-Nhưng phải đảm bảo không insert HTML font-size lớn.
-
-Ưu tiên dùng `QPlainTextEdit`:
-
-```cpp
-ui->txtActionLog->appendPlainText(message);
-```
-
----
-
-## 6. Kết quả mong muốn
-
-Sau khi sửa, khu vực log phía dưới phải hiển thị dạng nhỏ gọn, ví dụ:
+Và toàn bộ flow phía sau phải dùng:
 
 ```text
-[Pick Place] Sending goal to /pickplace, execute=true
-[Pick Place] feedback stage=Open gripper, progress=5%
-[Pick Place] feedback stage=Move directly to place approach, progress=70%
-[Pick Place] result success=true, message=...
+working_retract_pose
+meas_pose
+working_disturb_pose_1
 ```
 
-Font khoảng `8pt` hoặc `9pt`, đọc được nhiều dòng, không bị phóng to và không bị cắt như hiện tại.
+Không được dùng lại `retract_pose` / `disturb_pose_1` gốc trong các lệnh move sau khi đã tạo pose làm việc.
 
----
+============================================================
+2. HÀM XOAY ORIENTATION 90 ĐỘ
+=============================
 
-## 7. Build và test
+Tạo helper rõ ràng, ví dụ:
 
-Build lại:
+```cpp
+geometry_msgs::msg::Quaternion rotateToolYaw(
+  const geometry_msgs::msg::Quaternion& input,
+  double yaw_offset_rad)
+{
+  tf2::Quaternion q_input;
+  tf2::fromMsg(input, q_input);
+
+  tf2::Quaternion q_offset;
+  q_offset.setRPY(0.0, 0.0, yaw_offset_rad);
+
+  tf2::Quaternion q_result = q_input * q_offset;
+  q_result.normalize();
+
+  return tf2::toMsg(q_result);
+}
+```
+
+Dùng:
+
+```cpp
+const auto rotated_orientation =
+  rotateToolYaw(retract_pose.orientation, axis_y_tool_yaw_offset_rad_);
+```
+
+Default:
+
+```cpp
+axis_y_tool_yaw_offset_rad_ = 1.5707963267948966;
+```
+
+Nếu project đã thêm parameter `axis_y_tool_yaw_offset_rad` thì dùng parameter đó. Nếu chưa có thì thêm parameter này.
+
+============================================================
+3. FLOW SAU KHI SỬA
+===================
+
+Flow mới phải dùng pose đã được chuẩn hóa orientation:
+
+```text
+1. MoveToPose tới working_retract_pose
+2. Mỗi loop:
+   - Cartesian từ working_retract_pose tới meas_pose
+   - Wait measurement_settle_time_s
+   - Cartesian từ meas_pose quay về working_retract_pose
+   - MoveToPose tới working_disturb_pose_1
+   - MoveToPose quay về working_retract_pose
+```
+
+Với axis X:
+
+* `working_retract_pose.orientation = retract_pose.orientation`
+* `working_disturb_pose_1.orientation = disturb_pose_1.orientation`
+* `meas_pose.orientation = retract_pose.orientation`
+
+Với axis Y:
+
+* `working_retract_pose.orientation = rotated_orientation`
+* `working_disturb_pose_1.orientation = rotated_orientation`
+* `meas_pose.orientation = rotated_orientation`
+
+Với axis Z:
+
+* `working_retract_pose.orientation = retract_pose.orientation`
+* `working_disturb_pose_1.orientation = disturb_pose_1.orientation`
+* `meas_pose.orientation = retract_pose.orientation`
+
+============================================================
+4. ĐIỂM QUAN TRỌNG
+==================
+
+Khi `axis=Y`, không được để các đoạn này có orientation lệch nhau:
+
+```text
+working_retract_pose -> meas_pose
+meas_pose -> working_retract_pose
+```
+
+Hai pose này phải cùng orientation đã xoay 90 độ.
+
+Nếu dùng action con `/move_to_pose` cho `working_retract_pose` và `working_disturb_pose_1`, cũng phải truyền pose đã xoay.
+
+Nếu dùng `/move_to_pose_cartesian` cho `meas_pose`, cũng phải truyền pose đã xoay.
+
+Không sửa action interface.
+
+Không đổi:
+
+* action name `/repeatability_test`
+* action type
+* field goal
+* logic position X/Y/Z
+* velocity_scale / fast_velocity_scale
+* execute=true / execute=false behavior
+
+============================================================
+5. TEST BẮT BUỘC
+================
+
+Build:
 
 ```bash
 cd ~/ros2_dev
-colcon build --packages-select robot_gui --symlink-install
+colcon build --packages-select robot_task_manager
 source install/setup.bash
 ```
 
-Chạy task servers:
+Launch server:
 
 ```bash
 ros2 launch robot_task_manager task_servers.launch.py
 ```
 
-Chạy GUI.
+Test axis X plan-only, phải vẫn đúng như cũ:
 
-Test:
-
-1. Vào tab `Pick Place`.
-2. Bấm `Start` hoặc `Plan`.
-3. Quan sát khu vực log phía dưới.
-4. Xác nhận font đã nhỏ.
-5. Xác nhận log không bị cắt.
-6. Xác nhận GUI không crash.
-7. Xác nhận các vùng khác không bị đổi font ngoài ý muốn.
-
----
-
-## 8. Báo cáo
-
-Cập nhật file:
-
-```text
-src/robot_gui/task_action_gui_report.md
+```bash
+ros2 action send_goal /repeatability_test robot_task_manager/action/RepeatabilityTest \
+  "{retract_pose: {header: {frame_id: 'world'}, pose: {position: {x: 0.40, y: 0.00, z: 0.18}, orientation: {x: 0.7071068, y: 0.7071068, z: 0.0, w: 0.0}}}, disturb_pose_1: {header: {frame_id: 'world'}, pose: {position: {x: 0.35, y: -0.08, z: 0.18}, orientation: {x: 0.7071068, y: 0.7071068, z: 0.0, w: 0.0}}}, axis: 0, meas_offset: 0.02, repeat_count: 1, velocity_scale: 0.15, execute: false}" \
+  --feedback
 ```
 
-Thêm rõ:
+Test axis Y plan-only:
 
-```text
-## Fix action log font
-
-- Nguyên nhân font log vẫn to:
-  - <ghi rõ do widget nào / stylesheet nào / code nào ghi đè>
-- Widget thực tế hiển thị log:
-  - <objectName>
-  - <class: QLabel/QPlainTextEdit/QTextEdit/...>
-- File đã sửa:
-  - <danh sách file>
-- Font sau sửa:
-  - 8pt hoặc 9pt
-- Kết quả test:
-  - Log action đã hiển thị nhỏ, đọc được nhiều dòng.
+```bash
+ros2 action send_goal /repeatability_test robot_task_manager/action/RepeatabilityTest \
+  "{retract_pose: {header: {frame_id: 'world'}, pose: {position: {x: 0.40, y: 0.00, z: 0.18}, orientation: {x: 0.7071068, y: 0.7071068, z: 0.0, w: 0.0}}}, disturb_pose_1: {header: {frame_id: 'world'}, pose: {position: {x: 0.35, y: -0.08, z: 0.18}, orientation: {x: 0.7071068, y: 0.7071068, z: 0.0, w: 0.0}}}, axis: 1, meas_offset: 0.02, repeat_count: 1, velocity_scale: 0.15, execute: false}" \
+  --feedback
 ```
 
-Chỉ xem là hoàn thành khi ảnh/log thực tế trong GUI không còn chữ lớn như hiện tại.
+Kỳ vọng axis Y:
+
+* `working_retract_pose`, `meas_pose`, `working_disturb_pose_1` đều cùng orientation xoay 90 độ.
+* Cartesian từ retract xuống meas plan được.
+* Cartesian từ meas về retract plan được.
+* Không còn fail do orientation đổi đột ngột giữa retract/meas.
+
+Test axis Y execute thật:
+
+```bash
+ros2 action send_goal /repeatability_test robot_task_manager/action/RepeatabilityTest \
+  "{retract_pose: {header: {frame_id: 'world'}, pose: {position: {x: 0.40, y: 0.00, z: 0.18}, orientation: {x: 0.7071068, y: 0.7071068, z: 0.0, w: 0.0}}}, disturb_pose_1: {header: {frame_id: 'world'}, pose: {position: {x: 0.35, y: -0.08, z: 0.18}, orientation: {x: 0.7071068, y: 0.7071068, z: 0.0, w: 0.0}}}, axis: 1, meas_offset: 0.02, repeat_count: 1, velocity_scale: 0.15, execute: true}" \
+  --feedback
+```
+
+Kỳ vọng:
+
+* Robot đi tới retract với tool đã xoay 90 độ.
+* Cartesian tới meas theo Y thành công.
+* Quay về retract thành công.
+* Đi tới disturb_pose_1 với cùng hướng tool xoay 90 độ.
+* Không fail Cartesian do mismatch orientation.
+
+============================================================
+6. CẬP NHẬT TÀI LIỆU
+====================
+
+Cập nhật `robot_task_manager/Call_action.md` phần `/repeatability_test`:
+
+Ghi rõ:
+
+* `axis=0`: dịch X, giữ orientation goal gốc.
+* `axis=1`: dịch Y, toàn bộ pose trong chu trình đo dùng orientation xoay thêm `axis_y_tool_yaw_offset_rad`, default `+90 deg`.
+
+  * `retract_pose`
+  * `meas_pose`
+  * `disturb_pose_1`
+* `axis=2`: dịch Z, giữ orientation goal gốc.
+
+============================================================
+7. BÁO CÁO
+==========
+
+Tạo file:
+
+```text
+repeatability_test_axis_y_all_pose_orientation_report.md
+```
+
+Nội dung bắt buộc:
+
+1. Nguyên nhân axis Y fail Cartesian.
+2. File đã sửa.
+3. Logic cũ: chỉ xoay `meas_pose`.
+4. Logic mới: xoay cả `working_retract_pose`, `meas_pose`, `working_disturb_pose_1`.
+5. Giá trị yaw offset dùng cho axis Y.
+6. Có dùng parameter `axis_y_tool_yaw_offset_rad` không.
+7. Kết quả build.
+8. Kết quả test:
+
+   * axis X execute=false
+   * axis Y execute=false
+   * axis Y execute=true
+9. Xác nhận không đổi action interface.
+10. Xác nhận không ảnh hưởng axis X/Z.

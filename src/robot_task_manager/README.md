@@ -126,7 +126,7 @@ Run a GT10 repeatability measurement sequence without reading GT10 data in ROS. 
 Sequence:
 
 1. `MoveToPose` to `retract_pose`
-2. For each loop: Cartesian move to `meas_pose`, wait 2 seconds, Cartesian back to `retract_pose`, move to `disturb_pose_1`, move to `disturb_pose_2`, move back to `retract_pose`
+2. For each loop: Cartesian move to `meas_pose`, wait 2 seconds, Cartesian back to `retract_pose`, move to `disturb_pose_1`, move back to `retract_pose`
 
 `meas_pose` is computed from `retract_pose`; `axis=0` adds `meas_offset` to `x`, `axis=1` adds it to `y`, and `axis=2` adds it to `z`. Orientation is always copied from `retract_pose`. `velocity_scale` is used for the slow measurement segment; other moves use `fast_velocity_scale` default `0.7`.
 
@@ -169,7 +169,7 @@ Direct action command:
 
 ```bash
 ros2 action send_goal /repeatability_test robot_task_manager/action/RepeatabilityTest \
-  "{retract_pose: {header: {frame_id: 'world'}, pose: {position: {x: 0.40, y: 0.00, z: 0.18}, orientation: {x: 1.0, y: 1.0, z: 0.0, w: 0.0}}}, disturb_pose_1: {header: {frame_id: 'world'}, pose: {position: {x: 0.35, y: -0.08, z: 0.18}, orientation: {x: 1.0, y: 1.0, z: 0.0, w: 0.0}}}, disturb_pose_2: {header: {frame_id: 'world'}, pose: {position: {x: 0.45, y: 0.08, z: 0.18}, orientation: {x: 1.0, y: 1.0, z: 0.0, w: 0.0}}}, axis: 0, meas_offset: 0.02, repeat_count: 3, velocity_scale: 0.25, execute: true}" --feedback
+  "{retract_pose: {header: {frame_id: 'world'}, pose: {position: {x: 0.40, y: 0.00, z: 0.18}, orientation: {x: 0.7071068, y: 0.7071068, z: 0.0, w: 0.0}}}, disturb_pose_1: {header: {frame_id: 'world'}, pose: {position: {x: 0.35, y: -0.08, z: 0.18}, orientation: {x: 0.7071068, y: 0.7071068, z: 0.0, w: 0.0}}}, axis: 2, meas_offset: -0.02, repeat_count: 3, velocity_scale: 0.15, execute: true}" --feedback
 ```
 
 ## Robot Workspace Limits (approximate)

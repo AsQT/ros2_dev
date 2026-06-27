@@ -3,6 +3,7 @@
 #include <cmath>
 #include <chrono>
 #include <limits>
+#include <optional>
 #include <string>
 #include <thread>
 #include <vector>
@@ -47,8 +48,8 @@ using PickPlace = robot_task_manager::action::PickPlace;
 using RepeatabilityTest = robot_task_manager::action::RepeatabilityTest;
 using LogFn = std::function<void(const QString &)>;
 
-constexpr double kDefaultVelocityScale = 0.5;
-constexpr double kDefaultRepeatVelocityScale = 0.25;
+constexpr double kDefaultVelocityScale = 0.1;
+constexpr double kDefaultRepeatVelocityScale = 0.15;
 constexpr double kDefaultOriX = 1.0;
 constexpr double kDefaultOriY = 1.0;
 constexpr double kDefaultOriZ = 0.0;
@@ -57,9 +58,32 @@ constexpr double kDrlRepeatOriX = 1.0;
 constexpr double kDrlRepeatOriY = 1.0;
 constexpr double kDrlRepeatOriZ = 0.0;
 constexpr double kDrlRepeatOriW = 0.0;
-constexpr double kDefaultGripperOpen = 0.048;
-constexpr double kDefaultGripperClose = 0.028;
-constexpr double kDefaultPickGripper = 0.01;
+constexpr double kDefaultMoveXMm = 400.0;
+constexpr double kDefaultMoveYMm = 100.0;
+constexpr double kDefaultMoveZMm = 350.0;
+constexpr double kDefaultPickXMm = 400.0;
+constexpr double kDefaultPickYMm = 100.0;
+constexpr double kDefaultPickZMm = 250.0;
+constexpr double kDefaultPlaceXMm = 300.0;
+constexpr double kDefaultPlaceYMm = 0.0;
+constexpr double kDefaultPlaceZMm = 250.0;
+constexpr double kDefaultGripperOpenMm = 48.0;
+constexpr double kDefaultGripperCloseMm = 28.0;
+constexpr double kDefaultPickGripperMm = 10.0;
+constexpr double kDefaultCheckerStepMm = 100.0;
+constexpr double kDefaultRepeatRetractXMm = 350.0;
+constexpr double kDefaultRepeatRetractYMm = 0.0;
+constexpr double kDefaultRepeatRetractZMm = 100.0;
+constexpr double kDefaultRepeatDisturb1XMm = 320.0;
+constexpr double kDefaultRepeatDisturb1YMm = -50.0;
+constexpr double kDefaultRepeatDisturb1ZMm = 120.0;
+constexpr double kDefaultRepeatMeasOffsetMm = 50.0;
+constexpr double kDefaultDrlPickXMm = 400.0;
+constexpr double kDefaultDrlPickYMm = 50.0;
+constexpr double kDefaultDrlPickZMm = 80.0;
+constexpr double kDefaultDrlPlaceXMm = 340.0;
+constexpr double kDefaultDrlPlaceYMm = -100.0;
+constexpr double kDefaultDrlPlaceZMm = 80.0;
 constexpr double kPi = 3.14159265358979323846;
 
 QString resultCodeToString(rclcpp_action::ResultCode code)
@@ -497,11 +521,11 @@ void TaskActionController::connectUiSignals()
   connectButton("btnRLStop", [this]() {logCancelUnavailable("Move Pose RL");});
 
   connectButton("btnTaskGripperOpen", [this]() {
-    sendGripper(kDefaultGripperOpen, true, "Gripper Open");
+    sendGripper(kDefaultGripperOpenMm, true, "Gripper Open");
   });
   connectButton("btnTaskGripperClose", [this]() {
     const double position = root_->findChild<QLineEdit *>("txtGripperDistance") == nullptr ?
-      kDefaultGripperClose : std::numeric_limits<double>::quiet_NaN();
+      kDefaultGripperCloseMm : std::numeric_limits<double>::quiet_NaN();
     sendGripper(position, true, "Gripper Close");
   });
   connectButton("btnGripperRun", [this]() {
@@ -719,6 +743,29 @@ void TaskActionController::appendActionLog(const QString & msg)
     Qt::QueuedConnection);
 }
 
+std::optional<double> TaskActionController::readMmAsMeter(
+  QLineEdit * edit,
+  double default_mm,
+  const QString & field_name)
+{
+  double value_mm = default_mm;
+  if (edit != nullptr && !edit->text().trimmed().isEmpty()) {
+    bool ok = false;
+    value_mm = edit->text().trimmed().toDouble(&ok);
+    if (!ok || !std::isfinite(value_mm)) {
+      appendActionLog(QString("[Input Error] %1 invalid mm value").arg(field_name));
+      return std::nullopt;
+    }
+  }
+
+  const double value_m = value_mm / 1000.0;
+  appendActionLog(QString("%1=%2 mm -> %3 m")
+    .arg(field_name)
+    .arg(value_mm, 0, 'f', 3)
+    .arg(value_m, 0, 'f', 3));
+  return value_m;
+}
+
 void TaskActionController::setMovePoseRlBusy(bool busy)
 {
   QMetaObject::invokeMethod(
@@ -742,13 +789,11 @@ void TaskActionController::logCancelUnavailable(const QString & label)
 void TaskActionController::sendMovePose(bool execute)
 {
   const LogFn log = [this](const QString & msg) {appendActionLog(msg);};
-  double x = 0.40;
-  double y = 0.10;
-  double z = 0.35;
   double velocity = kDefaultVelocityScale;
-  if (!readDouble(root_, "txtTargetX", x, "Move Pose X", log, &x) ||
-    !readDouble(root_, "txtTargetY", y, "Move Pose Y", log, &y) ||
-    !readDouble(root_, "txtTargetZ", z, "Move Pose Z", log, &z) ||
+  const auto x = readMmAsMeter(lineEdit(root_, "txtTargetX"), kDefaultMoveXMm, "[Move Pose] X");
+  const auto y = readMmAsMeter(lineEdit(root_, "txtTargetY"), kDefaultMoveYMm, "[Move Pose] Y");
+  const auto z = readMmAsMeter(lineEdit(root_, "txtTargetZ"), kDefaultMoveZMm, "[Move Pose] Z");
+  if (!x || !y || !z ||
     !readVelocity(root_, "", velocity, "Move Pose velocity_scale", log, &velocity))
   {
     return;
@@ -767,7 +812,7 @@ void TaskActionController::sendMovePose(bool execute)
 
   if (cartesian) {
     MoveToPoseCartesian::Goal goal;
-    goal.target_pose = makePose(x, y, z, orientation);
+    goal.target_pose = makePose(*x, *y, *z, orientation);
     goal.velocity_scale = velocity;
     goal.execute = execute;
     sendGoal<MoveToPoseCartesian>(
@@ -775,7 +820,7 @@ void TaskActionController::sendMovePose(bool execute)
       execute ? "Move Pose Cartesian Start" : "Move Pose Cartesian Plan", goal, log);
   } else {
     MoveToPose::Goal goal;
-    goal.target_pose = makePose(x, y, z, orientation);
+    goal.target_pose = makePose(*x, *y, *z, orientation);
     goal.velocity_scale = velocity;
     goal.execute = execute;
     sendGoal<MoveToPose>(
@@ -785,38 +830,48 @@ void TaskActionController::sendMovePose(bool execute)
 
 void TaskActionController::sendGripper(double position, bool execute, const QString & label)
 {
-  const LogFn log = [this](const QString & msg) {appendActionLog(msg);};
-  double target = position;
-  if (!std::isfinite(target) &&
-    !readNonNegative(root_, "txtGripperDistance", kDefaultGripperClose, "Gripper position", log, &target))
-  {
+  std::optional<double> target;
+  if (std::isfinite(position)) {
+    target = position / 1000.0;
+    appendActionLog(QString("[Gripper] width=%1 mm -> %2 m")
+      .arg(position, 0, 'f', 3)
+      .arg(*target, 0, 'f', 3));
+  } else {
+    target = readMmAsMeter(
+      lineEdit(root_, "txtGripperDistance"),
+      kDefaultGripperCloseMm,
+      "[Gripper] width");
+  }
+  if (!target) {
+    return;
+  }
+  if (*target < 0.0) {
+    appendActionLog("[Input Error] [Gripper] width must be >= 0 mm");
     return;
   }
 
   MoveGripper::Goal goal;
-  goal.position = target;
+  goal.position = *target;
   goal.execute = execute;
+  const LogFn log = [this](const QString & msg) {appendActionLog(msg);};
   sendGoal<MoveGripper>(node_, "/move_gripper", label, goal, log);
 }
 
 void TaskActionController::sendPickPlace(bool execute)
 {
   const LogFn log = [this](const QString & msg) {appendActionLog(msg);};
-  double pick_x = 0.40;
-  double pick_y = 0.10;
-  double pick_z = 0.25;
-  double place_x = 0.30;
-  double place_y = 0.00;
-  double place_z = 0.25;
-  double gripper = kDefaultPickGripper;
   double velocity = kDefaultVelocityScale;
-  if (!readDouble(root_, "pickPoseX", pick_x, "Pick X", log, &pick_x) ||
-    !readDouble(root_, "pickPoseY", pick_y, "Pick Y", log, &pick_y) ||
-    !readDouble(root_, "pickPoseZ", pick_z, "Pick Z", log, &pick_z) ||
-    !readDouble(root_, "placePoseX", place_x, "Place X", log, &place_x) ||
-    !readDouble(root_, "placePoseY", place_y, "Place Y", log, &place_y) ||
-    !readDouble(root_, "placePoseZ", place_z, "Place Z", log, &place_z) ||
-    !readNonNegative(root_, "", gripper, "PickPlace gripper", log, &gripper) ||
+  const auto pick_x = readMmAsMeter(lineEdit(root_, "pickPoseX"), kDefaultPickXMm, "[Pick Place] pick X");
+  const auto pick_y = readMmAsMeter(lineEdit(root_, "pickPoseY"), kDefaultPickYMm, "[Pick Place] pick Y");
+  const auto pick_z = readMmAsMeter(lineEdit(root_, "pickPoseZ"), kDefaultPickZMm, "[Pick Place] pick Z");
+  const auto place_x = readMmAsMeter(lineEdit(root_, "placePoseX"), kDefaultPlaceXMm, "[Pick Place] place X");
+  const auto place_y = readMmAsMeter(lineEdit(root_, "placePoseY"), kDefaultPlaceYMm, "[Pick Place] place Y");
+  const auto place_z = readMmAsMeter(lineEdit(root_, "placePoseZ"), kDefaultPlaceZMm, "[Pick Place] place Z");
+  const double gripper = kDefaultPickGripperMm / 1000.0;
+  appendActionLog(QString("[Pick Place] gripper=%1 mm -> %2 m")
+    .arg(kDefaultPickGripperMm, 0, 'f', 3)
+    .arg(gripper, 0, 'f', 3));
+  if (!pick_x || !pick_y || !pick_z || !place_x || !place_y || !place_z ||
     !readVelocity(root_, "", velocity, "PickPlace velocity_scale", log, &velocity))
   {
     return;
@@ -833,8 +888,8 @@ void TaskActionController::sendPickPlace(bool execute)
   }
 
   PickPlace::Goal goal;
-  goal.pose_pick = makePose(pick_x, pick_y, pick_z, pick_q);
-  goal.pose_place = makePose(place_x, place_y, place_z, place_q);
+  goal.pose_pick = makePose(*pick_x, *pick_y, *pick_z, pick_q);
+  goal.pose_place = makePose(*place_x, *place_y, *place_z, place_q);
   goal.gripper = gripper;
   goal.velocity_scale = velocity;
   goal.execute = execute;
@@ -851,19 +906,14 @@ void TaskActionController::sendPickPlaceVision(bool execute)
       u8"Vision pose chưa có dữ liệu, dùng pose nhập tay hoặc không gửi goal."));
   }
 
-  double pick_x = 0.40;
-  double pick_y = 0.10;
-  double pick_z = 0.25;
-  double place_x = 0.30;
-  double place_y = 0.00;
-  double place_z = 0.25;
   double velocity = kDefaultVelocityScale;
-  if (!readDouble(root_, "txtObjectX", pick_x, "Vision pick X", log, &pick_x) ||
-    !readDouble(root_, "txtObjectY", pick_y, "Vision pick Y", log, &pick_y) ||
-    !readDouble(root_, "txtObjectZ", pick_z, "Vision pick Z", log, &pick_z) ||
-    !readDouble(root_, "visionPlacePoseX", place_x, "Vision place X", log, &place_x) ||
-    !readDouble(root_, "visionPlacePoseY", place_y, "Vision place Y", log, &place_y) ||
-    !readDouble(root_, "visionPlacePoseZ", place_z, "Vision place Z", log, &place_z) ||
+  const auto pick_x = readMmAsMeter(lineEdit(root_, "txtObjectX"), kDefaultPickXMm, "[Pick Place Vision] pick X");
+  const auto pick_y = readMmAsMeter(lineEdit(root_, "txtObjectY"), kDefaultPickYMm, "[Pick Place Vision] pick Y");
+  const auto pick_z = readMmAsMeter(lineEdit(root_, "txtObjectZ"), kDefaultPickZMm, "[Pick Place Vision] pick Z");
+  const auto place_x = readMmAsMeter(lineEdit(root_, "visionPlacePoseX"), kDefaultPlaceXMm, "[Pick Place Vision] place X");
+  const auto place_y = readMmAsMeter(lineEdit(root_, "visionPlacePoseY"), kDefaultPlaceYMm, "[Pick Place Vision] place Y");
+  const auto place_z = readMmAsMeter(lineEdit(root_, "visionPlacePoseZ"), kDefaultPlaceZMm, "[Pick Place Vision] place Z");
+  if (!pick_x || !pick_y || !pick_z || !place_x || !place_y || !place_z ||
     !readVelocity(root_, "", velocity, "PickPlace Vision velocity_scale", log, &velocity))
   {
     return;
@@ -876,9 +926,9 @@ void TaskActionController::sendPickPlaceVision(bool execute)
   }
 
   PickPlace::Goal goal;
-  goal.pose_pick = makePose(pick_x, pick_y, pick_z, defaultQuaternion());
-  goal.pose_place = makePose(place_x, place_y, place_z, place_q);
-  goal.gripper = kDefaultPickGripper;
+  goal.pose_pick = makePose(*pick_x, *pick_y, *pick_z, defaultQuaternion());
+  goal.pose_place = makePose(*place_x, *place_y, *place_z, place_q);
+  goal.gripper = kDefaultPickGripperMm / 1000.0;
   goal.velocity_scale = velocity;
   goal.execute = execute;
   sendGoal<PickPlace>(
@@ -888,15 +938,14 @@ void TaskActionController::sendPickPlaceVision(bool execute)
 void TaskActionController::sendDrlPickPlace(bool execute)
 {
   const LogFn log = [this](const QString & msg) {appendActionLog(msg);};
-  double place_x = 0.34;
-  double place_y = -0.10;
-  double place_z = 0.08;
-  double gripper = kDefaultGripperClose;
-  if (!readDouble(root_, "rlPlacePoseX", place_x, "DRL place X", log, &place_x) ||
-    !readDouble(root_, "rlPlacePoseY", place_y, "DRL place Y", log, &place_y) ||
-    !readDouble(root_, "rlPlacePoseZ", place_z, "DRL place Z", log, &place_z) ||
-    !readNonNegative(root_, "", gripper, "DRL gripper close width", log, &gripper))
-  {
+  const auto place_x = readMmAsMeter(lineEdit(root_, "rlPlacePoseX"), kDefaultDrlPlaceXMm, "[Pick Place RL] place X");
+  const auto place_y = readMmAsMeter(lineEdit(root_, "rlPlacePoseY"), kDefaultDrlPlaceYMm, "[Pick Place RL] place Y");
+  const auto place_z = readMmAsMeter(lineEdit(root_, "rlPlacePoseZ"), kDefaultDrlPlaceZMm, "[Pick Place RL] place Z");
+  const double gripper = kDefaultGripperCloseMm / 1000.0;
+  appendActionLog(QString("[Pick Place RL] gripper_close_width=%1 mm -> %2 m")
+    .arg(kDefaultGripperCloseMm, 0, 'f', 3)
+    .arg(gripper, 0, 'f', 3));
+  if (!place_x || !place_y || !place_z) {
     return;
   }
 
@@ -911,8 +960,13 @@ void TaskActionController::sendDrlPickPlace(bool execute)
 
   DrlPickPlace::Goal goal;
   goal.target_pick = makeStampedPose(
-    "base_link", makePose(0.40, 0.05, 0.08, drlRepeatQuaternion()));
-  goal.target_place = makeStampedPose("base_link", makePose(place_x, place_y, place_z, place_q));
+    "base_link",
+    makePose(
+      kDefaultDrlPickXMm / 1000.0,
+      kDefaultDrlPickYMm / 1000.0,
+      kDefaultDrlPickZMm / 1000.0,
+      drlRepeatQuaternion()));
+  goal.target_place = makeStampedPose("base_link", makePose(*place_x, *place_y, *place_z, place_q));
   goal.gripper_close_width_m = gripper;
   goal.execute = execute;
   sendGoal<DrlPickPlace>(
@@ -922,13 +976,11 @@ void TaskActionController::sendDrlPickPlace(bool execute)
 void TaskActionController::sendMovePoseRl(bool execute)
 {
   const LogFn log = [this](const QString & msg) {appendActionLog(msg);};
-  double x = 0.40;
-  double y = 0.10;
-  double z = 0.35;
   double velocity = kDefaultVelocityScale;
-  if (!readDouble(root_, "rlPosePositionX", x, "MovePoseRL X", log, &x) ||
-    !readDouble(root_, "rlPosePositionY", y, "MovePoseRL Y", log, &y) ||
-    !readDouble(root_, "rlPosePositionZ", z, "MovePoseRL Z", log, &z) ||
+  const auto x = readMmAsMeter(lineEdit(root_, "rlPosePositionX"), kDefaultMoveXMm, "[MovePoseRL] X");
+  const auto y = readMmAsMeter(lineEdit(root_, "rlPosePositionY"), kDefaultMoveYMm, "[MovePoseRL] Y");
+  const auto z = readMmAsMeter(lineEdit(root_, "rlPosePositionZ"), kDefaultMoveZMm, "[MovePoseRL] Z");
+  if (!x || !y || !z ||
     !readVelocity(root_, "txtVelocityScale", velocity, "MovePoseRL velocity_scale", log, &velocity))
   {
     return;
@@ -947,7 +999,7 @@ void TaskActionController::sendMovePoseRl(bool execute)
   }
 
   MovePoseRl::Goal goal;
-  goal.target_pose = makePose(x, y, z, orientation);
+  goal.target_pose = makePose(*x, *y, *z, orientation);
   goal.velocity_scale = velocity;
   goal.execute = execute;
 
@@ -1053,16 +1105,19 @@ void TaskActionController::sendMovePoseRl(bool execute)
 void TaskActionController::sendCheckerBoard(bool execute)
 {
   const LogFn log = [this](const QString & msg) {appendActionLog(msg);};
-  double step = 0.10;
   double velocity = kDefaultVelocityScale;
-  if (!readDouble(root_, "txtCheckBoardStep", step, "CheckerBoard step", log, &step) ||
+  const auto step = readMmAsMeter(
+    lineEdit(root_, "txtCheckBoardStep"),
+    kDefaultCheckerStepMm,
+    "[Check Board] step");
+  if (!step ||
     !readVelocity(root_, "", velocity, "CheckerBoard velocity_scale", log, &velocity))
   {
     return;
   }
 
   CheckerBoard::Goal goal;
-  goal.step = step;
+  goal.step = *step;
   goal.velocity_scale = velocity;
   goal.execute = execute;
   sendGoal<CheckerBoard>(
@@ -1072,32 +1127,25 @@ void TaskActionController::sendCheckerBoard(bool execute)
 void TaskActionController::sendRepeatabilityTest(bool execute)
 {
   const LogFn log = [this](const QString & msg) {appendActionLog(msg);};
-  double retract_x = 0.40;
-  double retract_y = 0.00;
-  double retract_z = 0.18;
-  double disturb1_x = 0.35;
-  double disturb1_y = -0.08;
-  double disturb1_z = 0.18;
-  double disturb2_x = 0.45;
-  double disturb2_y = 0.08;
-  double disturb2_z = 0.18;
-  double offset = 0.02;
   double velocity = kDefaultRepeatVelocityScale;
   int repeat_count = 3;
 
-  if (!readDouble(root_, "repeatRetractX", retract_x, "Retract X", log, &retract_x) ||
-    !readDouble(root_, "repeatRetractY", retract_y, "Retract Y", log, &retract_y) ||
-    !readDouble(root_, "repeatRetractZ", retract_z, "Retract Z", log, &retract_z) ||
-    !readDouble(root_, "repeatDisturb1X", disturb1_x, "Disturb1 X", log, &disturb1_x) ||
-    !readDouble(root_, "repeatDisturb1Y", disturb1_y, "Disturb1 Y", log, &disturb1_y) ||
-    !readDouble(root_, "repeatDisturb1Z", disturb1_z, "Disturb1 Z", log, &disturb1_z) ||
-    !readDouble(root_, "repeatDisturb2X", disturb2_x, "Disturb2 X", log, &disturb2_x) ||
-    !readDouble(root_, "repeatDisturb2Y", disturb2_y, "Disturb2 Y", log, &disturb2_y) ||
-    !readDouble(root_, "repeatDisturb2Z", disturb2_z, "Disturb2 Z", log, &disturb2_z) ||
-    !readNonZero(root_, "txtMeasOffset", offset, "meas_offset", log, &offset) ||
+  const auto retract_x = readMmAsMeter(lineEdit(root_, "repeatRetractX"), kDefaultRepeatRetractXMm, "[Repeatability] retract X");
+  const auto retract_y = readMmAsMeter(lineEdit(root_, "repeatRetractY"), kDefaultRepeatRetractYMm, "[Repeatability] retract Y");
+  const auto retract_z = readMmAsMeter(lineEdit(root_, "repeatRetractZ"), kDefaultRepeatRetractZMm, "[Repeatability] retract Z");
+  const auto disturb1_x = readMmAsMeter(lineEdit(root_, "repeatDisturb1X"), kDefaultRepeatDisturb1XMm, "[Repeatability] disturb1 X");
+  const auto disturb1_y = readMmAsMeter(lineEdit(root_, "repeatDisturb1Y"), kDefaultRepeatDisturb1YMm, "[Repeatability] disturb1 Y");
+  const auto disturb1_z = readMmAsMeter(lineEdit(root_, "repeatDisturb1Z"), kDefaultRepeatDisturb1ZMm, "[Repeatability] disturb1 Z");
+  const auto offset = readMmAsMeter(lineEdit(root_, "txtMeasOffset"), kDefaultRepeatMeasOffsetMm, "[Repeatability] meas_offset");
+  if (!retract_x || !retract_y || !retract_z || !disturb1_x || !disturb1_y || !disturb1_z ||
+    !offset ||
     !readPositiveInt(root_, "txtRepeatCount", repeat_count, "repeat_count", log, &repeat_count) ||
     !readVelocity(root_, "", velocity, "Repeatability velocity_scale", log, &velocity))
   {
+    return;
+  }
+  if (*offset == 0.0) {
+    appendActionLog("[Input Error] [Repeatability] meas_offset must be non-zero mm");
     return;
   }
 
@@ -1113,11 +1161,10 @@ void TaskActionController::sendRepeatabilityTest(bool execute)
 
   const auto q = drlRepeatQuaternion();
   RepeatabilityTest::Goal goal;
-  goal.retract_pose = makeStampedPose("world", makePose(retract_x, retract_y, retract_z, q));
-  goal.disturb_pose_1 = makeStampedPose("world", makePose(disturb1_x, disturb1_y, disturb1_z, q));
-  goal.disturb_pose_2 = makeStampedPose("world", makePose(disturb2_x, disturb2_y, disturb2_z, q));
+  goal.retract_pose = makeStampedPose("world", makePose(*retract_x, *retract_y, *retract_z, q));
+  goal.disturb_pose_1 = makeStampedPose("world", makePose(*disturb1_x, *disturb1_y, *disturb1_z, q));
   goal.axis = axis;
-  goal.meas_offset = offset;
+  goal.meas_offset = *offset;
   goal.repeat_count = repeat_count;
   goal.velocity_scale = velocity;
   goal.execute = execute;

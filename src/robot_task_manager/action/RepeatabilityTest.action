@@ -4,7 +4,6 @@ uint8 AXIS_Z=2
 
 geometry_msgs/PoseStamped retract_pose
 geometry_msgs/PoseStamped disturb_pose_1
-geometry_msgs/PoseStamped disturb_pose_2
 uint8 axis
 float64 meas_offset
 int32 repeat_count

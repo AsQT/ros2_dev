@@ -2,11 +2,13 @@
 
 #include <memory>
 #include <functional>
+#include <optional>
 
 #include <QObject>
 
 #include "rclcpp/rclcpp.hpp"
 
+class QLineEdit;
 class QWidget;
 
 namespace robot_gui
@@ -37,6 +39,10 @@ private:
   void setMovePoseRlBusy(bool busy);
   void logCancelUnavailable(const QString & label);
   void appendActionLog(const QString & msg);
+  std::optional<double> readMmAsMeter(
+    QLineEdit * edit,
+    double default_mm,
+    const QString & field_name);
 
   rclcpp::Node::SharedPtr node_;
   QWidget * root_{nullptr};

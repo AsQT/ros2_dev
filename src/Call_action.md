@@ -631,7 +631,6 @@ AXIS_Y: 1
 AXIS_Z: 2
 retract_pose: geometry_msgs/PoseStamped
 disturb_pose_1: geometry_msgs/PoseStamped
-disturb_pose_2: geometry_msgs/PoseStamped
 axis: uint8
 meas_offset: float64
 repeat_count: int32
@@ -682,7 +681,6 @@ Sequence:
    - Wait `measurement_settle_time_s`.
    - Cartesian quay về `retract_pose` với `fast_velocity_scale`.
    - MoveToPose tới `disturb_pose_1` với `fast_velocity_scale`.
-   - MoveToPose tới `disturb_pose_2` với `fast_velocity_scale`.
    - MoveToPose quay về `retract_pose` với `fast_velocity_scale`.
 
 `meas_pose` được tính từ `retract_pose`:
@@ -695,7 +693,7 @@ CLI:
 
 ```bash
 ros2 action send_goal /repeatability_test robot_task_manager/action/RepeatabilityTest \
-  "{retract_pose: {header: {frame_id: 'world'}, pose: {position: {x: 0.40, y: 0.00, z: 0.18}, orientation: {x: 1.0, y: 1.0, z: 0.0, w: 0.0}}}, disturb_pose_1: {header: {frame_id: 'world'}, pose: {position: {x: 0.35, y: -0.08, z: 0.18}, orientation: {x: 1.0, y: 1.0, z: 0.0, w: 0.0}}}, disturb_pose_2: {header: {frame_id: 'world'}, pose: {position: {x: 0.45, y: 0.08, z: 0.18}, orientation: {x: 1.0, y: 1.0, z: 0.0, w: 0.0}}}, axis: 0, meas_offset: 0.02, repeat_count: 3, velocity_scale: 0.25, execute: true}" \
+  "{retract_pose: {header: {frame_id: 'world'}, pose: {position: {x: 0.40, y: 0.00, z: 0.18}, orientation: {x: 0.7071068, y: 0.7071068, z: 0.0, w: 0.0}}}, disturb_pose_1: {header: {frame_id: 'world'}, pose: {position: {x: 0.35, y: -0.08, z: 0.18}, orientation: {x: 0.7071068, y: 0.7071068, z: 0.0, w: 0.0}}}, axis: 2, meas_offset: -0.02, repeat_count: 3, velocity_scale: 0.15, execute: true}" \
   --feedback
 ```
 
@@ -703,7 +701,7 @@ Plan only:
 
 ```bash
 ros2 action send_goal /repeatability_test robot_task_manager/action/RepeatabilityTest \
-  "{retract_pose: {header: {frame_id: 'world'}, pose: {position: {x: 0.40, y: 0.00, z: 0.18}, orientation: {x: 1.0, y: 1.0, z: 0.0, w: 0.0}}}, disturb_pose_1: {header: {frame_id: 'world'}, pose: {position: {x: 0.35, y: -0.08, z: 0.18}, orientation: {x: 1.0, y: 1.0, z: 0.0, w: 0.0}}}, disturb_pose_2: {header: {frame_id: 'world'}, pose: {position: {x: 0.45, y: 0.08, z: 0.18}, orientation: {x: 1.0, y: 1.0, z: 0.0, w: 0.0}}}, axis: 2, meas_offset: 0.02, repeat_count: 3, velocity_scale: 0.25, execute: false}" \
+  "{retract_pose: {header: {frame_id: 'world'}, pose: {position: {x: 0.40, y: 0.00, z: 0.18}, orientation: {x: 0.7071068, y: 0.7071068, z: 0.0, w: 0.0}}}, disturb_pose_1: {header: {frame_id: 'world'}, pose: {position: {x: 0.35, y: -0.08, z: 0.18}, orientation: {x: 0.7071068, y: 0.7071068, z: 0.0, w: 0.0}}}, axis: 2, meas_offset: -0.02, repeat_count: 1, velocity_scale: 0.15, execute: false}" \
   --feedback
 ```
 
@@ -747,8 +745,7 @@ Default goal pose trong `repeatability_test_client.py`:
 |---|---|
 | `retract_pose.position` | `{x: 0.40, y: 0.00, z: 0.18}` |
 | `disturb_pose_1.position` | `{x: 0.35, y: -0.08, z: 0.18}` |
-| `disturb_pose_2.position` | `{x: 0.45, y: 0.08, z: 0.18}` |
-| orientation của cả 3 pose | `{x: 1.0, y: 1.0, z: 0.0, w: 0.0}` |
+| orientation của cả 2 pose | `{x: 1.0, y: 1.0, z: 0.0, w: 0.0}` |
 
 ## `task_manager_client`
 

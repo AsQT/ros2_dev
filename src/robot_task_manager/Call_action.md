@@ -313,17 +313,34 @@ Server parameters:
 |---|---|
 | `planning_group` | `arm` |
 | `base_frame` | `world` |
+| `measurement_settle_time_s` | `2.0` |
 
 Rule:
 
 - `velocity_scale` phải nằm trong `(0, 1]`.
-- Server gọi `executor_->checkerBoard(step, ..., velocity_scale, 0.3, 5.0)`.
+- `step` phải finite và `> 0.0`.
+- Server gọi `executor_->checkerBoard(step, ..., velocity_scale, 0.3, 5.0, execute, measurement_settle_time_s, feedback_cb)`.
+- Executor lấy TCP pose hiện tại làm tâm, sinh 9 target checkerboard 3x3 zig-zag.
+- Mỗi target chạy 2 Cartesian segment riêng:
+  - đi tới `travel_pose` với `z = target.z + step / 2.0`.
+  - hạ xuống `drop_pose` tại Z đo.
+- Không còn gom toàn bộ 19 waypoint vào một `computeCartesianPath()` lớn.
+- Với `execute=true`, sau mỗi `drop_pose` robot chờ `measurement_settle_time_s` giây để đo.
+- Với `execute=false`, executor vẫn plan lần lượt từng segment, không execute motion và không chờ đo.
+- Trước mỗi segment executor lấy current state từ `/joint_states`; nếu không lấy được state thật thì fail, không plan từ zero/default state.
 
 CLI:
 
 ```bash
 ros2 action send_goal /move_checker_board robot_task_manager/action/CheckerBoard \
-  "{step: 0.10, velocity_scale: 0.5, execute: true}" --feedback
+  "{step: 0.10, velocity_scale: 0.2, execute: true}" --feedback
+```
+
+Plan-only:
+
+```bash
+ros2 action send_goal /move_checker_board robot_task_manager/action/CheckerBoard \
+  "{step: 0.10, velocity_scale: 0.2, execute: false}" --feedback
 ```
 
 `task_manager_client` có nhánh `task_name:=checker_board` và connect tới `/move_checker_board`.
@@ -333,7 +350,7 @@ Default goal trong `task_manager_client`:
 | Field | Default |
 |---|---|
 | `step` | `0.40` |
-| `velocity_scale` | `0.5` |
+| `velocity_scale` | `0.2` |
 | `execute` | `true` |
 
 ## `/move_gripper`
@@ -665,7 +682,6 @@ AXIS_Y: 1
 AXIS_Z: 2
 retract_pose: geometry_msgs/PoseStamped
 disturb_pose_1: geometry_msgs/PoseStamped
-disturb_pose_2: geometry_msgs/PoseStamped
 axis: uint8
 meas_offset: float64
 repeat_count: int32
@@ -696,6 +712,7 @@ Server parameters:
 | `action_result_timeout_s` | `120.0` |
 | `measurement_settle_time_s` | `2.0` |
 | `fast_velocity_scale` | `0.7` |
+| `axis_y_tool_yaw_offset_rad` | `1.5707963267948966` |
 
 Rule:
 
@@ -704,32 +721,32 @@ Rule:
 - `meas_offset` phải finite và khác `0.0`.
 - `velocity_scale` phải finite và nằm trong `(0, 1]`.
 - `execute` quyết định chạy thật hay chỉ planning/dry-run.
-- `velocity_scale` chỉ dùng cho đoạn đo chậm từ `retract_pose` tới `meas_pose`; các đoạn còn lại dùng parameter server `fast_velocity_scale` default `0.7`.
+- `velocity_scale` chỉ dùng cho đoạn đo chậm từ `working_retract_pose` tới `meas_pose`; các đoạn còn lại dùng parameter server `fast_velocity_scale` default `0.7`.
 - Các pose phải finite và quaternion norm lớn hơn `1e-12`.
 - Server phụ thuộc `/move_to_pose`, `/move_to_pose_cartesian`.
+- Với `axis=1` (`AXIS_Y`), server xoay orientation của cả `working_retract_pose`, `meas_pose` và `working_disturb_pose_1` thêm `axis_y_tool_yaw_offset_rad` quanh trục Z của tool, để các đoạn Cartesian giữ cùng orientation.
 
 Sequence:
 
-1. MoveToPose tới `retract_pose` với `fast_velocity_scale`.
+1. MoveToPose tới `working_retract_pose` với `fast_velocity_scale`.
 2. Mỗi loop:
    - Cartesian tới `meas_pose` với `goal.velocity_scale`.
    - Wait `measurement_settle_time_s`.
-   - Cartesian quay về `retract_pose` với `fast_velocity_scale`.
-   - MoveToPose tới `disturb_pose_1` với `fast_velocity_scale`.
-   - MoveToPose tới `disturb_pose_2` với `fast_velocity_scale`.
-   - MoveToPose quay về `retract_pose` với `fast_velocity_scale`.
+   - Cartesian quay về `working_retract_pose` với `fast_velocity_scale`.
+   - MoveToPose tới `working_disturb_pose_1` với `fast_velocity_scale`.
+   - MoveToPose quay về `working_retract_pose` với `fast_velocity_scale`.
 
-`meas_pose` được tính từ `retract_pose`:
+Các pose làm việc được tính từ `retract_pose` và `disturb_pose_1`:
 
-- `axis=0`: `meas_pose.x = retract_pose.x + meas_offset`.
-- `axis=1`: `meas_pose.y = retract_pose.y + meas_offset`.
-- `axis=2`: `meas_pose.z = retract_pose.z + meas_offset`.
+- `axis=0`: `working_retract_pose.orientation = retract_pose.orientation`, `working_disturb_pose_1.orientation = disturb_pose_1.orientation`, `meas_pose.x = working_retract_pose.x + meas_offset`, `meas_pose.orientation = working_retract_pose.orientation`.
+- `axis=1`: `working_retract_pose.orientation`, `meas_pose.orientation` và `working_disturb_pose_1.orientation` đều xoay thêm `axis_y_tool_yaw_offset_rad` từ `retract_pose.orientation`. Default `1.5707963267948966` rad (`+90 deg`). `meas_pose.y = working_retract_pose.y + meas_offset`.
+- `axis=2`: `working_retract_pose.orientation = retract_pose.orientation`, `working_disturb_pose_1.orientation = disturb_pose_1.orientation`, `meas_pose.z = working_retract_pose.z + meas_offset`, `meas_pose.orientation = working_retract_pose.orientation`.
 
 CLI:
 
 ```bash
 ros2 action send_goal /repeatability_test robot_task_manager/action/RepeatabilityTest \
-  "{retract_pose: {header: {frame_id: 'world'}, pose: {position: {x: 0.40, y: 0.00, z: 0.18}, orientation: {x: 1.0, y: 1.0, z: 0.0, w: 0.0}}}, disturb_pose_1: {header: {frame_id: 'world'}, pose: {position: {x: 0.35, y: -0.08, z: 0.18}, orientation: {x: 1.0, y: 1.0, z: 0.0, w: 0.0}}}, disturb_pose_2: {header: {frame_id: 'world'}, pose: {position: {x: 0.45, y: 0.08, z: 0.18}, orientation: {x: 1.0, y: 1.0, z: 0.0, w: 0.0}}}, axis: 0, meas_offset: 0.02, repeat_count: 3, velocity_scale: 0.25, execute: true}" \
+  "{retract_pose: {header: {frame_id: 'world'}, pose: {position: {x: 0.40, y: 0.00, z: 0.18}, orientation: {x: 0.7071068, y: 0.7071068, z: 0.0, w: 0.0}}}, disturb_pose_1: {header: {frame_id: 'world'}, pose: {position: {x: 0.35, y: -0.08, z: 0.18}, orientation: {x: 0.7071068, y: 0.7071068, z: 0.0, w: 0.0}}}, axis: 2, meas_offset: -0.02, repeat_count: 3, velocity_scale: 0.15, execute: true}" \
   --feedback
 ```
 
@@ -737,7 +754,7 @@ Plan only:
 
 ```bash
 ros2 action send_goal /repeatability_test robot_task_manager/action/RepeatabilityTest \
-  "{retract_pose: {header: {frame_id: 'world'}, pose: {position: {x: 0.40, y: 0.00, z: 0.18}, orientation: {x: 1.0, y: 1.0, z: 0.0, w: 0.0}}}, disturb_pose_1: {header: {frame_id: 'world'}, pose: {position: {x: 0.35, y: -0.08, z: 0.18}, orientation: {x: 1.0, y: 1.0, z: 0.0, w: 0.0}}}, disturb_pose_2: {header: {frame_id: 'world'}, pose: {position: {x: 0.45, y: 0.08, z: 0.18}, orientation: {x: 1.0, y: 1.0, z: 0.0, w: 0.0}}}, axis: 2, meas_offset: 0.02, repeat_count: 3, velocity_scale: 0.25, execute: false}" \
+  "{retract_pose: {header: {frame_id: 'world'}, pose: {position: {x: 0.40, y: 0.00, z: 0.18}, orientation: {x: 0.7071068, y: 0.7071068, z: 0.0, w: 0.0}}}, disturb_pose_1: {header: {frame_id: 'world'}, pose: {position: {x: 0.35, y: -0.08, z: 0.18}, orientation: {x: 0.7071068, y: 0.7071068, z: 0.0, w: 0.0}}}, axis: 2, meas_offset: -0.02, repeat_count: 1, velocity_scale: 0.15, execute: false}" \
   --feedback
 ```
 
@@ -781,8 +798,7 @@ Default goal pose trong `repeatability_test_client.py`:
 |---|---|
 | `retract_pose.position` | `{x: 0.40, y: 0.00, z: 0.18}` |
 | `disturb_pose_1.position` | `{x: 0.35, y: -0.08, z: 0.18}` |
-| `disturb_pose_2.position` | `{x: 0.45, y: 0.08, z: 0.18}` |
-| orientation của cả 3 pose | `{x: 1.0, y: 1.0, z: 0.0, w: 0.0}` |
+| orientation của cả 2 pose | `{x: 1.0, y: 1.0, z: 0.0, w: 0.0}` |
 
 ## `/move_pose_rl`
 

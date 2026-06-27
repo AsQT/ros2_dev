@@ -1107,11 +1107,11 @@ background:transparent;
         <string>background:transparent; color:#102d3d; border:0px;</string>
        </property>
        <property name="text">
-        <string>X</string>
+        <string>X [mm]</string>
        </property>
-       <property name="alignment">
-        <set>Qt::AlignCenter</set>
-       </property>
+      <property name="alignment">
+       <set>Qt::AlignCenter</set>
+      </property>
       </widget>
       <widget class="QLineEdit" name="txtTargetX">
        <property name="geometry">
@@ -1127,6 +1127,9 @@ background:transparent;
        </property>
        <property name="alignment">
         <set>Qt::AlignCenter</set>
+       </property>
+       <property name="placeholderText">
+        <string>400</string>
        </property>
       </widget>
       <widget class="QLabel" name="txtTargetY_label">
@@ -1148,11 +1151,11 @@ background:transparent;
         <string>background:transparent; color:#102d3d; border:0px;</string>
        </property>
        <property name="text">
-        <string>Y</string>
+        <string>Y [mm]</string>
        </property>
-       <property name="alignment">
-        <set>Qt::AlignCenter</set>
-       </property>
+      <property name="alignment">
+       <set>Qt::AlignCenter</set>
+      </property>
       </widget>
       <widget class="QLineEdit" name="txtTargetY">
        <property name="geometry">
@@ -1168,6 +1171,9 @@ background:transparent;
        </property>
        <property name="alignment">
         <set>Qt::AlignCenter</set>
+       </property>
+       <property name="placeholderText">
+        <string>100</string>
        </property>
       </widget>
       <widget class="QLabel" name="txtTargetZ_label">
@@ -1189,11 +1195,11 @@ background:transparent;
         <string>background:transparent; color:#102d3d; border:0px;</string>
        </property>
        <property name="text">
-        <string>Z</string>
+        <string>Z [mm]</string>
        </property>
-       <property name="alignment">
-        <set>Qt::AlignCenter</set>
-       </property>
+      <property name="alignment">
+       <set>Qt::AlignCenter</set>
+      </property>
       </widget>
       <widget class="QLineEdit" name="txtTargetZ">
        <property name="geometry">
@@ -1209,6 +1215,9 @@ background:transparent;
        </property>
        <property name="alignment">
         <set>Qt::AlignCenter</set>
+       </property>
+       <property name="placeholderText">
+        <string>350</string>
        </property>
       </widget>
       </widget>
@@ -1268,7 +1277,7 @@ background:transparent;
         <string>background:transparent; color:#102d3d; border:0px;</string>
        </property>
        <property name="text">
-        <string>Roll</string>
+        <string>Roll [deg]</string>
        </property>
        <property name="alignment">
         <set>Qt::AlignCenter</set>
@@ -1309,7 +1318,7 @@ background:transparent;
         <string>background:transparent; color:#102d3d; border:0px;</string>
        </property>
        <property name="text">
-        <string>Pitch</string>
+        <string>Pitch [deg]</string>
        </property>
        <property name="alignment">
         <set>Qt::AlignCenter</set>
@@ -1350,7 +1359,7 @@ background:transparent;
         <string>background:transparent; color:#102d3d; border:0px;</string>
        </property>
        <property name="text">
-        <string>Yaw</string>
+        <string>Yaw [deg]</string>
        </property>
        <property name="alignment">
         <set>Qt::AlignCenter</set>
@@ -1566,7 +1575,7 @@ background:transparent;
         <string>background:transparent; color:#102d3d; border:0px;</string>
        </property>
        <property name="text">
-        <string>X</string>
+        <string>X [mm]</string>
        </property>
        <property name="alignment">
         <set>Qt::AlignCenter</set>
@@ -1584,9 +1593,12 @@ background:transparent;
        <property name="styleSheet">
         <string>QLineEdit{background:white; color:black; border-radius:3px; border:1px solid #b8cfd8; padding-left:3px; padding-right:3px; selection-background-color:#00a6c7;}</string>
        </property>
-       <property name="alignment">
-        <set>Qt::AlignCenter</set>
-       </property>
+      <property name="alignment">
+       <set>Qt::AlignCenter</set>
+      </property>
+      <property name="placeholderText">
+       <string>400</string>
+      </property>
       </widget>
       <widget class="QLabel" name="rlPosePositionY_label">
        <property name="geometry">
@@ -1607,7 +1619,7 @@ background:transparent;
         <string>background:transparent; color:#102d3d; border:0px;</string>
        </property>
        <property name="text">
-        <string>Y</string>
+        <string>Y [mm]</string>
        </property>
        <property name="alignment">
         <set>Qt::AlignCenter</set>
@@ -1625,9 +1637,12 @@ background:transparent;
        <property name="styleSheet">
         <string>QLineEdit{background:white; color:black; border-radius:3px; border:1px solid #b8cfd8; padding-left:3px; padding-right:3px; selection-background-color:#00a6c7;}</string>
        </property>
-       <property name="alignment">
-        <set>Qt::AlignCenter</set>
-       </property>
+      <property name="alignment">
+       <set>Qt::AlignCenter</set>
+      </property>
+      <property name="placeholderText">
+       <string>100</string>
+      </property>
       </widget>
       <widget class="QLabel" name="rlPosePositionZ_label">
        <property name="geometry">
@@ -1648,7 +1663,7 @@ background:transparent;
         <string>background:transparent; color:#102d3d; border:0px;</string>
        </property>
        <property name="text">
-        <string>Z</string>
+        <string>Z [mm]</string>
        </property>
        <property name="alignment">
         <set>Qt::AlignCenter</set>
@@ -1666,9 +1681,12 @@ background:transparent;
        <property name="styleSheet">
         <string>QLineEdit{background:white; color:black; border-radius:3px; border:1px solid #b8cfd8; padding-left:3px; padding-right:3px; selection-background-color:#00a6c7;}</string>
        </property>
-       <property name="alignment">
-        <set>Qt::AlignCenter</set>
-       </property>
+      <property name="alignment">
+       <set>Qt::AlignCenter</set>
+      </property>
+      <property name="placeholderText">
+       <string>350</string>
+      </property>
       </widget>
       </widget>
       <widget class="QFrame" name="rlPoseOrientationGroup">
@@ -1727,7 +1745,7 @@ background:transparent;
         <string>background:transparent; color:#102d3d; border:0px;</string>
        </property>
        <property name="text">
-        <string>Roll</string>
+        <string>Roll [deg]</string>
        </property>
        <property name="alignment">
         <set>Qt::AlignCenter</set>
@@ -1768,7 +1786,7 @@ background:transparent;
         <string>background:transparent; color:#102d3d; border:0px;</string>
        </property>
        <property name="text">
-        <string>Pitch</string>
+        <string>Pitch [deg]</string>
        </property>
        <property name="alignment">
         <set>Qt::AlignCenter</set>
@@ -1809,7 +1827,7 @@ background:transparent;
         <string>background:transparent; color:#102d3d; border:0px;</string>
        </property>
        <property name="text">
-        <string>Yaw</string>
+        <string>Yaw [deg]</string>
        </property>
        <property name="alignment">
         <set>Qt::AlignCenter</set>
@@ -1966,7 +1984,7 @@ background:transparent;
         <string>background:transparent; color:#102d3d; border:0px;</string>
        </property>
        <property name="text">
-        <string>Distance</string>
+        <string>Distance [mm]</string>
        </property>
        <property name="alignment">
         <set>Qt::AlignLeft|Qt::AlignVCenter</set>
@@ -1984,9 +2002,12 @@ background:transparent;
        <property name="styleSheet">
         <string>QLineEdit{background:white; color:black; border-radius:3px; border:1px solid #b8cfd8; padding-left:3px; padding-right:3px; selection-background-color:#00a6c7;}</string>
        </property>
-       <property name="alignment">
-        <set>Qt::AlignCenter</set>
-       </property>
+      <property name="alignment">
+       <set>Qt::AlignCenter</set>
+      </property>
+      <property name="placeholderText">
+       <string>28</string>
+      </property>
       </widget>
       <widget class="QPushButton" name="btnGripperRun">
        <property name="geometry">
@@ -2181,7 +2202,7 @@ background:transparent;
         <string>background:transparent; color:#102d3d; border:0px;</string>
        </property>
        <property name="text">
-        <string>X</string>
+        <string>X [mm]</string>
        </property>
        <property name="alignment">
         <set>Qt::AlignCenter</set>
@@ -2199,9 +2220,12 @@ background:transparent;
        <property name="styleSheet">
         <string>QLineEdit{background:white; color:black; border-radius:3px; border:1px solid #b8cfd8; padding-left:3px; padding-right:3px; selection-background-color:#00a6c7;}</string>
        </property>
-       <property name="alignment">
-        <set>Qt::AlignCenter</set>
-       </property>
+      <property name="alignment">
+       <set>Qt::AlignCenter</set>
+      </property>
+      <property name="placeholderText">
+       <string>400</string>
+      </property>
       </widget>
       <widget class="QLabel" name="pickPoseY_label">
        <property name="geometry">
@@ -2222,7 +2246,7 @@ background:transparent;
         <string>background:transparent; color:#102d3d; border:0px;</string>
        </property>
        <property name="text">
-        <string>Y</string>
+        <string>Y [mm]</string>
        </property>
        <property name="alignment">
         <set>Qt::AlignCenter</set>
@@ -2240,9 +2264,12 @@ background:transparent;
        <property name="styleSheet">
         <string>QLineEdit{background:white; color:black; border-radius:3px; border:1px solid #b8cfd8; padding-left:3px; padding-right:3px; selection-background-color:#00a6c7;}</string>
        </property>
-       <property name="alignment">
-        <set>Qt::AlignCenter</set>
-       </property>
+      <property name="alignment">
+       <set>Qt::AlignCenter</set>
+      </property>
+      <property name="placeholderText">
+       <string>100</string>
+      </property>
       </widget>
       <widget class="QLabel" name="pickPoseZ_label">
        <property name="geometry">
@@ -2263,7 +2290,7 @@ background:transparent;
         <string>background:transparent; color:#102d3d; border:0px;</string>
        </property>
        <property name="text">
-        <string>Z</string>
+        <string>Z [mm]</string>
        </property>
        <property name="alignment">
         <set>Qt::AlignCenter</set>
@@ -2281,9 +2308,12 @@ background:transparent;
        <property name="styleSheet">
         <string>QLineEdit{background:white; color:black; border-radius:3px; border:1px solid #b8cfd8; padding-left:3px; padding-right:3px; selection-background-color:#00a6c7;}</string>
        </property>
-       <property name="alignment">
-        <set>Qt::AlignCenter</set>
-       </property>
+      <property name="alignment">
+       <set>Qt::AlignCenter</set>
+      </property>
+      <property name="placeholderText">
+       <string>250</string>
+      </property>
       </widget>
       <widget class="QLabel" name="pickPoseYaw_label">
        <property name="geometry">
@@ -2304,7 +2334,7 @@ background:transparent;
         <string>background:transparent; color:#102d3d; border:0px;</string>
        </property>
        <property name="text">
-        <string>Yaw</string>
+        <string>Yaw [deg]</string>
        </property>
        <property name="alignment">
         <set>Qt::AlignCenter</set>
@@ -2383,7 +2413,7 @@ background:transparent;
         <string>background:transparent; color:#102d3d; border:0px;</string>
        </property>
        <property name="text">
-        <string>X</string>
+        <string>X [mm]</string>
        </property>
        <property name="alignment">
         <set>Qt::AlignCenter</set>
@@ -2401,9 +2431,12 @@ background:transparent;
        <property name="styleSheet">
         <string>QLineEdit{background:white; color:black; border-radius:3px; border:1px solid #b8cfd8; padding-left:3px; padding-right:3px; selection-background-color:#00a6c7;}</string>
        </property>
-       <property name="alignment">
-        <set>Qt::AlignCenter</set>
-       </property>
+      <property name="alignment">
+       <set>Qt::AlignCenter</set>
+      </property>
+      <property name="placeholderText">
+       <string>300</string>
+      </property>
       </widget>
       <widget class="QLabel" name="placePoseY_label">
        <property name="geometry">
@@ -2424,7 +2457,7 @@ background:transparent;
         <string>background:transparent; color:#102d3d; border:0px;</string>
        </property>
        <property name="text">
-        <string>Y</string>
+        <string>Y [mm]</string>
        </property>
        <property name="alignment">
         <set>Qt::AlignCenter</set>
@@ -2442,9 +2475,12 @@ background:transparent;
        <property name="styleSheet">
         <string>QLineEdit{background:white; color:black; border-radius:3px; border:1px solid #b8cfd8; padding-left:3px; padding-right:3px; selection-background-color:#00a6c7;}</string>
        </property>
-       <property name="alignment">
-        <set>Qt::AlignCenter</set>
-       </property>
+      <property name="alignment">
+       <set>Qt::AlignCenter</set>
+      </property>
+      <property name="placeholderText">
+       <string>0</string>
+      </property>
       </widget>
       <widget class="QLabel" name="placePoseZ_label">
        <property name="geometry">
@@ -2465,7 +2501,7 @@ background:transparent;
         <string>background:transparent; color:#102d3d; border:0px;</string>
        </property>
        <property name="text">
-        <string>Z</string>
+        <string>Z [mm]</string>
        </property>
        <property name="alignment">
         <set>Qt::AlignCenter</set>
@@ -2483,9 +2519,12 @@ background:transparent;
        <property name="styleSheet">
         <string>QLineEdit{background:white; color:black; border-radius:3px; border:1px solid #b8cfd8; padding-left:3px; padding-right:3px; selection-background-color:#00a6c7;}</string>
        </property>
-       <property name="alignment">
-        <set>Qt::AlignCenter</set>
-       </property>
+      <property name="alignment">
+       <set>Qt::AlignCenter</set>
+      </property>
+      <property name="placeholderText">
+       <string>250</string>
+      </property>
       </widget>
       <widget class="QLabel" name="placePoseYaw_label">
        <property name="geometry">
@@ -2506,7 +2545,7 @@ background:transparent;
         <string>background:transparent; color:#102d3d; border:0px;</string>
        </property>
        <property name="text">
-        <string>Yaw</string>
+        <string>Yaw [deg]</string>
        </property>
        <property name="alignment">
         <set>Qt::AlignCenter</set>
@@ -2700,7 +2739,7 @@ background:transparent;
         <string>background:transparent; color:#102d3d; border:0px;</string>
        </property>
        <property name="text">
-        <string>X</string>
+        <string>X [mm]</string>
        </property>
        <property name="alignment">
         <set>Qt::AlignCenter</set>
@@ -2718,9 +2757,12 @@ background:transparent;
        <property name="styleSheet">
         <string>QLineEdit{background:white; color:black; border-radius:3px; border:1px solid #b8cfd8; padding-left:3px; padding-right:3px; selection-background-color:#00a6c7;}</string>
        </property>
-       <property name="alignment">
-        <set>Qt::AlignCenter</set>
-       </property>
+      <property name="alignment">
+       <set>Qt::AlignCenter</set>
+      </property>
+      <property name="placeholderText">
+       <string>300</string>
+      </property>
       </widget>
       <widget class="QLabel" name="visionPlacePoseY_label">
        <property name="geometry">
@@ -2741,7 +2783,7 @@ background:transparent;
         <string>background:transparent; color:#102d3d; border:0px;</string>
        </property>
        <property name="text">
-        <string>Y</string>
+        <string>Y [mm]</string>
        </property>
        <property name="alignment">
         <set>Qt::AlignCenter</set>
@@ -2759,9 +2801,12 @@ background:transparent;
        <property name="styleSheet">
         <string>QLineEdit{background:white; color:black; border-radius:3px; border:1px solid #b8cfd8; padding-left:3px; padding-right:3px; selection-background-color:#00a6c7;}</string>
        </property>
-       <property name="alignment">
-        <set>Qt::AlignCenter</set>
-       </property>
+      <property name="alignment">
+       <set>Qt::AlignCenter</set>
+      </property>
+      <property name="placeholderText">
+       <string>0</string>
+      </property>
       </widget>
       <widget class="QLabel" name="visionPlacePoseZ_label">
        <property name="geometry">
@@ -2782,7 +2827,7 @@ background:transparent;
         <string>background:transparent; color:#102d3d; border:0px;</string>
        </property>
        <property name="text">
-        <string>Z</string>
+        <string>Z [mm]</string>
        </property>
        <property name="alignment">
         <set>Qt::AlignCenter</set>
@@ -2800,9 +2845,12 @@ background:transparent;
        <property name="styleSheet">
         <string>QLineEdit{background:white; color:black; border-radius:3px; border:1px solid #b8cfd8; padding-left:3px; padding-right:3px; selection-background-color:#00a6c7;}</string>
        </property>
-       <property name="alignment">
-        <set>Qt::AlignCenter</set>
-       </property>
+      <property name="alignment">
+       <set>Qt::AlignCenter</set>
+      </property>
+      <property name="placeholderText">
+       <string>250</string>
+      </property>
       </widget>
       <widget class="QLabel" name="visionPlacePoseYaw_label">
        <property name="geometry">
@@ -2823,7 +2871,7 @@ background:transparent;
         <string>background:transparent; color:#102d3d; border:0px;</string>
        </property>
        <property name="text">
-        <string>Yaw</string>
+        <string>Yaw [deg]</string>
        </property>
        <property name="alignment">
         <set>Qt::AlignCenter</set>
@@ -3017,7 +3065,7 @@ background:transparent;
         <string>background:transparent; color:#102d3d; border:0px;</string>
        </property>
        <property name="text">
-        <string>X</string>
+        <string>X [mm]</string>
        </property>
        <property name="alignment">
         <set>Qt::AlignCenter</set>
@@ -3035,9 +3083,12 @@ background:transparent;
        <property name="styleSheet">
         <string>QLineEdit{background:white; color:black; border-radius:3px; border:1px solid #b8cfd8; padding-left:3px; padding-right:3px; selection-background-color:#00a6c7;}</string>
        </property>
-       <property name="alignment">
-        <set>Qt::AlignCenter</set>
-       </property>
+      <property name="alignment">
+       <set>Qt::AlignCenter</set>
+      </property>
+      <property name="placeholderText">
+       <string>340</string>
+      </property>
       </widget>
       <widget class="QLabel" name="rlPlacePoseY_label">
        <property name="geometry">
@@ -3058,7 +3109,7 @@ background:transparent;
         <string>background:transparent; color:#102d3d; border:0px;</string>
        </property>
        <property name="text">
-        <string>Y</string>
+        <string>Y [mm]</string>
        </property>
        <property name="alignment">
         <set>Qt::AlignCenter</set>
@@ -3076,9 +3127,12 @@ background:transparent;
        <property name="styleSheet">
         <string>QLineEdit{background:white; color:black; border-radius:3px; border:1px solid #b8cfd8; padding-left:3px; padding-right:3px; selection-background-color:#00a6c7;}</string>
        </property>
-       <property name="alignment">
-        <set>Qt::AlignCenter</set>
-       </property>
+      <property name="alignment">
+       <set>Qt::AlignCenter</set>
+      </property>
+      <property name="placeholderText">
+       <string>-100</string>
+      </property>
       </widget>
       <widget class="QLabel" name="rlPlacePoseZ_label">
        <property name="geometry">
@@ -3099,7 +3153,7 @@ background:transparent;
         <string>background:transparent; color:#102d3d; border:0px;</string>
        </property>
        <property name="text">
-        <string>Z</string>
+        <string>Z [mm]</string>
        </property>
        <property name="alignment">
         <set>Qt::AlignCenter</set>
@@ -3117,9 +3171,12 @@ background:transparent;
        <property name="styleSheet">
         <string>QLineEdit{background:white; color:black; border-radius:3px; border:1px solid #b8cfd8; padding-left:3px; padding-right:3px; selection-background-color:#00a6c7;}</string>
        </property>
-       <property name="alignment">
-        <set>Qt::AlignCenter</set>
-       </property>
+      <property name="alignment">
+       <set>Qt::AlignCenter</set>
+      </property>
+      <property name="placeholderText">
+       <string>80</string>
+      </property>
       </widget>
       <widget class="QLabel" name="rlPlacePoseYaw_label">
        <property name="geometry">
@@ -3140,7 +3197,7 @@ background:transparent;
         <string>background:transparent; color:#102d3d; border:0px;</string>
        </property>
        <property name="text">
-        <string>Yaw</string>
+        <string>Yaw [deg]</string>
        </property>
        <property name="alignment">
         <set>Qt::AlignCenter</set>
@@ -3457,7 +3514,7 @@ background:transparent;
         <string>background:transparent; color:#102d3d; border:0px;</string>
        </property>
        <property name="text">
-        <string>Step</string>
+        <string>Step [mm]</string>
        </property>
        <property name="alignment">
         <set>Qt::AlignCenter</set>
@@ -3475,9 +3532,12 @@ background:transparent;
        <property name="styleSheet">
         <string>QLineEdit{background:white; color:black; border-radius:3px; border:1px solid #b8cfd8; padding-left:3px; padding-right:3px; selection-background-color:#00a6c7;}</string>
        </property>
-       <property name="alignment">
-        <set>Qt::AlignCenter</set>
-       </property>
+      <property name="alignment">
+       <set>Qt::AlignCenter</set>
+      </property>
+      <property name="placeholderText">
+       <string>100</string>
+      </property>
       </widget>
       </widget>
       <widget class="QFrame" name="checkBoardPreviewGroup">
@@ -3673,7 +3733,7 @@ background:transparent;
         <string>background:transparent; color:#102d3d; border:0px;</string>
        </property>
        <property name="text">
-        <string>X</string>
+        <string>X mm</string>
        </property>
        <property name="alignment">
         <set>Qt::AlignCenter</set>
@@ -3691,9 +3751,12 @@ background:transparent;
        <property name="styleSheet">
         <string>QLineEdit{background:white; color:black; border-radius:3px; border:1px solid #b8cfd8; padding-left:3px; padding-right:3px; selection-background-color:#00a6c7;}</string>
        </property>
-       <property name="alignment">
-        <set>Qt::AlignCenter</set>
-       </property>
+      <property name="alignment">
+       <set>Qt::AlignCenter</set>
+      </property>
+      <property name="placeholderText">
+       <string>400</string>
+      </property>
       </widget>
       <widget class="QLabel" name="repeatRetractY_label">
        <property name="geometry">
@@ -3714,7 +3777,7 @@ background:transparent;
         <string>background:transparent; color:#102d3d; border:0px;</string>
        </property>
        <property name="text">
-        <string>Y</string>
+        <string>Y mm</string>
        </property>
        <property name="alignment">
         <set>Qt::AlignCenter</set>
@@ -3732,9 +3795,12 @@ background:transparent;
        <property name="styleSheet">
         <string>QLineEdit{background:white; color:black; border-radius:3px; border:1px solid #b8cfd8; padding-left:3px; padding-right:3px; selection-background-color:#00a6c7;}</string>
        </property>
-       <property name="alignment">
-        <set>Qt::AlignCenter</set>
-       </property>
+      <property name="alignment">
+       <set>Qt::AlignCenter</set>
+      </property>
+      <property name="placeholderText">
+       <string>0</string>
+      </property>
       </widget>
       <widget class="QLabel" name="repeatRetractZ_label">
        <property name="geometry">
@@ -3755,7 +3821,7 @@ background:transparent;
         <string>background:transparent; color:#102d3d; border:0px;</string>
        </property>
        <property name="text">
-        <string>Z</string>
+        <string>Z mm</string>
        </property>
        <property name="alignment">
         <set>Qt::AlignCenter</set>
@@ -3773,9 +3839,12 @@ background:transparent;
        <property name="styleSheet">
         <string>QLineEdit{background:white; color:black; border-radius:3px; border:1px solid #b8cfd8; padding-left:3px; padding-right:3px; selection-background-color:#00a6c7;}</string>
        </property>
-       <property name="alignment">
-        <set>Qt::AlignCenter</set>
-       </property>
+      <property name="alignment">
+       <set>Qt::AlignCenter</set>
+      </property>
+      <property name="placeholderText">
+       <string>180</string>
+      </property>
       </widget>
       </widget>
       <widget class="QFrame" name="repeatDisturb1Group">
@@ -3834,7 +3903,7 @@ background:transparent;
         <string>background:transparent; color:#102d3d; border:0px;</string>
        </property>
        <property name="text">
-        <string>X</string>
+        <string>X mm</string>
        </property>
        <property name="alignment">
         <set>Qt::AlignCenter</set>
@@ -3852,9 +3921,12 @@ background:transparent;
        <property name="styleSheet">
         <string>QLineEdit{background:white; color:black; border-radius:3px; border:1px solid #b8cfd8; padding-left:3px; padding-right:3px; selection-background-color:#00a6c7;}</string>
        </property>
-       <property name="alignment">
-        <set>Qt::AlignCenter</set>
-       </property>
+      <property name="alignment">
+       <set>Qt::AlignCenter</set>
+      </property>
+      <property name="placeholderText">
+       <string>350</string>
+      </property>
       </widget>
       <widget class="QLabel" name="repeatDisturb1Y_label">
        <property name="geometry">
@@ -3875,7 +3947,7 @@ background:transparent;
         <string>background:transparent; color:#102d3d; border:0px;</string>
        </property>
        <property name="text">
-        <string>Y</string>
+        <string>Y mm</string>
        </property>
        <property name="alignment">
         <set>Qt::AlignCenter</set>
@@ -3893,9 +3965,12 @@ background:transparent;
        <property name="styleSheet">
         <string>QLineEdit{background:white; color:black; border-radius:3px; border:1px solid #b8cfd8; padding-left:3px; padding-right:3px; selection-background-color:#00a6c7;}</string>
        </property>
-       <property name="alignment">
-        <set>Qt::AlignCenter</set>
-       </property>
+      <property name="alignment">
+       <set>Qt::AlignCenter</set>
+      </property>
+      <property name="placeholderText">
+       <string>-80</string>
+      </property>
       </widget>
       <widget class="QLabel" name="repeatDisturb1Z_label">
        <property name="geometry">
@@ -3916,7 +3991,7 @@ background:transparent;
         <string>background:transparent; color:#102d3d; border:0px;</string>
        </property>
        <property name="text">
-        <string>Z</string>
+        <string>Z mm</string>
        </property>
        <property name="alignment">
         <set>Qt::AlignCenter</set>
@@ -3934,177 +4009,19 @@ background:transparent;
        <property name="styleSheet">
         <string>QLineEdit{background:white; color:black; border-radius:3px; border:1px solid #b8cfd8; padding-left:3px; padding-right:3px; selection-background-color:#00a6c7;}</string>
        </property>
-       <property name="alignment">
-        <set>Qt::AlignCenter</set>
-       </property>
-      </widget>
-      </widget>
-      <widget class="QFrame" name="repeatDisturb2Group">
-       <property name="geometry">
-        <rect>
-         <x>0</x>
-         <y>235</y>
-         <width>337</width>
-         <height>58</height>
-        </rect>
-       </property>
-       <property name="styleSheet">
-        <string>QFrame{background:rgba(255,255,255,220); border:1px solid #c1d7df; border-radius:8px;}</string>
-       </property>
-      <widget class="QLabel" name="repeatDisturb2Title">
-       <property name="geometry">
-        <rect>
-         <x>8</x>
-         <y>20</y>
-         <width>110</width>
-         <height>24</height>
-        </rect>
-       </property>
-       <property name="font">
-        <font>
-         <family>Arial</family>
-         <pointsize>8</pointsize>
-        </font>
-       </property>
-       <property name="styleSheet">
-        <string>background:transparent; color:#102d3d; border:0px;</string>
-       </property>
-       <property name="text">
-        <string>Disturb position 2</string>
-       </property>
-       <property name="alignment">
-        <set>Qt::AlignCenter</set>
-       </property>
-      </widget>
-      <widget class="QLabel" name="repeatDisturb2X_label">
-       <property name="geometry">
-        <rect>
-         <x>145</x>
-         <y>4</y>
-         <width>40</width>
-         <height>14</height>
-        </rect>
-       </property>
-       <property name="font">
-        <font>
-         <family>Arial</family>
-         <pointsize>7</pointsize>
-        </font>
-       </property>
-       <property name="styleSheet">
-        <string>background:transparent; color:#102d3d; border:0px;</string>
-       </property>
-       <property name="text">
-        <string>X</string>
-       </property>
-       <property name="alignment">
-        <set>Qt::AlignCenter</set>
-       </property>
-      </widget>
-      <widget class="QLineEdit" name="repeatDisturb2X">
-       <property name="geometry">
-        <rect>
-         <x>145</x>
-         <y>20</y>
-         <width>40</width>
-         <height>30</height>
-        </rect>
-       </property>
-       <property name="styleSheet">
-        <string>QLineEdit{background:white; color:black; border-radius:3px; border:1px solid #b8cfd8; padding-left:3px; padding-right:3px; selection-background-color:#00a6c7;}</string>
-       </property>
-       <property name="alignment">
-        <set>Qt::AlignCenter</set>
-       </property>
-      </widget>
-      <widget class="QLabel" name="repeatDisturb2Y_label">
-       <property name="geometry">
-        <rect>
-         <x>191</x>
-         <y>4</y>
-         <width>40</width>
-         <height>14</height>
-        </rect>
-       </property>
-       <property name="font">
-        <font>
-         <family>Arial</family>
-         <pointsize>7</pointsize>
-        </font>
-       </property>
-       <property name="styleSheet">
-        <string>background:transparent; color:#102d3d; border:0px;</string>
-       </property>
-       <property name="text">
-        <string>Y</string>
-       </property>
-       <property name="alignment">
-        <set>Qt::AlignCenter</set>
-       </property>
-      </widget>
-      <widget class="QLineEdit" name="repeatDisturb2Y">
-       <property name="geometry">
-        <rect>
-         <x>191</x>
-         <y>20</y>
-         <width>40</width>
-         <height>30</height>
-        </rect>
-       </property>
-       <property name="styleSheet">
-        <string>QLineEdit{background:white; color:black; border-radius:3px; border:1px solid #b8cfd8; padding-left:3px; padding-right:3px; selection-background-color:#00a6c7;}</string>
-       </property>
-       <property name="alignment">
-        <set>Qt::AlignCenter</set>
-       </property>
-      </widget>
-      <widget class="QLabel" name="repeatDisturb2Z_label">
-       <property name="geometry">
-        <rect>
-         <x>237</x>
-         <y>4</y>
-         <width>40</width>
-         <height>14</height>
-        </rect>
-       </property>
-       <property name="font">
-        <font>
-         <family>Arial</family>
-         <pointsize>7</pointsize>
-        </font>
-       </property>
-       <property name="styleSheet">
-        <string>background:transparent; color:#102d3d; border:0px;</string>
-       </property>
-       <property name="text">
-        <string>Z</string>
-       </property>
-       <property name="alignment">
-        <set>Qt::AlignCenter</set>
-       </property>
-      </widget>
-      <widget class="QLineEdit" name="repeatDisturb2Z">
-       <property name="geometry">
-        <rect>
-         <x>237</x>
-         <y>20</y>
-         <width>40</width>
-         <height>30</height>
-        </rect>
-       </property>
-       <property name="styleSheet">
-        <string>QLineEdit{background:white; color:black; border-radius:3px; border:1px solid #b8cfd8; padding-left:3px; padding-right:3px; selection-background-color:#00a6c7;}</string>
-       </property>
-       <property name="alignment">
-        <set>Qt::AlignCenter</set>
-       </property>
+      <property name="alignment">
+       <set>Qt::AlignCenter</set>
+      </property>
+      <property name="placeholderText">
+       <string>180</string>
+      </property>
       </widget>
       </widget>
       <widget class="QFrame" name="repeatParamGroup">
        <property name="geometry">
         <rect>
          <x>0</x>
-         <y>306</y>
+         <y>235</y>
          <width>337</width>
          <height>54</height>
         </rect>
@@ -4131,11 +4048,11 @@ background:transparent;
         <string>background:transparent; color:#102d3d; border:0px;</string>
        </property>
        <property name="text">
-        <string>meas_offset</string>
+        <string>offset [mm]</string>
        </property>
-       <property name="alignment">
-        <set>Qt::AlignCenter</set>
-       </property>
+      <property name="alignment">
+       <set>Qt::AlignCenter</set>
+      </property>
       </widget>
       <widget class="QLineEdit" name="txtMeasOffset">
        <property name="geometry">
@@ -4151,6 +4068,9 @@ background:transparent;
        </property>
        <property name="alignment">
         <set>Qt::AlignCenter</set>
+       </property>
+       <property name="placeholderText">
+        <string>20</string>
        </property>
       </widget>
       <widget class="QLabel" name="lblRepeatCount">
@@ -4199,7 +4119,7 @@ background:transparent;
        <property name="geometry">
         <rect>
          <x>0</x>
-         <y>368</y>
+         <y>297</y>
          <width>337</width>
          <height>88</height>
         </rect>
@@ -10862,6 +10782,31 @@ QPushButton:pressed {
        <property name="styleSheet">
         <string>QLineEdit { background:white; border-radius:3px; border:1px solid #cbd8e0; padding-left:6px; color:black;}</string>
        </property>
+       <property name="placeholderText">
+        <string>400</string>
+       </property>
+      </widget>
+      <widget class="QLabel" name="lblObjectXUnit">
+       <property name="geometry">
+        <rect>
+         <x>185</x>
+         <y>70</y>
+         <width>42</width>
+         <height>34</height>
+        </rect>
+       </property>
+       <property name="font">
+        <font>
+         <family>Arial</family>
+         <pointsize>12</pointsize>
+        </font>
+       </property>
+       <property name="styleSheet">
+        <string>color:black; background:transparent; border:0px;</string>
+       </property>
+       <property name="text">
+        <string>mm</string>
+       </property>
       </widget>
       <widget class="QLabel" name="txtObjectY_label">
        <property name="geometry">
@@ -10897,6 +10842,31 @@ QPushButton:pressed {
        <property name="styleSheet">
         <string>QLineEdit { background:white; border-radius:3px; border:1px solid #cbd8e0; padding-left:6px; color:black;}</string>
        </property>
+       <property name="placeholderText">
+        <string>100</string>
+       </property>
+      </widget>
+      <widget class="QLabel" name="lblObjectYUnit">
+       <property name="geometry">
+        <rect>
+         <x>385</x>
+         <y>70</y>
+         <width>42</width>
+         <height>34</height>
+        </rect>
+       </property>
+       <property name="font">
+        <font>
+         <family>Arial</family>
+         <pointsize>12</pointsize>
+        </font>
+       </property>
+       <property name="styleSheet">
+        <string>color:black; background:transparent; border:0px;</string>
+       </property>
+       <property name="text">
+        <string>mm</string>
+       </property>
       </widget>
       <widget class="QLabel" name="txtObjectZ_label">
        <property name="geometry">
@@ -10931,6 +10901,31 @@ QPushButton:pressed {
        </property>
        <property name="styleSheet">
         <string>QLineEdit { background:white; border-radius:3px; border:1px solid #cbd8e0; padding-left:6px; color:black;}</string>
+       </property>
+       <property name="placeholderText">
+        <string>250</string>
+       </property>
+      </widget>
+      <widget class="QLabel" name="lblObjectZUnit">
+       <property name="geometry">
+        <rect>
+         <x>585</x>
+         <y>70</y>
+         <width>42</width>
+         <height>34</height>
+        </rect>
+       </property>
+       <property name="font">
+        <font>
+         <family>Arial</family>
+         <pointsize>12</pointsize>
+        </font>
+       </property>
+       <property name="styleSheet">
+        <string>color:black; background:transparent; border:0px;</string>
+       </property>
+       <property name="text">
+        <string>mm</string>
        </property>
       </widget>
       <widget class="QLabel" name="ledTransformStatus">

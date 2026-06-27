@@ -1,5 +1,6 @@
 #include <memory>
 #include <thread>
+#include <cmath>
 
 #include "rclcpp/rclcpp.hpp"
 #include "rclcpp_action/rclcpp_action.hpp"
@@ -18,6 +19,7 @@ public:
   {
     planning_group_ = declare_parameter<std::string>("planning_group", "arm");
     base_frame_ = declare_parameter<std::string>("base_frame", "world");
+    measurement_settle_time_s_ = declare_parameter<double>("measurement_settle_time_s", 2.0);
 
     action_server_ = rclcpp_action::create_server<CheckerBoard>(
       this,
@@ -38,6 +40,7 @@ public:
 private:
   std::string planning_group_;
   std::string base_frame_;
+  double measurement_settle_time_s_{2.0};
 
   std::shared_ptr<robot_task_manager::MoveItExecutor> executor_;
   rclcpp_action::Server<CheckerBoard>::SharedPtr action_server_;
@@ -46,8 +49,16 @@ private:
                                   const rclcpp_action::GoalUUID &,
                                   std::shared_ptr<const CheckerBoard::Goal> goal)
   {
+    if (!std::isfinite(goal->step) || goal->step <= 0.0) {
+      RCLCPP_WARN(get_logger(), "Reject goal because CheckerBoard step must be finite and > 0.0");
+      return rclcpp_action::GoalResponse::REJECT;
+    }
     if (goal->velocity_scale <= 0.0 || goal->velocity_scale > 1.0) {
       RCLCPP_WARN(get_logger(), "Reject goal because velocity_scale must be in (0,1]");
+      return rclcpp_action::GoalResponse::REJECT;
+    }
+    if (!std::isfinite(measurement_settle_time_s_) || measurement_settle_time_s_ < 0.0) {
+      RCLCPP_WARN(get_logger(), "Reject goal because measurement_settle_time_s must be finite and >= 0.0");
       return rclcpp_action::GoalResponse::REJECT;
     }
     return rclcpp_action::GoalResponse::ACCEPT_AND_EXECUTE;
@@ -114,8 +125,10 @@ private:
       return;
     }
 
-    feedback->stage = goal->execute ? "Planning checker board path" : "Planning checker board path (plan-only)";
-    feedback->progress = 30.0f;
+    feedback->stage = goal->execute ?
+      "CheckerBoard segmented motion starting" :
+      "CheckerBoard segmented planning starting (plan-only)";
+    feedback->progress = 0.0f;
     goal_handle->publish_feedback(feedback);
 
     std::string error_msg;
@@ -129,7 +142,23 @@ private:
         goal->velocity_scale,
         0.3,
         5.0,
-        goal->execute);
+        goal->execute,
+        measurement_settle_time_s_,
+        [this, goal_handle](const std::string & stage, float progress)
+        {
+          if (!goal_handle || goal_handle->is_canceling()) {
+            return;
+          }
+          auto feedback = std::make_shared<CheckerBoard::Feedback>();
+          feedback->stage = stage;
+          feedback->progress = progress;
+          goal_handle->publish_feedback(feedback);
+          RCLCPP_INFO(
+            this->get_logger(),
+            "[CheckerBoard feedback] %s | %.1f%%",
+            stage.c_str(),
+            progress);
+        });
       RCLCPP_INFO(this->get_logger(), "Returned from CheckerBoard(), ok=%s", ok ? "true" : "false");
     } catch (const std::exception &e) {
       RCLCPP_ERROR(this->get_logger(), "Exception in CheckerBoard: %s", e.what());
@@ -161,14 +190,16 @@ private:
       return;
     }
 
-    feedback->stage = goal->execute ? "Checker board completed" : "Checker board plan validated (execution skipped)";
+    feedback->stage = goal->execute ?
+      "CheckerBoard segmented motion completed" :
+      "CheckerBoard segmented plan validated (execution skipped)";
     feedback->progress = 100.0f;
     goal_handle->publish_feedback(feedback);
 
     result->success = true;
     result->message = goal->execute ?
-      "Checker board motion completed successfully" :
-      "CheckerBoard planning success; execution skipped";
+      "CheckerBoard segmented motion completed successfully" :
+      "CheckerBoard segmented planning success; execution skipped because execute=false";
 
     RCLCPP_INFO(this->get_logger(), "Calling goal_handle->succeed()");
     goal_handle->succeed(result);

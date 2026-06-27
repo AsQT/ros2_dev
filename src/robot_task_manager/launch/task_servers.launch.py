@@ -120,7 +120,9 @@ def generate_launch_description():
         executable="checker_board_server",
         name="checker_board_server",
         output="screen",
-        parameters=common_parameters,
+        parameters=common_parameters + [{
+            "measurement_settle_time_s": 2.0,
+        }],
     )
 
     mode_gripper = Node(
