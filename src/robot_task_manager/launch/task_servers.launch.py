@@ -8,6 +8,9 @@ from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
 from moveit_configs_utils import MoveItConfigsBuilder
 
+RL_PYTHON = "/home/minhquang/venvs/ros_rl/bin/python3"
+
+
 def generate_launch_description():
     robot_description_pkg = get_package_share_directory("robot_description")
     moveit_config = (
@@ -61,6 +64,7 @@ def generate_launch_description():
         executable="drl_unified_planner_node",
         name="drl_unified_planner_node",
         output="screen",
+        prefix=RL_PYTHON,
         condition=IfCondition(LaunchConfiguration("enable_drl_backend")),
         parameters=[{
             "use_sim_time": False,
@@ -178,7 +182,7 @@ def generate_launch_description():
         name="repeatability_test_action_server",
         output="screen",
         parameters=common_parameters + [{
-            "fast_velocity_scale": 0.7,
+            "fast_velocity_scale": 0.1,
         }],
     )
 

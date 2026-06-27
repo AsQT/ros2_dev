@@ -10,7 +10,7 @@ def generate_launch_description():
         DeclareLaunchArgument("axis", default_value="0"),
         DeclareLaunchArgument("repeat_count", default_value="3"),
         DeclareLaunchArgument("meas_offset", default_value="0.02"),
-        DeclareLaunchArgument("velocity_scale", default_value="0.25"),
+        DeclareLaunchArgument("velocity_scale", default_value="0.1"),
         DeclareLaunchArgument("execute", default_value="true"),
         DeclareLaunchArgument("frame_id", default_value="world"),
         Node(

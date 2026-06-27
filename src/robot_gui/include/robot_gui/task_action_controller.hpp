@@ -43,6 +43,10 @@ private:
     QLineEdit * edit,
     double default_mm,
     const QString & field_name);
+  std::optional<double> readVelocityScale(
+    QLineEdit * edit,
+    double default_value,
+    const QString & field_name);
 
   rclcpp::Node::SharedPtr node_;
   QWidget * root_{nullptr};

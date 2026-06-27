@@ -10,7 +10,7 @@ from ament_index_python.packages        import get_package_share_directory
 
 
 def generate_launch_description():
-    robot_description_pkg = get_package_share_directory("robot_description")
+    robot_gazebo_pkg     = get_package_share_directory("robot_gazebo")
     robot_moveit_pkg     = get_package_share_directory("robot_moveit")
     robot_task_pkg       = get_package_share_directory("robot_task_manager")
     robot_control_pkg    = get_package_share_directory("robot_control")
@@ -19,13 +19,18 @@ def generate_launch_description():
     spawn_demo_woods_arg = DeclareLaunchArgument(
         "spawn_demo_woods",
         default_value="true",
-        description="Spawn the legacy random demo wood blocks from robot_description",
+        description="Spawn the legacy random demo wood blocks from robot_gazebo",
+    )
+    enable_drl_backend_arg = DeclareLaunchArgument(
+        "enable_drl_backend",
+        default_value="true",
+        description="Forwarded to task_servers_sim.launch.py for DRL backend startup",
     )
 
     # 1) Gazebo bringup
     gazebo = IncludeLaunchDescription(
                 PythonLaunchDescriptionSource(
-                    os.path.join(robot_description_pkg, "launch", "gazebo.launch.py")),
+                    os.path.join(robot_gazebo_pkg, "launch", "gazebo.launch.py")),
                 launch_arguments={
                     "spawn_demo_woods": LaunchConfiguration("spawn_demo_woods"),
                 }.items())
@@ -40,10 +45,13 @@ def generate_launch_description():
                     "start_controller_manager": "false",
                 }.items())
 
-    # 3) Task executor (MoveIt client — talks to move_group)
-    task_executor = IncludeLaunchDescription(
+    # 3) Task servers (MoveIt action servers)
+    task_servers = IncludeLaunchDescription(
                 PythonLaunchDescriptionSource(
-                    os.path.join(robot_task_pkg, "launch", "task_servers_sim.launch.py")))
+                    os.path.join(robot_task_pkg, "launch", "task_servers_sim.launch.py")),
+                launch_arguments={
+                    "enable_drl_backend": LaunchConfiguration("enable_drl_backend"),
+                }.items())
 
     # 4) Controller spawners (talk to the /controller_manager provided by gz_ros2_control plugin)
     joint_state_broadcaster = Node(
@@ -54,6 +62,7 @@ def generate_launch_description():
             "--controller-manager", "/controller_manager",
             "--param-file", controllers_yaml,
             "--controller-manager-timeout", "15",
+            "--switch-timeout", "20",
         ],
         output="screen",
     )
@@ -65,6 +74,7 @@ def generate_launch_description():
             "--controller-manager", "/controller_manager",
             "--param-file", controllers_yaml,
             "--controller-manager-timeout", "15",
+            "--switch-timeout", "20",
         ],
         output="screen",
     )
@@ -76,6 +86,7 @@ def generate_launch_description():
             "--controller-manager", "/controller_manager",
             "--param-file", controllers_yaml,
             "--controller-manager-timeout", "15",
+            "--switch-timeout", "20",
         ],
         output="screen",
     )
@@ -88,9 +99,10 @@ def generate_launch_description():
         OnProcessExit(target_action=arm_controller_spawner,
                        on_exit=[gripper_controller_spawner]))
 
-    # MoveIt after 4 s, task executor after 5 s
+    # MoveIt after 4 s, task servers after 6 s
     return LaunchDescription([
         spawn_demo_woods_arg,
+        enable_drl_backend_arg,
         LogInfo(msg="[sim.launch] Starting: Gazebo + robot spawn + bridges"),
         gazebo,
 
@@ -103,7 +115,7 @@ def generate_launch_description():
         ]),
 
         TimerAction(period=6.0, actions=[
-            LogInfo(msg="[sim.launch] Starting: Task executor (MoveIt client)"),
-            task_executor,
+            LogInfo(msg="[sim.launch] Starting: Task servers"),
+            task_servers,
         ]),
     ])

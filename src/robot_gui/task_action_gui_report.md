@@ -37,13 +37,13 @@ Stop buttons currently log `cancel chưa implement` as required.
 
 - Empty numeric fields use defaults from `codex.md`/`Call_action.md`.
 - Invalid numeric input logs an error to the GUI log and does not send a goal.
-- Velocity defaults to `0.5` for task tabs without a velocity field.
-- Repeatability velocity defaults to `0.25`.
+- Velocity defaults to `0.1` for task tabs without a velocity field.
+- Repeatability velocity defaults to `0.1`.
 - Gripper defaults: open `0.048`, close `0.028`.
 - Move Pose orientation uses Roll/Pitch/Yaw as degrees and converts to quaternion.
 - If Move Pose orientation fields are empty, the quaternion remains the requested constant: `{x: 1.0, y: 1.0, z: 0.0, w: 0.0}`.
 - Move Pose RL reads `rlPosePositionX/Y/Z`, converts `rlPoseOrientationRoll/Pitch/Yaw` from degrees to quaternion, and uses `{x: 1.0, y: 1.0, z: 0.0, w: 0.0}` when all orientation fields are empty.
-- Move Pose RL reads velocity from `txtVelocityScale`, defaulting to `0.5`.
+- Move Pose RL reads velocity from `txtVelocityScale`, defaulting to `0.1`.
 - Pick/Place yaw fields are treated as degrees; empty yaw uses the same default orientation constant.
 - DRL Pick Place and Repeatability use `{x: 1.0, y: 1.0, z: 0.0, w: 0.0}` where `Call_action.md` specifies it.
 - Repeatability axis selector maps `X/Y/Z` to `0/1/2`.
@@ -148,3 +148,81 @@ Result: GUI initialized without crashing on `DISPLAY=:0`; command exited by `tim
 - DRL Pick Place and Move Pose RL both depend on the DRL planner stack at runtime.
 - Move Pose RL reports the missing backend service/action explicitly and does not send a goal when preflight fails.
 - The environment did not have an image conversion tool (`convert`, `magick`, `xwdtopnm`, or `pnmtopng`) available for producing a PNG screenshot from X11. The font fix is applied directly to the runtime widget that receives action feedback.
+
+## Default velocity update
+
+- Đã đổi toàn bộ velocity default trong GUI về `0.1`.
+- File layout đã kiểm tra:
+  - `src/robot_gui/ui/robot_gui.ui`
+- File code đã sửa:
+  - `src/robot_gui/src/task_action_controller.cpp`
+  - `src/robot_gui/ui/robot_gui.ui`
+  - `src/robot_gui/task_action_gui_report.md`
+- Các action dùng `velocity_scale=0.1` mặc định:
+  - `/move_to_pose`
+  - `/move_to_pose_cartesian`
+  - `/pickplace`
+  - `/move_pose_rl`
+  - `/move_checker_board`
+  - `/repeatability_test`
+- Các action không có `velocity_scale`:
+  - `/move_gripper`
+  - `/drl_pickplace`
+- Giá trị đã đổi:
+  - `kDefaultRepeatVelocityScale`: `0.15` -> `0.1`
+  - `txtVelocityScale` trong layout: `0.2` -> `0.1`
+- Các default velocity đã có sẵn `0.1` và được giữ nguyên:
+  - `kDefaultVelocityScale`
+  - Move Pose
+  - Move Pose Cartesian
+  - Pick Place
+  - Pick Place Vision
+  - Move Pose RL
+  - Check Board
+- Log khi gửi action đã bổ sung:
+  - `[Move Pose] velocity_scale=0.100`
+  - `[Pick Place] velocity_scale=0.100`
+  - `[Pick Place Vision] velocity_scale=0.100`
+  - `[MovePoseRL] velocity_scale=0.100`
+  - `[Check Board] velocity_scale=0.100`
+  - `[Repeatability] velocity_scale=0.100`
+- Kết quả build:
+  - `colcon build --packages-select robot_gui --symlink-install`: passed.
+- Kết quả test mock_hardware:
+  - Static/code-path check: passed, các goal GUI-side dùng default `0.1` khi người dùng không nhập velocity.
+  - Chưa chạy click-test GUI mock hardware đầy đủ trong phiên này.
+
+## Add velocity input fields
+
+- File layout đã sửa:
+  - `src/robot_gui/ui/robot_gui.ui`
+- File code đã sửa:
+  - `src/robot_gui/include/robot_gui/task_action_controller.hpp`
+  - `src/robot_gui/src/task_action_controller.cpp`
+- Các ô velocity đã thêm:
+  - `txtMovePoseVelocity`
+  - `txtPickPlaceVelocity`
+  - `txtPickPlaceVisionVelocity`
+  - `txtCheckBoardVelocity`
+  - `txtRepeatabilityVelocity`
+- Default velocity scale:
+  - `0.1`
+- Điều kiện hợp lệ:
+  - `(0, 1]`
+- Helper đọc velocity:
+  - `readVelocityScale`
+- Các action dùng `velocity_scale` từ GUI:
+  - `/move_to_pose`
+  - `/move_to_pose_cartesian`
+  - `/pickplace`
+  - `/move_checker_board`
+  - `/repeatability_test`
+- Các action không thêm velocity theo yêu cầu:
+  - `/move_gripper`
+  - `/drl_pickplace`
+- Kết quả build:
+  - `colcon build --packages-select robot_gui --symlink-install`: passed.
+- Kết quả test mock_hardware:
+  - Static/code-path check: passed, các tab action ở trên đọc velocity từ QLineEdit tương ứng trước khi gửi goal.
+  - GUI smoke test: `ros2 launch robot_gui robot_gui.launch.py embed_rviz:=false initial_page:=0` khởi động không crash và được dừng bằng `timeout`.
+  - Chưa chạy click-test GUI mock hardware đầy đủ trong phiên này.

@@ -63,9 +63,9 @@ from robot_drl.planning_scene_adapter import (
 )
 from std_srvs.srv import Trigger
 
-# Lazy import — the Box message type is optional.
+# Lazy import - the Box message type is optional.
 try:
-    from robot_vision_pipeline.msg import Box  # noqa: F401
+    from robot_vision_pipeline_msgs.msg import Box  # noqa: F401
 except ImportError:
     Box = None  # type: ignore
 

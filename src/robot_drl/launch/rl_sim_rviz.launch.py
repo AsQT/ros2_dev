@@ -1,4 +1,4 @@
-"""Launch robot simulation, MoveIt, DRL planner, task executor, and RViz."""
+"""Launch robot simulation, MoveIt, DRL planner, DRL executor, and RViz."""
 
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
@@ -15,10 +15,12 @@ from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
 
+RL_PYTHON = "/home/minhquang/venvs/ros_rl/bin/python3"
+
 
 def generate_launch_description() -> LaunchDescription:
     bringup_share = get_package_share_directory("robot_bringup")
-    task_executor_share = get_package_share_directory("robot_task_executor")
+    drl_executor_share = get_package_share_directory("robot_drl_executor")
 
     use_sim_time_arg = DeclareLaunchArgument(
         "use_sim_time",
@@ -52,9 +54,9 @@ def generate_launch_description() -> LaunchDescription:
         PythonLaunchDescriptionSource([bringup_share, "/launch/sim.launch.py"])
     )
 
-    task_executor = IncludeLaunchDescription(
+    drl_executor = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
-            [task_executor_share, "/launch/task_executor.launch.py"]
+            [drl_executor_share, "/launch/robot_drl_executor.launch.py"]
         ),
         launch_arguments={
             "use_sim_time": use_sim_time,
@@ -68,6 +70,7 @@ def generate_launch_description() -> LaunchDescription:
         executable="drl_unified_planner_node",
         name="drl_unified_planner_node",
         output="screen",
+        prefix=RL_PYTHON,
         parameters=[{
             "use_sim_time": use_sim_time,
             "input_mode": "manual",
@@ -85,9 +88,9 @@ def generate_launch_description() -> LaunchDescription:
             "ros2",
             "service",
             "call",
-            "/move_to_named_pose_target",
-            "robot_task_executor_msgs/srv/MoveToNamedPoseTarget",
-            "{target_name: pose_A, execute: true}",
+            "/move_cartesian_pose_sequence",
+            "robot_task_executor_msgs/srv/MoveCartesianPoseSequence",
+            "{poses: [{header: {frame_id: base_link}, pose: {position: {x: 0.5241, y: 0.0, z: 0.315}, orientation: {x: 0.7071068, y: 0.7071068, z: 0.0, w: 0.0}}}], execute: true}",
         ],
         output="screen",
     )
@@ -119,8 +122,8 @@ def generate_launch_description() -> LaunchDescription:
         TimerAction(
             period=7.0,
             actions=[
-                LogInfo(msg="[rl_sim_rviz] Starting robot_task_executor..."),
-                task_executor,
+                LogInfo(msg="[rl_sim_rviz] Starting robot_drl_executor..."),
+                drl_executor,
             ],
         ),
         TimerAction(

@@ -1,10 +1,10 @@
-"""Unified launch: Gazebo sim + MoveIt + Task Executor + DRL Planner.
+"""Unified launch: Gazebo sim + MoveIt + DRL Executor + DRL Planner.
 
 Full robot simulation stack for DRL-based pick-and-place:
   1. Gazebo world + robot spawn + bridges + gz_ros2_control
   2. MoveIt (move_group) — waits 4 s for Gazebo to initialise
-  3. Task executor (MoveIt client) — provides /move_cartesian_pose_sequence
-  4. DRL unified planner node — DRL inference + trajectory execution via task executor
+  3. DRL executor (MoveIt client) — provides /move_cartesian_pose_sequence
+  4. DRL unified planner node — DRL inference + trajectory execution via DRL executor
   5. RViz — trajectory visualisation
 
 Note: No separate controller spawners are needed.
@@ -50,11 +50,13 @@ from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
 
+RL_PYTHON = "/home/minhquang/venvs/ros_rl/bin/python3"
+
 
 def generate_launch_description():
     pkg_drl = "robot_drl"
 
-    share_desc = get_package_share_directory("robot_description")
+    share_gazebo = get_package_share_directory("robot_gazebo")
     share_drl = get_package_share_directory(pkg_drl)
 
     # ── Arguments ────────────────────────────────────────────────────────────
@@ -88,7 +90,7 @@ def generate_launch_description():
 
     # ── Step 1: Gazebo (gz_ros2_control plugin provides /controller_manager) ──
     gazebo = IncludeLaunchDescription(
-        PythonLaunchDescriptionSource([share_desc, "/launch/gazebo.launch.py"])
+        PythonLaunchDescriptionSource([share_gazebo, "/launch/gazebo.launch.py"])
     )
 
     # ── Step 2: MoveIt (start_controller_manager=false to avoid spawner conflicts)
@@ -107,13 +109,13 @@ def generate_launch_description():
         }.items(),
     )
 
-    # ── Step 3: Task executor (provides /move_cartesian_pose_sequence)
-    # This is the C++ node from robot_task_executor package.
+    # ── Step 3: DRL executor (provides /move_cartesian_pose_sequence)
+    # This is the C++ node from robot_drl_executor package.
     # It connects to move_group and provides MoveIt's Cartesian pose execution.
-    task_executor = IncludeLaunchDescription(
+    drl_executor = IncludeLaunchDescription(
         PythonLaunchDescriptionSource([
-            get_package_share_directory("robot_task_executor"),
-            "/launch/task_executor.launch.py",
+            get_package_share_directory("robot_drl_executor"),
+            "/launch/robot_drl_executor.launch.py",
         ]),
         launch_arguments={
             "use_sim_time": "true",
@@ -127,6 +129,7 @@ def generate_launch_description():
         executable="drl_unified_planner_node",
         name="drl_unified_planner_node",
         output="screen",
+        prefix=RL_PYTHON,
         parameters=[{
             "use_sim_time": True,
             "calibrated_start_tcp_base": start_tcp,
@@ -160,10 +163,10 @@ def generate_launch_description():
             moveit,
         ]),
 
-        # Step 3: Task executor (after 9 s — needs time for move_group to be ready)
+        # Step 3: DRL executor (after 9 s — needs time for move_group to be ready)
         TimerAction(period=9.0, actions=[
-            LogInfo(msg="[drl_test] Step 3: Task executor (/move_cartesian_pose_sequence)..."),
-            task_executor,
+            LogInfo(msg="[drl_test] Step 3: robot_drl_executor (/move_cartesian_pose_sequence)..."),
+            drl_executor,
         ]),
 
         # Step 4: DRL planner (after 13 s)

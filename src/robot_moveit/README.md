@@ -1,65 +1,51 @@
-# robot_moveit
+    # robot_moveit
 
-MoveIt 2 configuration and launch package for the robot arm. Provides the `move_group` node, RViz visualization, semantic robot description (SRDF), and controller configuration.
+    ## 1. Vai trò package
+    MoveIt configuration package cho robot: SRDF, kinematics, controller mapping, joint limits, RViz config và launch move_group/RViz/GUI.
 
-## Package Structure
+    ## 2. Vị trí trong hệ thống
+    Cung cấp `move_group` và config cho task manager, task executor, DRL executor, GUI và bringup.
 
-```
-robot_moveit/
-├── launch/
-│   └── moveit.launch.py       # Main MoveIt launch
-├── config/
-│   ├── robot.srdf            # Semantic robot description (named poses, groups)
-│   ├── moveit_controllers.yaml  # Controller mapping
-│   ├── ompl_planning.yaml    # OMPL planner config
-│   ├── moveit.rviz           # RViz configuration
-│   └── (other MoveIt configs)
-├── CMakeLists.txt
-└── package.xml
-```
+    ## 3. Thành phần chính
+    - `config/robot.srdf`: group/state/EEF MoveIt.
+- `config/kinematics.yaml`, `joint_limits.yaml`, `moveit_controllers.yaml`, `pilz_cartesian_limits.yaml`, `sensors_3d.yaml`.
+- `config/moveit.rviz`: RViz config.
+- `launch/moveit.launch.py`, `moveit_gui.launch.py`, `moveit_mock.launch.py`.
+- `gui/moveit_gui.py`: GUI Python thử nghiệm gọi MoveGroup/ExecuteTrajectory action.
 
-## Launch
+    ## 4. Node / executable
+    | Node / executable | Nguồn | Vai trò |
+    |---|---|---|
+    | Không build C++ executable; cài script `moveit_gui.py`; launch chạy `move_group`, `rviz2`, `static_transform_publisher`, `robot_gui_node` tùy file. | package source/launch | Runtime của package hoặc node được launch |
 
-```bash
-ros2 launch robot_moveit moveit.launch.py
-```
+    ## 5. Topic / Service / Action
+    | Interface | Type | Vai trò |
+    |---|---|---|
+    | Xem mô tả bên dưới | runtime interface | package dependent |
 
-### Arguments
+    Ghi chú interface: MoveIt actions `/move_action` và `/execute_trajectory` từ move_group, service query planner, `/joint_states`, controller action từ ros2_control.
 
-| Argument | Default | Description |
-|----------|---------|-------------|
-| `use_sim_time` | `false` | Use simulation time (true for Gazebo) |
-| `use_mock` | `true` | Use mock hardware |
-| `start_controller_manager` | `true` | Start local ros2_control node |
+    ## 6. File launch liên quan
+    moveit.launch.py, moveit_gui.launch.py, moveit_mock.launch.py
 
-### What It Starts
+    ## 7. File cấu hình liên quan
+    config/robot.srdf, config/kinematics.yaml, config/joint_limits.yaml, config/moveit_controllers.yaml, config/pilz_cartesian_limits.yaml, config/sensors_3d.yaml, config/moveit.rviz
 
-- `move_group` node (MoveIt planning)
-- `static_transform_publisher` — `world` -> `base_link`
-- `robot_state_publisher` — from URDF
-- `controller_manager` + spawners (`joint_state_broadcaster`, `arm_controller`, `gripper_controller`)
+    ## 8. Cách build riêng package
+    ```bash
+    cd ~/ros2_dev
+    colcon build --packages-select robot_moveit
+    source install/setup.bash
+    ```
 
-RViz is **commented out** by default. To enable, uncomment in `moveit.launch.py`.
+    ## 9. Cách chạy nhanh
+    ```bash
+    source ~/ros2_dev/install/setup.bash
+    ros2 launch robot_moveit moveit.launch.py
+    ```
+    Nếu package không có launch/runtime node, dùng nó bằng cách phụ thuộc interface hoặc include file từ package khác.
 
-## Planning Group
-
-The default planning group is named `arm`, containing joints `joint_1` through `joint_6`.
-
-End-effector link: `tcp_link`
-
-## Dependencies
-
-This package depends on:
-- `robot_description` — URDF and xacro files
-- `controller_manager` / `ros2_controllers` — joint controllers
-- `moveit_ros_move_group` — planning core
-- `moveit_ros_visualization` — RViz integration
-- `moveit_configs_utils` — configuration builder utilities
-
-## Build
-
-```bash
-cd ~/ros2
-colcon build --packages-select robot_moveit
-source install/setup.bash
-```
+    ## 10. Ghi chú kỹ thuật / giới hạn hiện tại
+    - Source of truth là source code hiện tại trong `robot_moveit`.
+    - Tài liệu này không thay thế kiểm tra runtime bằng `ros2 node list`, `ros2 topic list`, `ros2 service list`, `ros2 action list` sau khi launch.
+    - Đây là runtime MoveIt trung tâm. Plan-only/execute do client quyết định: task servers dùng MoveGroupInterface, GUI Python dùng MoveGroup/ExecuteTrajectory action.

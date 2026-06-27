@@ -32,7 +32,7 @@ public:
   bool goNamedTarget(
     const std::string & target_name,
     std::string & error_msg,
-    double velocity_scale = 0.3,
+    double velocity_scale = 0.1,
     double acceleration_scale = 0.3,
     double planning_time = 5.0,
     bool execute = true);
@@ -40,14 +40,14 @@ public:
   bool moveToPose(
           const geometry_msgs::msg::Pose & target_pose,
           std::string & error_msg,
-          double velocity_scale = 0.3,
+          double velocity_scale = 0.1,
           double acceleration_scale = 0.3,
           double planning_time = 5.0,
           bool execute = true);
   bool moveToPoseCartesian(
           const geometry_msgs::msg::Pose & target_pose,
           std::string & error_msg,
-          double velocity_scale = 0.3,
+          double velocity_scale = 0.1,
           double acceleration_scale = 0.3,
           double planning_time = 5.0,
           bool execute = true);
@@ -55,7 +55,7 @@ public:
   bool checkerBoard(
           double step,
           std::string & error_msg,
-          double velocity_scale = 0.3,
+          double velocity_scale = 0.1,
           double acceleration_scale = 0.3,
           double planning_time = 5.0,
           bool execute = true,

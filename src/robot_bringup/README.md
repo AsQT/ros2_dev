@@ -1,82 +1,51 @@
-# robot_bringup
+    # robot_bringup
 
-Top-level launch package for bringing up the full robot system. Provides simulation and real-hardware launch files that orchestrate Gazebo, MoveIt, hardware interface, GUI, and task servers.
+    ## 1. Vai trò package
+    Package launch tổng hợp để khởi động robot ở chế độ simulation, real hardware và demo DRL pick-place. Source of truth: `launch/*.launch.py` và `package.xml` hiện tại.
 
-## Package Structure
+    ## 2. Vị trí trong hệ thống
+    Đứng ở tầng orchestration: include `robot_description`, `robot_control`, `robot_moveit`, `robot_task_manager`, `robot_drl`, `robot_drl_executor`, RViz/Gazebo tùy mode.
 
-```
-robot_bringup/
-├── launch/
-│   ├── sim.launch.py         # Simulation bringup (Gazebo + MoveIt + task servers)
-│   └── real.launch.py        # Real hardware bringup (TCP ros2_control + GUI + MoveIt + task servers)
-└── package.xml
-```
+    ## 3. Thành phần chính
+- `launch/sim.launch.py`: Gazebo từ `robot_gazebo` + MoveIt + task servers simulation + controller spawner.
+- `launch/real.launch.py`: MoveIt GUI + task servers với `use_mock=false`.
+- `launch/drl_test.launch.py`: Gazebo + MoveIt + `robot_drl_executor` + DRL planner + RViz.
+- `launch/rl_pick_place_box_gazebo_demo.launch.py`: demo pick-place hộp trong Gazebo, spawn box bằng `robot_gazebo` và client demo.
+- `config/common.yaml`, `config/ros2_controllers.yaml`: cấu hình dùng kèm bringup/controller.
 
-## Launch Files
+    ## 4. Node / executable
+    | Node / executable | Nguồn | Vai trò |
+    |---|---|---|
+    | Không build executable riêng; launch file khởi tạo node từ package khác như `move_group`, `drl_unified_planner_node`, `robot_drl_executor_node`, `task_servers_*`, controller spawner và RViz. | package source/launch | Runtime của package hoặc node được launch |
 
-### `sim.launch.py` — Simulation bringup
+    ## 5. Topic / Service / Action
+    | Interface | Type | Vai trò |
+    |---|---|---|
+    | Xem mô tả bên dưới | runtime interface | package dependent |
 
-Starts the robot in Gazebo simulation with MoveIt and task servers.
+    Ghi chú interface: Không định nghĩa topic/service/action riêng. Các interface runtime đến từ package được include: action của `robot_task_manager`, service `/move_cartesian_pose_sequence`, topic Gazebo/ROS bridge và controller.
 
-```bash
-ros2 launch robot_bringup sim.launch.py
-```
+    ## 6. File launch liên quan
+    sim.launch.py, real.launch.py, drl_test.launch.py, rl_pick_place_box_gazebo_demo.launch.py
 
-Includes:
-- Gazebo simulation
-- MoveIt (with `use_sim_time:=true`)
-- Task server for simulation
+    ## 7. File cấu hình liên quan
+    config/common.yaml, config/ros2_controllers.yaml
 
-### `real.launch.py` — Real hardware bringup
+    ## 8. Cách build riêng package
+    ```bash
+    cd ~/ros2_dev
+    colcon build --packages-select robot_bringup
+    source install/setup.bash
+    ```
 
-Starts the robot with the real TCP hardware interface, GUI, MoveIt, and task servers.
+    ## 9. Cách chạy nhanh
+    ```bash
+    source ~/ros2_dev/install/setup.bash
+    ros2 launch robot_bringup sim.launch.py
+    ```
+    Nếu package không có launch/runtime node, dùng nó bằng cách phụ thuộc interface hoặc include file từ package khác.
 
-```bash
-ros2 launch robot_bringup real.launch.py
-```
-
-Includes:
-- `robot_hardware_interface/RobotSystemHardware` through `controller_manager/ros2_control_node`
-- `robot_gui` Qt-based robot GUI
-- MoveIt (with `use_sim_time:=false`)
-- Task server for real hardware
-
-## Architecture
-
-This package is the **entry point** for launching the robot. It coordinates:
-
-```
-robot_bringup
-├── robot_description        # URDF / xacro definitions
-├── robot_moveit             # MoveIt configuration and move_group
-├── robot_hardware_interface # TCP communication and ros2_control hardware plugin (real only)
-├── robot_gui                # GUI for hardware control (real only)
-└── robot_task_manager      # High-level task actions
-```
-
-## Dependencies
-
-The launch files depend on:
-- `robot_description`
-- `robot_moveit`
-- `robot_hardware_interface`
-- `robot_gui`
-- `robot_task_manager`
-
-## Hardware State Protocol
-
-The real hardware path expects the STM32 `CMD_GET_ALL` response to use:
-
-```text
-[pos:i32][vel:u32][flag:u32] * NUM_AXIS
-12 bytes / axis
-72 bytes for 6 axes
-flag/status is uint32, little-endian
-```
-
-`robot_hardware_interface` publishes the raw 32-bit status per axis as:
-
-```text
-/robot_hw/flags
-msg.axes[i].status_f
-```
+    ## 10. Ghi chú kỹ thuật / giới hạn hiện tại
+    - Source of truth là source code hiện tại trong `robot_bringup`.
+    - Tài liệu này không thay thế kiểm tra runtime bằng `ros2 node list`, `ros2 topic list`, `ros2 service list`, `ros2 action list` sau khi launch.
+    - Bringup không gọi MoveIt trực tiếp trong code, nhưng launch `move_group`, `task_servers_*`, `robot_drl_executor_node` và GUI/client. Thất bại thường đến từ include thiếu package, controller chưa active hoặc action/server chưa sẵn sàng.

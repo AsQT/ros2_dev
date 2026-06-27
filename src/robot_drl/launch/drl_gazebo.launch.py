@@ -1,9 +1,9 @@
 """Launch Gazebo simulation stack plus the DRL planner.
 
 This is the Gazebo counterpart to ``drl_mock_hw.launch.py``.  The robot model,
-Gazebo, controller manager, MoveIt, RViz and ``robot_task_executor`` are started
-by ``robot_bringup/launch/sim.launch.py``; this launch only adds the mock vision
-environment and the DRL unified planner.
+Gazebo, controller manager, MoveIt, RViz and task action servers are started by
+``robot_bringup/launch/sim.launch.py``; this launch adds the DRL executor, mock
+vision environment and the DRL unified planner.
 
 Usage:
     ros2 launch robot_drl drl_gazebo.launch.py
@@ -23,6 +23,8 @@ from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
 from launch_ros.parameter_descriptions import ParameterValue
+
+RL_PYTHON = "/home/minhquang/venvs/ros_rl/bin/python3"
 
 
 def generate_launch_description() -> LaunchDescription:
@@ -74,17 +76,16 @@ def generate_launch_description() -> LaunchDescription:
         launch_arguments={
             "use_sim_time": use_sim_time,
             "use_rviz": LaunchConfiguration("use_rviz"),
-            "start_task_executor": "true",
             "spawn_demo_woods": "false",
         }.items(),
     )
 
-    task_executor_launch = IncludeLaunchDescription(
+    drl_executor_launch = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
             os.path.join(
-                get_package_share_directory("robot_task_executor"),
+                get_package_share_directory("robot_drl_executor"),
                 "launch",
-                "task_executor.launch.py",
+                "robot_drl_executor.launch.py",
             )
         ),
         launch_arguments={
@@ -94,7 +95,7 @@ def generate_launch_description() -> LaunchDescription:
             "ee_link": "tcp_link",
             "planning_time": "2.0",
             "num_planning_attempts": "5",
-            "max_velocity_scaling_factor": "0.5",
+            "max_velocity_scaling_factor": "0.1",
             "max_acceleration_scaling_factor": "0.5",
         }.items(),
     )
@@ -122,6 +123,7 @@ def generate_launch_description() -> LaunchDescription:
         executable="drl_unified_planner_node",
         name="drl_unified_planner_node",
         output="screen",
+        prefix=RL_PYTHON,
         parameters=[{
             "use_sim_time": True,
             "calibrated_start_tcp_base": LaunchConfiguration("calibrated_start_tcp_base"),
@@ -164,7 +166,7 @@ def generate_launch_description() -> LaunchDescription:
     )
 
     return LaunchDescription([
-        LogInfo(msg="[drl_gazebo] Gazebo sim + task executor + DRL"),
+        LogInfo(msg="[drl_gazebo] Gazebo sim + robot_drl_executor + DRL"),
         input_mode_arg,
         auto_plan_arg,
         manual_prompt_arg,
@@ -177,8 +179,8 @@ def generate_launch_description() -> LaunchDescription:
         target_class_arg,
         sim_bringup,
         TimerAction(period=12.0, actions=[
-            LogInfo(msg="[drl_gazebo] Starting task_executor_node..."),
-            task_executor_launch,
+            LogInfo(msg="[drl_gazebo] Starting robot_drl_executor_node..."),
+            drl_executor_launch,
         ]),
         TimerAction(period=14.0, actions=[
             LogInfo(msg="[drl_gazebo] Starting mock environment and DRL planner..."),

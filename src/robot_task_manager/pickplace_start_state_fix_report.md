@@ -113,7 +113,7 @@ Command:
 
 ```bash
 ros2 action send_goal /move_to_pose robot_task_manager/action/MoveToPose \
-  "{target_pose: {position: {x: 0.40, y: 0.10, z: 0.35}, orientation: {x: 1.0, y: 1.0, z: 0.0, w: 0.0}}, velocity_scale: 0.3, execute: false}" \
+  "{target_pose: {position: {x: 0.40, y: 0.10, z: 0.35}, orientation: {x: 1.0, y: 1.0, z: 0.0, w: 0.0}}, velocity_scale: 0.1, execute: false}" \
   --feedback
 ```
 
@@ -126,7 +126,7 @@ Command:
 
 ```bash
 ros2 action send_goal /move_to_pose_cartesian robot_task_manager/action/MoveToPoseCartesian \
-  "{target_pose: {position: {x: 0.40, y: 0.10, z: 0.30}, orientation: {x: 1.0, y: 1.0, z: 0.0, w: 0.0}}, velocity_scale: 0.2, execute: false}" \
+  "{target_pose: {position: {x: 0.40, y: 0.10, z: 0.30}, orientation: {x: 1.0, y: 1.0, z: 0.0, w: 0.0}}, velocity_scale: 0.1, execute: false}" \
   --feedback
 ```
 
@@ -139,7 +139,7 @@ Command:
 
 ```bash
 ros2 action send_goal /pickplace robot_task_manager/action/PickPlace \
-  "{pose_pick: {position: {x: 0.40, y: 0.10, z: 0.25}, orientation: {x: 1.0, y: 1.0, z: 0.0, w: 0.0}}, pose_place: {position: {x: 0.30, y: 0.00, z: 0.25}, orientation: {x: 1.0, y: 1.0, z: 0.0, w: 0.0}}, gripper: 0.01, velocity_scale: 0.3, execute: false}" \
+  "{pose_pick: {position: {x: 0.40, y: 0.10, z: 0.25}, orientation: {x: 1.0, y: 1.0, z: 0.0, w: 0.0}}, pose_place: {position: {x: 0.30, y: 0.00, z: 0.25}, orientation: {x: 1.0, y: 1.0, z: 0.0, w: 0.0}}, gripper: 0.01, velocity_scale: 0.1, execute: false}" \
   --feedback
 ```
 
@@ -157,7 +157,7 @@ Command:
 
 ```bash
 ros2 action send_goal /pickplace robot_task_manager/action/PickPlace \
-  "{pose_pick: {position: {x: 0.40, y: 0.10, z: 0.25}, orientation: {x: 1.0, y: 1.0, z: 0.0, w: 0.0}}, pose_place: {position: {x: 0.30, y: 0.00, z: 0.25}, orientation: {x: 1.0, y: 1.0, z: 0.0, w: 0.0}}, gripper: 0.01, velocity_scale: 0.3, execute: true}" \
+  "{pose_pick: {position: {x: 0.40, y: 0.10, z: 0.25}, orientation: {x: 1.0, y: 1.0, z: 0.0, w: 0.0}}, pose_place: {position: {x: 0.30, y: 0.00, z: 0.25}, orientation: {x: 1.0, y: 1.0, z: 0.0, w: 0.0}}, gripper: 0.01, velocity_scale: 0.1, execute: true}" \
   --feedback
 ```
 

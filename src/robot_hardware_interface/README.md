@@ -1,115 +1,61 @@
-# robot_hardware_interface
+    # robot_hardware_interface
 
-ROS 2 C++ package providing a `ros2_control` `SystemInterface` plugin and a small hardware service node for a robot TCP controller.
+    ## 1. Vai trò package
+    Hardware interface TCP/RS485 cho robot, gồm node standalone `robot_hw_node`, plugin ros2_control `tcp_system_hardware`, service điều khiển trục và message flag trạng thái.
 
-The ROS 2 PC is a TCP client. The robot controller, currently implemented on STM32F407 firmware, is expected to run as a TCP server and keep handling the downstream motor-driver bus internally.
+    ## 2. Vị trí trong hệ thống
+    Tầng sát phần cứng. Nhận lệnh từ GUI/controller_manager, publish joint state/status và cung cấp service connect/servo/home/jog/run/stop.
 
-## ros2_control Plugin
+    ## 3. Thành phần chính
+    - `src/robot_hw_node.cpp`: node hardware standalone qua TCP client.
+- `src/tcp_system_hardware.cpp`: plugin ros2_control lifecycle.
+- `src/tcp_client.cpp`: framing/protocol TCP.
+- `src/rs485_hw_node.cpp`, `rs485_system_hardware.cpp`: biến thể RS485 trong source.
+- `srv/*.srv`: service điều khiển axis/all.
+- `msg/AxisFlag.msg`, `FlagStatus.msg`: trạng thái servo/limit/emergency.
+- `scripts/hardware_gui.py`, `test_servo_all_flags.py`: tool test.
+- `config/params.yaml`, `plugin.xml`, `launch/hardware_interface.launch.py`.
 
-Plugin name:
+    ## 4. Node / executable
+    | Node / executable | Nguồn | Vai trò |
+    |---|---|---|
+    | Executable `robot_hw_node`; script `hardware_gui.py`; plugin library `tcp_system_hardware` cho ros2_control. | package source/launch | Runtime của package hoặc node được launch |
 
-```xml
-<plugin>robot_hardware_interface/RobotSystemHardware</plugin>
-```
+    ## 5. Topic / Service / Action
+    | Interface | Type | Vai trò |
+    |---|---|---|
+    | /robot_hw/servo_all | service/topic | hardware IO |
+| /robot_hw/home | service/topic | hardware IO |
+| /robot_hw/jog | service/topic | hardware IO |
+| /robot_hw/run_axis | service/topic | hardware IO |
+| /robot_hw/stop_axis | service/topic | hardware IO |
+| /robot_hw/stop_all | service/topic | hardware IO |
+| /robot_hw/flags | service/topic | hardware IO |
+| /joint_states | service/topic | hardware IO |
 
-Default hardware parameters:
+    Ghi chú interface: Publish `/joint_states`, `/robot_hw/connected`, `/hardware/connected` legacy, `/robot_hw/status_text`, `/robot_hw/flags`, `/hardware/flags`; subscribe `/robot_hw/servo_axis_cmd`, `/robot_hw/run_axis_cmd`, `/robot_hw/jog_cmd`, `/robot_hw/run_all_cmd`, controller trajectory; services `/robot_hw/connect`, `/robot_hw/disconnect`, `/robot_hw/poll_now`, `/robot_hw/servo_all`, `/robot_hw/servo_on_axis`, `/robot_hw/servo_on_all`, `/robot_hw/jog`, `/robot_hw/home`, `/robot_hw/run_axis`, `/robot_hw/stop_axis`, `/robot_hw/stop_all`.
 
-```xml
-<param name="robot_ip">192.168.2.50</param>
-<param name="robot_port">5000</param>
-<param name="connect_timeout_ms">2000</param>
-<param name="read_timeout_ms">50</param>
-```
+    ## 6. File launch liên quan
+    hardware_interface.launch.py
 
-The plugin keeps the existing joint names and command/state interfaces. Position and velocity conversion logic follows the previous package.
+    ## 7. File cấu hình liên quan
+    config/params.yaml, plugin.xml
 
-## TCP Protocol
+    ## 8. Cách build riêng package
+    ```bash
+    cd ~/ros2_dev
+    colcon build --packages-select robot_hardware_interface
+    source install/setup.bash
+    ```
 
-The transport frame is a compact binary TCP frame:
+    ## 9. Cách chạy nhanh
+    ```bash
+    source ~/ros2_dev/install/setup.bash
+    ros2 launch robot_hardware_interface hardware_interface.launch.py
+    ```
+    Nếu package không có launch/runtime node, dùng nó bằng cách phụ thuộc interface hoặc include file từ package khác.
 
-```text
-MAGIC | CMD | SEQ | LENGTH | PAYLOAD
-```
-
-Header layout:
-
-```text
-AA 55 | cmd:u8 | seq:u16_le | length:u16_le | payload
-```
-
-Magic is `0x55AA` stored little-endian on the wire as `AA 55`. There is no CRC16, byte stuffing, or UART-style tail parser. TCP connect and read operations use separate timeouts so state polling does not block ROS execution.
-
-### `STATUS_ALL` / `CMD_GET_ALL` State Payload
-
-The STM32 `CMD_GET_ALL` response is parsed by the ROS side as the `STATUS_ALL`
-command. The payload format is fixed:
-
-```text
-payload[0] = CMD_OK = 0x00
-payload[1..96] = [pos:i32][vel:u32][flag:u32] * 8 axes
-```
-
-For the current STM32 frame:
-
-```text
-payload_len = 97 bytes
-axis_count_in_frame = 8
-12 bytes / axis
-96 bytes axis payload
-axis data offset = 1
-```
-
-Fields are little-endian:
-
-```text
-pos_mdeg:   int32
-vel_mdeg_s: uint32
-flag:       uint32
-```
-
-The TCP parser requires the 97-byte payload and rejects frames without the
-`CMD_OK` status byte. The old `[pos:i32][vel:u32][flag:u16]` 10-byte-per-axis
-payload and the previous 72-byte 6-axis payload are deprecated and reported as
-protocol mismatches.
-
-The `/robot_hw/flags` topic publishes:
-
-```text
-robot_hardware_interface/msg/FlagStatus
-axes[i].status_f = uint32 flag from STM32 axis i
-```
-
-The STM32 frame carries 8 axes. The current ROS GUI/interface publishes the
-first 6 axes to `/robot_hw/flags` because `FlagStatus.msg` is still
-`AxisFlag[6]`.
-
-Boolean fields such as `servo_on`, `motionning`, `org_ok`, and fault LEDs are
-derived from that same 32-bit `status_f`.
-
-## Build
-
-```bash
-cd ~/ros2_dev
-colcon build --packages-select robot_hardware_interface
-source install/setup.bash
-```
-
-## Run Debug Node
-
-```bash
-ros2 launch robot_hardware_interface hardware_interface.launch.py
-```
-
-Override TCP parameters if needed:
-
-```bash
-ros2 run robot_hardware_interface robot_hw_node --ros-args \
-  -p robot_ip:=192.168.2.50 \
-  -p robot_port:=5000 \
-  -p connect_timeout_ms:=2000 \
-  -p read_timeout_ms:=50
-```
-
-Main runtime topics and services use `/robot_hw/*`, including `/robot_hw/connect`,
-`/robot_hw/connected`, `/robot_hw/status_text`, command topics, and typed motion services.
-The node publishes actual robot state on `/joint_states` after successful polling.
+    ## 10. Ghi chú kỹ thuật / giới hạn hiện tại
+    - Source of truth là source code hiện tại trong `robot_hardware_interface`.
+    - Tài liệu này không thay thế kiểm tra runtime bằng `ros2 node list`, `ros2 topic list`, `ros2 service list`, `ros2 action list` sau khi launch.
+    - Không có phụ thuộc MoveIt/action đặc biệt được xác định từ source.

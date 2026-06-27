@@ -48,8 +48,7 @@ using PickPlace = robot_task_manager::action::PickPlace;
 using RepeatabilityTest = robot_task_manager::action::RepeatabilityTest;
 using LogFn = std::function<void(const QString &)>;
 
-constexpr double kDefaultVelocityScale = 0.1;
-constexpr double kDefaultRepeatVelocityScale = 0.15;
+constexpr double DEFAULT_GUI_VELOCITY_SCALE = 0.1;
 constexpr double kDefaultOriX = 1.0;
 constexpr double kDefaultOriY = 1.0;
 constexpr double kDefaultOriZ = 0.0;
@@ -766,6 +765,29 @@ std::optional<double> TaskActionController::readMmAsMeter(
   return value_m;
 }
 
+std::optional<double> TaskActionController::readVelocityScale(
+  QLineEdit * edit,
+  double default_value,
+  const QString & field_name)
+{
+  double value = default_value;
+  if (edit != nullptr && !edit->text().trimmed().isEmpty()) {
+    bool ok = false;
+    value = edit->text().trimmed().toDouble(&ok);
+    if (!ok || !std::isfinite(value)) {
+      appendActionLog(QString("[Input Error] %1 invalid velocity_scale").arg(field_name));
+      return std::nullopt;
+    }
+  }
+
+  if (value <= 0.0 || value > 1.0) {
+    appendActionLog(QString("[Input Error] %1 must be in range (0, 1]").arg(field_name));
+    return std::nullopt;
+  }
+
+  return value;
+}
+
 void TaskActionController::setMovePoseRlBusy(bool busy)
 {
   QMetaObject::invokeMethod(
@@ -789,15 +811,17 @@ void TaskActionController::logCancelUnavailable(const QString & label)
 void TaskActionController::sendMovePose(bool execute)
 {
   const LogFn log = [this](const QString & msg) {appendActionLog(msg);};
-  double velocity = kDefaultVelocityScale;
+  const auto velocity = readVelocityScale(
+    lineEdit(root_, "txtMovePoseVelocity"),
+    DEFAULT_GUI_VELOCITY_SCALE,
+    "[Move Pose] velocity_scale");
   const auto x = readMmAsMeter(lineEdit(root_, "txtTargetX"), kDefaultMoveXMm, "[Move Pose] X");
   const auto y = readMmAsMeter(lineEdit(root_, "txtTargetY"), kDefaultMoveYMm, "[Move Pose] Y");
   const auto z = readMmAsMeter(lineEdit(root_, "txtTargetZ"), kDefaultMoveZMm, "[Move Pose] Z");
-  if (!x || !y || !z ||
-    !readVelocity(root_, "", velocity, "Move Pose velocity_scale", log, &velocity))
-  {
+  if (!velocity || !x || !y || !z) {
     return;
   }
+  appendActionLog(QString("[Move Pose] velocity_scale=%1").arg(*velocity, 0, 'f', 3));
 
   bool ok = true;
   const auto orientation =
@@ -813,7 +837,7 @@ void TaskActionController::sendMovePose(bool execute)
   if (cartesian) {
     MoveToPoseCartesian::Goal goal;
     goal.target_pose = makePose(*x, *y, *z, orientation);
-    goal.velocity_scale = velocity;
+    goal.velocity_scale = *velocity;
     goal.execute = execute;
     sendGoal<MoveToPoseCartesian>(
       node_, "/move_to_pose_cartesian",
@@ -821,7 +845,7 @@ void TaskActionController::sendMovePose(bool execute)
   } else {
     MoveToPose::Goal goal;
     goal.target_pose = makePose(*x, *y, *z, orientation);
-    goal.velocity_scale = velocity;
+    goal.velocity_scale = *velocity;
     goal.execute = execute;
     sendGoal<MoveToPose>(
       node_, "/move_to_pose", execute ? "Move Pose Start" : "Move Pose Plan", goal, log);
@@ -860,7 +884,10 @@ void TaskActionController::sendGripper(double position, bool execute, const QStr
 void TaskActionController::sendPickPlace(bool execute)
 {
   const LogFn log = [this](const QString & msg) {appendActionLog(msg);};
-  double velocity = kDefaultVelocityScale;
+  const auto velocity = readVelocityScale(
+    lineEdit(root_, "txtPickPlaceVelocity"),
+    DEFAULT_GUI_VELOCITY_SCALE,
+    "[Pick Place] velocity_scale");
   const auto pick_x = readMmAsMeter(lineEdit(root_, "pickPoseX"), kDefaultPickXMm, "[Pick Place] pick X");
   const auto pick_y = readMmAsMeter(lineEdit(root_, "pickPoseY"), kDefaultPickYMm, "[Pick Place] pick Y");
   const auto pick_z = readMmAsMeter(lineEdit(root_, "pickPoseZ"), kDefaultPickZMm, "[Pick Place] pick Z");
@@ -871,11 +898,10 @@ void TaskActionController::sendPickPlace(bool execute)
   appendActionLog(QString("[Pick Place] gripper=%1 mm -> %2 m")
     .arg(kDefaultPickGripperMm, 0, 'f', 3)
     .arg(gripper, 0, 'f', 3));
-  if (!pick_x || !pick_y || !pick_z || !place_x || !place_y || !place_z ||
-    !readVelocity(root_, "", velocity, "PickPlace velocity_scale", log, &velocity))
-  {
+  if (!velocity || !pick_x || !pick_y || !pick_z || !place_x || !place_y || !place_z) {
     return;
   }
+  appendActionLog(QString("[Pick Place] velocity_scale=%1").arg(*velocity, 0, 'f', 3));
 
   bool ok = true;
   const auto pick_q = orientationFromYawField(root_, "pickPoseYaw", log, &ok);
@@ -891,7 +917,7 @@ void TaskActionController::sendPickPlace(bool execute)
   goal.pose_pick = makePose(*pick_x, *pick_y, *pick_z, pick_q);
   goal.pose_place = makePose(*place_x, *place_y, *place_z, place_q);
   goal.gripper = gripper;
-  goal.velocity_scale = velocity;
+  goal.velocity_scale = *velocity;
   goal.execute = execute;
   sendGoal<PickPlace>(node_, "/pickplace", execute ? "Pick Place Start" : "Pick Place Plan", goal, log);
 }
@@ -906,18 +932,20 @@ void TaskActionController::sendPickPlaceVision(bool execute)
       u8"Vision pose chưa có dữ liệu, dùng pose nhập tay hoặc không gửi goal."));
   }
 
-  double velocity = kDefaultVelocityScale;
+  const auto velocity = readVelocityScale(
+    lineEdit(root_, "txtPickPlaceVisionVelocity"),
+    DEFAULT_GUI_VELOCITY_SCALE,
+    "[Pick Place Vision] velocity_scale");
   const auto pick_x = readMmAsMeter(lineEdit(root_, "txtObjectX"), kDefaultPickXMm, "[Pick Place Vision] pick X");
   const auto pick_y = readMmAsMeter(lineEdit(root_, "txtObjectY"), kDefaultPickYMm, "[Pick Place Vision] pick Y");
   const auto pick_z = readMmAsMeter(lineEdit(root_, "txtObjectZ"), kDefaultPickZMm, "[Pick Place Vision] pick Z");
   const auto place_x = readMmAsMeter(lineEdit(root_, "visionPlacePoseX"), kDefaultPlaceXMm, "[Pick Place Vision] place X");
   const auto place_y = readMmAsMeter(lineEdit(root_, "visionPlacePoseY"), kDefaultPlaceYMm, "[Pick Place Vision] place Y");
   const auto place_z = readMmAsMeter(lineEdit(root_, "visionPlacePoseZ"), kDefaultPlaceZMm, "[Pick Place Vision] place Z");
-  if (!pick_x || !pick_y || !pick_z || !place_x || !place_y || !place_z ||
-    !readVelocity(root_, "", velocity, "PickPlace Vision velocity_scale", log, &velocity))
-  {
+  if (!velocity || !pick_x || !pick_y || !pick_z || !place_x || !place_y || !place_z) {
     return;
   }
+  appendActionLog(QString("[Pick Place Vision] velocity_scale=%1").arg(*velocity, 0, 'f', 3));
 
   bool ok = true;
   const auto place_q = orientationFromYawField(root_, "visionPlacePoseYaw", log, &ok);
@@ -929,7 +957,7 @@ void TaskActionController::sendPickPlaceVision(bool execute)
   goal.pose_pick = makePose(*pick_x, *pick_y, *pick_z, defaultQuaternion());
   goal.pose_place = makePose(*place_x, *place_y, *place_z, place_q);
   goal.gripper = kDefaultPickGripperMm / 1000.0;
-  goal.velocity_scale = velocity;
+  goal.velocity_scale = *velocity;
   goal.execute = execute;
   sendGoal<PickPlace>(
     node_, "/pickplace", execute ? "Pick Place Vision Start" : "Pick Place Vision Plan", goal, log);
@@ -976,7 +1004,7 @@ void TaskActionController::sendDrlPickPlace(bool execute)
 void TaskActionController::sendMovePoseRl(bool execute)
 {
   const LogFn log = [this](const QString & msg) {appendActionLog(msg);};
-  double velocity = kDefaultVelocityScale;
+  double velocity = DEFAULT_GUI_VELOCITY_SCALE;
   const auto x = readMmAsMeter(lineEdit(root_, "rlPosePositionX"), kDefaultMoveXMm, "[MovePoseRL] X");
   const auto y = readMmAsMeter(lineEdit(root_, "rlPosePositionY"), kDefaultMoveYMm, "[MovePoseRL] Y");
   const auto z = readMmAsMeter(lineEdit(root_, "rlPosePositionZ"), kDefaultMoveZMm, "[MovePoseRL] Z");
@@ -985,6 +1013,7 @@ void TaskActionController::sendMovePoseRl(bool execute)
   {
     return;
   }
+  appendActionLog(QString("[MovePoseRL] velocity_scale=%1").arg(velocity, 0, 'f', 3));
 
   bool ok = true;
   const auto orientation = orientationFromRpyFields(
@@ -1105,20 +1134,22 @@ void TaskActionController::sendMovePoseRl(bool execute)
 void TaskActionController::sendCheckerBoard(bool execute)
 {
   const LogFn log = [this](const QString & msg) {appendActionLog(msg);};
-  double velocity = kDefaultVelocityScale;
+  const auto velocity = readVelocityScale(
+    lineEdit(root_, "txtCheckBoardVelocity"),
+    DEFAULT_GUI_VELOCITY_SCALE,
+    "[Check Board] velocity_scale");
   const auto step = readMmAsMeter(
     lineEdit(root_, "txtCheckBoardStep"),
     kDefaultCheckerStepMm,
     "[Check Board] step");
-  if (!step ||
-    !readVelocity(root_, "", velocity, "CheckerBoard velocity_scale", log, &velocity))
-  {
+  if (!velocity || !step) {
     return;
   }
+  appendActionLog(QString("[Check Board] velocity_scale=%1").arg(*velocity, 0, 'f', 3));
 
   CheckerBoard::Goal goal;
   goal.step = *step;
-  goal.velocity_scale = velocity;
+  goal.velocity_scale = *velocity;
   goal.execute = execute;
   sendGoal<CheckerBoard>(
     node_, "/move_checker_board", execute ? "Check Board Start" : "Check Board Plan", goal, log);
@@ -1127,7 +1158,10 @@ void TaskActionController::sendCheckerBoard(bool execute)
 void TaskActionController::sendRepeatabilityTest(bool execute)
 {
   const LogFn log = [this](const QString & msg) {appendActionLog(msg);};
-  double velocity = kDefaultRepeatVelocityScale;
+  const auto velocity = readVelocityScale(
+    lineEdit(root_, "txtRepeatabilityVelocity"),
+    DEFAULT_GUI_VELOCITY_SCALE,
+    "[Repeatability] velocity_scale");
   int repeat_count = 3;
 
   const auto retract_x = readMmAsMeter(lineEdit(root_, "repeatRetractX"), kDefaultRepeatRetractXMm, "[Repeatability] retract X");
@@ -1137,13 +1171,13 @@ void TaskActionController::sendRepeatabilityTest(bool execute)
   const auto disturb1_y = readMmAsMeter(lineEdit(root_, "repeatDisturb1Y"), kDefaultRepeatDisturb1YMm, "[Repeatability] disturb1 Y");
   const auto disturb1_z = readMmAsMeter(lineEdit(root_, "repeatDisturb1Z"), kDefaultRepeatDisturb1ZMm, "[Repeatability] disturb1 Z");
   const auto offset = readMmAsMeter(lineEdit(root_, "txtMeasOffset"), kDefaultRepeatMeasOffsetMm, "[Repeatability] meas_offset");
-  if (!retract_x || !retract_y || !retract_z || !disturb1_x || !disturb1_y || !disturb1_z ||
+  if (!velocity || !retract_x || !retract_y || !retract_z || !disturb1_x || !disturb1_y || !disturb1_z ||
     !offset ||
-    !readPositiveInt(root_, "txtRepeatCount", repeat_count, "repeat_count", log, &repeat_count) ||
-    !readVelocity(root_, "", velocity, "Repeatability velocity_scale", log, &velocity))
+    !readPositiveInt(root_, "txtRepeatCount", repeat_count, "repeat_count", log, &repeat_count))
   {
     return;
   }
+  appendActionLog(QString("[Repeatability] velocity_scale=%1").arg(*velocity, 0, 'f', 3));
   if (*offset == 0.0) {
     appendActionLog("[Input Error] [Repeatability] meas_offset must be non-zero mm");
     return;
@@ -1166,7 +1200,7 @@ void TaskActionController::sendRepeatabilityTest(bool execute)
   goal.axis = axis;
   goal.meas_offset = *offset;
   goal.repeat_count = repeat_count;
-  goal.velocity_scale = velocity;
+  goal.velocity_scale = *velocity;
   goal.execute = execute;
   sendGoal<RepeatabilityTest>(
     node_, "/repeatability_test",

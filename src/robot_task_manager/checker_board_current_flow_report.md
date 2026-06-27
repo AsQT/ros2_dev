@@ -244,7 +244,7 @@ goal mac dinh:
 
 ```text
 step = 0.40
-velocity_scale = 0.2
+velocity_scale = 0.1
 execute = parameter execute
 ```
 

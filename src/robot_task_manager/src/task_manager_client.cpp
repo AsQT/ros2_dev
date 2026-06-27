@@ -145,7 +145,7 @@ private:
     goal.target_pose.orientation.y = 1.0;
     goal.target_pose.orientation.z = 0.0;
     goal.target_pose.orientation.w = 0.0;
-    goal.velocity_scale = 0.2;
+    goal.velocity_scale = 0.1;
     goal.execute = get_parameter("execute").as_bool();
 
     rclcpp_action::Client<MoveToPose>::SendGoalOptions options;
@@ -191,7 +191,7 @@ private:
     goal.target_pose.orientation.y = 1.0;
     goal.target_pose.orientation.z = 0.0;
     goal.target_pose.orientation.w = 0.0;
-    goal.velocity_scale = 0.2;
+    goal.velocity_scale = 0.1;
     goal.execute = get_parameter("execute").as_bool();
 
     rclcpp_action::Client<MoveToPoseCartesian>::SendGoalOptions options;
@@ -238,7 +238,7 @@ private:
     goal.target_pose.orientation.y = 0.0;
     goal.target_pose.orientation.z = 0.0;
     goal.target_pose.orientation.w = 1.0;
-    goal.velocity_scale = 0.2;
+    goal.velocity_scale = 0.1;
     goal.execute = get_parameter("execute").as_bool();
 
     rclcpp_action::Client<MovePoseRl>::SendGoalOptions options;
@@ -291,7 +291,7 @@ private:
 
     CheckerBoard::Goal goal;
     goal.step = 0.40;
-    goal.velocity_scale = 0.2;
+    goal.velocity_scale = 0.1;
     goal.execute = get_parameter("execute").as_bool();
 
     rclcpp_action::Client<CheckerBoard>::SendGoalOptions options;
@@ -417,7 +417,7 @@ private:
     goal.gripper = 0.01;
 
     // Scale vận tốc
-    goal.velocity_scale = 0.2;
+    goal.velocity_scale = 0.1;
     goal.execute = get_parameter("execute").as_bool();
 
     rclcpp_action::Client<PickPlace>::SendGoalOptions options;

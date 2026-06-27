@@ -42,7 +42,7 @@ public:
     server_wait_timeout_s_ = declare_parameter<double>("server_wait_timeout_s", 5.0);
     action_result_timeout_s_ = declare_parameter<double>("action_result_timeout_s", 120.0);
     measurement_settle_time_s_ = declare_parameter<double>("measurement_settle_time_s", 2.0);
-    fast_velocity_scale_ = declare_parameter<double>("fast_velocity_scale", 0.7);
+    fast_velocity_scale_ = declare_parameter<double>("fast_velocity_scale", 0.1);
     axis_y_tool_yaw_offset_rad_ =
       declare_parameter<double>("axis_y_tool_yaw_offset_rad", kDefaultAxisYToolYawOffsetRad);
     if (!std::isfinite(fast_velocity_scale_) ||
@@ -51,9 +51,9 @@ public:
     {
       RCLCPP_WARN(
         get_logger(),
-        "Invalid fast_velocity_scale=%.3f, clamping to 0.7 ",
+        "Invalid fast_velocity_scale=%.3f, clamping to 0.1 ",
         fast_velocity_scale_);
-      fast_velocity_scale_ = 0.7;
+      fast_velocity_scale_ = 0.1;
     }
     if (!std::isfinite(axis_y_tool_yaw_offset_rad_)) {
       RCLCPP_WARN(
@@ -85,7 +85,7 @@ private:
   double server_wait_timeout_s_ = 5.0;
   double action_result_timeout_s_ = 120.0;
   double measurement_settle_time_s_ = 2.0;
-  double fast_velocity_scale_ = 0.7;
+  double fast_velocity_scale_ = 0.1;
   double axis_y_tool_yaw_offset_rad_ = kDefaultAxisYToolYawOffsetRad;
 
   rclcpp_action::Server<RepeatabilityTest>::SharedPtr action_server_;

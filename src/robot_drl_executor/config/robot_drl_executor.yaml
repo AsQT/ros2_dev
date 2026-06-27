@@ -1,0 +1,15 @@
+# Default parameters for robot_drl_executor.
+
+/**:
+  ros__parameters:
+    move_group_name: "arm"
+    base_frame: "base_link"
+    ee_link: "tcp_link"
+    planning_time: 2.0
+    num_planning_attempts: 5
+    max_velocity_scaling_factor: 0.1
+    max_acceleration_scaling_factor: 0.5
+    cartesian_pose_sequence_service_name: "/move_cartesian_pose_sequence"
+    cartesian_eef_step: 0.01
+    cartesian_jump_threshold: 0.0
+    cartesian_success_threshold: 0.95

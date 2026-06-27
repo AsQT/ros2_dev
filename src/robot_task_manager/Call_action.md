@@ -213,7 +213,7 @@ Default goal trong `task_manager_client`:
 |---|---|
 | `target_pose.position` | `{x: 0.40, y: 0.10, z: 0.35}` |
 | `target_pose.orientation` | `{x: 1.0, y: 1.0, z: 0.0, w: 0.0}` |
-| `velocity_scale` | `0.5` |
+| `velocity_scale` | `0.1` |
 | `execute` | `true` |
 
 ## `/move_to_pose_cartesian`
@@ -256,7 +256,7 @@ CLI:
 
 ```bash
 ros2 action send_goal /move_to_pose_cartesian robot_task_manager/action/MoveToPoseCartesian \
-  "{target_pose: {position: {x: 0.40, y: 0.10, z: 0.35}, orientation: {x: 1.0, y: 1.0, z: 0.0, w: 0.0}}, velocity_scale: 0.5, execute: true}" \
+  "{target_pose: {position: {x: 0.40, y: 0.10, z: 0.35}, orientation: {x: 1.0, y: 1.0, z: 0.0, w: 0.0}}, velocity_scale: 0.1, execute: true}" \
   --feedback
 ```
 
@@ -264,7 +264,7 @@ Plan only:
 
 ```bash
 ros2 action send_goal /move_to_pose_cartesian robot_task_manager/action/MoveToPoseCartesian \
-  "{target_pose: {position: {x: 0.40, y: 0.10, z: 0.35}, orientation: {x: 1.0, y: 1.0, z: 0.0, w: 0.0}}, velocity_scale: 0.5, execute: false}" \
+  "{target_pose: {position: {x: 0.40, y: 0.10, z: 0.35}, orientation: {x: 1.0, y: 1.0, z: 0.0, w: 0.0}}, velocity_scale: 0.1, execute: false}" \
   --feedback
 ```
 
@@ -280,7 +280,7 @@ Default goal trong `task_manager_client`:
 |---|---|
 | `target_pose.position` | `{x: 0.40, y: 0.10, z: 0.35}` |
 | `target_pose.orientation` | `{x: 1.0, y: 1.0, z: 0.0, w: 0.0}` |
-| `velocity_scale` | `0.5` |
+| `velocity_scale` | `0.1` |
 | `execute` | `true` |
 
 ## `/move_checker_board`
@@ -319,7 +319,8 @@ Rule:
 
 - `velocity_scale` phải nằm trong `(0, 1]`.
 - `step` phải finite và `> 0.0`.
-- Server gọi `executor_->checkerBoard(step, ..., velocity_scale, 0.3, 5.0, execute, measurement_settle_time_s, feedback_cb)`.
+- Server truyền `velocity_scale` từ goal vào `executor_->checkerBoard(...)`.
+- CheckerBoard vẫn dùng acceleration scale cố định `0.3` và planning timeout `5.0`.
 - Executor lấy TCP pose hiện tại làm tâm, sinh 9 target checkerboard 3x3 zig-zag.
 - Mỗi target chạy 2 Cartesian segment riêng:
   - đi tới `travel_pose` với `z = target.z + step / 2.0`.
@@ -333,14 +334,14 @@ CLI:
 
 ```bash
 ros2 action send_goal /move_checker_board robot_task_manager/action/CheckerBoard \
-  "{step: 0.10, velocity_scale: 0.2, execute: true}" --feedback
+  "{step: 0.10, velocity_scale: 0.1, execute: true}" --feedback
 ```
 
 Plan-only:
 
 ```bash
 ros2 action send_goal /move_checker_board robot_task_manager/action/CheckerBoard \
-  "{step: 0.10, velocity_scale: 0.2, execute: false}" --feedback
+  "{step: 0.10, velocity_scale: 0.1, execute: false}" --feedback
 ```
 
 `task_manager_client` có nhánh `task_name:=checker_board` và connect tới `/move_checker_board`.
@@ -350,7 +351,7 @@ Default goal trong `task_manager_client`:
 | Field | Default |
 |---|---|
 | `step` | `0.40` |
-| `velocity_scale` | `0.2` |
+| `velocity_scale` | `0.1` |
 | `execute` | `true` |
 
 ## `/move_gripper`
@@ -382,7 +383,7 @@ Server parameters:
 |---|---|
 | `planning_group` | `gripper` |
 | `base_frame` | `link_6` |
-| `velocity_scale` | `0.5` |
+| `velocity_scale` | `0.1` |
 | `acceleration_scale` | `0.5` |
 | `gripper_max_open` | `0.05` |
 | `gripper_min_open` | `0.0` |
@@ -469,7 +470,7 @@ CLI:
 
 ```bash
 ros2 action send_goal /pickplace robot_task_manager/action/PickPlace \
-  "{pose_pick: {position: {x: 0.40, y: 0.10, z: 0.25}, orientation: {x: 1.0, y: 1.0, z: 0.0, w: 0.0}}, pose_place: {position: {x: 0.30, y: 0.00, z: 0.25}, orientation: {x: 1.0, y: 1.0, z: 0.0, w: 0.0}}, gripper: 0.01, velocity_scale: 0.5, execute: true}" \
+  "{pose_pick: {position: {x: 0.40, y: 0.10, z: 0.25}, orientation: {x: 1.0, y: 1.0, z: 0.0, w: 0.0}}, pose_place: {position: {x: 0.30, y: 0.00, z: 0.25}, orientation: {x: 1.0, y: 1.0, z: 0.0, w: 0.0}}, gripper: 0.01, velocity_scale: 0.1, execute: true}" \
   --feedback
 ```
 
@@ -477,7 +478,7 @@ Plan only:
 
 ```bash
 ros2 action send_goal /pickplace robot_task_manager/action/PickPlace \
-  "{pose_pick: {position: {x: 0.40, y: 0.10, z: 0.25}, orientation: {x: 1.0, y: 1.0, z: 0.0, w: 0.0}}, pose_place: {position: {x: 0.30, y: 0.00, z: 0.25}, orientation: {x: 1.0, y: 1.0, z: 0.0, w: 0.0}}, gripper: 0.01, velocity_scale: 0.5, execute: false}" \
+  "{pose_pick: {position: {x: 0.40, y: 0.10, z: 0.25}, orientation: {x: 1.0, y: 1.0, z: 0.0, w: 0.0}}, pose_place: {position: {x: 0.30, y: 0.00, z: 0.25}, orientation: {x: 1.0, y: 1.0, z: 0.0, w: 0.0}}, gripper: 0.01, velocity_scale: 0.1, execute: false}" \
   --feedback
 ```
 
@@ -496,7 +497,7 @@ Default goal trong `task_manager_client`:
 | `pose_place.position` | `{x: 0.30, y: 0.00, z: 0.25}` |
 | `pose_place.orientation` | `{x: 1.0, y: 1.0, z: 0.0, w: 0.0}` |
 | `gripper` | `0.01` |
-| `velocity_scale` | `0.5` |
+| `velocity_scale` | `0.1` |
 | `execute` | `true` |
 
 ## `/drl_pickplace`
@@ -541,7 +542,7 @@ Server parameters:
 | `gripper_open_width_m` | `0.05` |
 | `gripper_default_close_width_m` | `0.028` |
 | `pick_approach_height_m` | `0.05` |
-| `cartesian_velocity_scale` | `0.3` |
+| `cartesian_velocity_scale` | `0.1` |
 | `tf_timeout_sec` | `2.0` |
 | `planner_node_name` | `/drl_unified_planner_node` |
 
@@ -643,7 +644,7 @@ Default parameter của `drl_pick_place_random_test_client.py`:
 | `action_server_timeout_sec` | `30.0` |
 | `wait_for_joint_states` | `false` |
 | `joint_states_timeout_sec` | `30.0` |
-| `start_velocity_scale` | `0.35` |
+| `start_velocity_scale` | `0.1` |
 | `execute` | `true` |
 | `obstacle_id` | `drl_pick_place_random_obstacle` |
 | `obstacle_size_min` | `[0.018, 0.018, 0.018]` |
@@ -711,7 +712,7 @@ Server parameters:
 | `server_wait_timeout_s` | `5.0` |
 | `action_result_timeout_s` | `120.0` |
 | `measurement_settle_time_s` | `2.0` |
-| `fast_velocity_scale` | `0.7` |
+| `fast_velocity_scale` | `0.1` |
 | `axis_y_tool_yaw_offset_rad` | `1.5707963267948966` |
 
 Rule:
@@ -721,7 +722,7 @@ Rule:
 - `meas_offset` phải finite và khác `0.0`.
 - `velocity_scale` phải finite và nằm trong `(0, 1]`.
 - `execute` quyết định chạy thật hay chỉ planning/dry-run.
-- `velocity_scale` chỉ dùng cho đoạn đo chậm từ `working_retract_pose` tới `meas_pose`; các đoạn còn lại dùng parameter server `fast_velocity_scale` default `0.7`.
+- `velocity_scale` chỉ dùng cho đoạn đo chậm từ `working_retract_pose` tới `meas_pose`; các đoạn còn lại dùng parameter server `fast_velocity_scale` default `0.1`.
 - Các pose phải finite và quaternion norm lớn hơn `1e-12`.
 - Server phụ thuộc `/move_to_pose`, `/move_to_pose_cartesian`.
 - Với `axis=1` (`AXIS_Y`), server xoay orientation của cả `working_retract_pose`, `meas_pose` và `working_disturb_pose_1` thêm `axis_y_tool_yaw_offset_rad` quanh trục Z của tool, để các đoạn Cartesian giữ cùng orientation.
@@ -746,7 +747,7 @@ CLI:
 
 ```bash
 ros2 action send_goal /repeatability_test robot_task_manager/action/RepeatabilityTest \
-  "{retract_pose: {header: {frame_id: 'world'}, pose: {position: {x: 0.40, y: 0.00, z: 0.18}, orientation: {x: 0.7071068, y: 0.7071068, z: 0.0, w: 0.0}}}, disturb_pose_1: {header: {frame_id: 'world'}, pose: {position: {x: 0.35, y: -0.08, z: 0.18}, orientation: {x: 0.7071068, y: 0.7071068, z: 0.0, w: 0.0}}}, axis: 2, meas_offset: -0.02, repeat_count: 3, velocity_scale: 0.15, execute: true}" \
+  "{retract_pose: {header: {frame_id: 'world'}, pose: {position: {x: 0.40, y: 0.00, z: 0.18}, orientation: {x: 0.7071068, y: 0.7071068, z: 0.0, w: 0.0}}}, disturb_pose_1: {header: {frame_id: 'world'}, pose: {position: {x: 0.35, y: -0.08, z: 0.18}, orientation: {x: 0.7071068, y: 0.7071068, z: 0.0, w: 0.0}}}, axis: 2, meas_offset: -0.02, repeat_count: 3, velocity_scale: 0.1, execute: true}" \
   --feedback
 ```
 
@@ -754,7 +755,7 @@ Plan only:
 
 ```bash
 ros2 action send_goal /repeatability_test robot_task_manager/action/RepeatabilityTest \
-  "{retract_pose: {header: {frame_id: 'world'}, pose: {position: {x: 0.40, y: 0.00, z: 0.18}, orientation: {x: 0.7071068, y: 0.7071068, z: 0.0, w: 0.0}}}, disturb_pose_1: {header: {frame_id: 'world'}, pose: {position: {x: 0.35, y: -0.08, z: 0.18}, orientation: {x: 0.7071068, y: 0.7071068, z: 0.0, w: 0.0}}}, axis: 2, meas_offset: -0.02, repeat_count: 1, velocity_scale: 0.15, execute: false}" \
+  "{retract_pose: {header: {frame_id: 'world'}, pose: {position: {x: 0.40, y: 0.00, z: 0.18}, orientation: {x: 0.7071068, y: 0.7071068, z: 0.0, w: 0.0}}}, disturb_pose_1: {header: {frame_id: 'world'}, pose: {position: {x: 0.35, y: -0.08, z: 0.18}, orientation: {x: 0.7071068, y: 0.7071068, z: 0.0, w: 0.0}}}, axis: 2, meas_offset: -0.02, repeat_count: 1, velocity_scale: 0.1, execute: false}" \
   --feedback
 ```
 
@@ -762,21 +763,21 @@ Client launch:
 
 ```bash
 ros2 launch robot_task_manager repeatability_test_client.launch.py \
-  axis:=0 repeat_count:=3 meas_offset:=0.02 velocity_scale:=0.25 execute:=true frame_id:=world
+  axis:=0 repeat_count:=3 meas_offset:=0.02 velocity_scale:=0.1 execute:=true frame_id:=world
 ```
 
 Z-axis chạy thật:
 
 ```bash
 ros2 launch robot_task_manager repeatability_test_client.launch.py \
-  axis:=2 repeat_count:=3 meas_offset:=-0.02 velocity_scale:=0.15 execute:=true frame_id:=world
+  axis:=2 repeat_count:=3 meas_offset:=-0.02 velocity_scale:=0.1 execute:=true frame_id:=world
 ```
 
 Z-axis plan only:
 
 ```bash
 ros2 launch robot_task_manager repeatability_test_client.launch.py \
-  axis:=2 repeat_count:=3 meas_offset:=-0.02 velocity_scale:=0.15 execute:=false frame_id:=world
+  axis:=2 repeat_count:=3 meas_offset:=-0.02 velocity_scale:=0.1 execute:=false frame_id:=world
 ```
 
 Default parameter của `repeatability_test_client.py` và launch:
@@ -787,7 +788,7 @@ Default parameter của `repeatability_test_client.py` và launch:
 | `axis` | `0` |
 | `repeat_count` | `3` |
 | `meas_offset` | `0.02` |
-| `velocity_scale` | `0.25` |
+| `velocity_scale` | `0.1` |
 | `execute` | `true` |
 | `frame_id` | `world` |
 | `goal_timeout_sec` | `600.0` |
@@ -875,7 +876,7 @@ Plan only:
 
 ```bash
 ros2 action send_goal /move_pose_rl robot_task_manager/action/MovePoseRl \
-  "{target_pose: {position: {x: 0.40, y: 0.10, z: 0.35}, orientation: {x: 0.0, y: 0.0, z: 0.0, w: 1.0}}, velocity_scale: 0.5, execute: false}" \
+  "{target_pose: {position: {x: 0.40, y: 0.10, z: 0.35}, orientation: {x: 0.0, y: 0.0, z: 0.0, w: 1.0}}, velocity_scale: 0.1, execute: false}" \
   --feedback
 ```
 
@@ -883,7 +884,7 @@ Execute:
 
 ```bash
 ros2 action send_goal /move_pose_rl robot_task_manager/action/MovePoseRl \
-  "{target_pose: {position: {x: 0.40, y: 0.10, z: 0.35}, orientation: {x: 0.0, y: 0.0, z: 0.0, w: 1.0}}, velocity_scale: 0.5, execute: true}" \
+  "{target_pose: {position: {x: 0.40, y: 0.10, z: 0.35}, orientation: {x: 0.0, y: 0.0, z: 0.0, w: 1.0}}, velocity_scale: 0.1, execute: true}" \
   --feedback
 ```
 
@@ -908,7 +909,7 @@ Default goal trong `task_manager_client`:
 |---|---|
 | `target_pose.position` | `{x: 0.40, y: 0.10, z: 0.35}` |
 | `target_pose.orientation` | `{x: 0.0, y: 0.0, z: 0.0, w: 1.0}` |
-| `velocity_scale` | `0.5` |
+| `velocity_scale` | `0.1` |
 | `execute` | `true` |
 
 Có thể override position trong client bằng `target_x`, `target_y`, `target_z`.

@@ -1,69 +1,51 @@
-# robot_control
+    # robot_control
 
-ROS 2 `ament_cmake` package providing ros2_control configuration and launch files for the robot. Defines joint controllers, controller manager setup, and URDF xacro snippets for ros2_control hardware plugin selection.
+    ## 1. Vai trò package
+    Package cấu hình ros2_control và launch controller cho robot; không có node ứng dụng riêng.
 
-## Package Structure
+    ## 2. Vị trí trong hệ thống
+    Nằm giữa mô tả robot/hardware và MoveIt/task execution. `robot_moveit` và `robot_bringup` include launch controller từ package này.
 
-```
-robot_control/
-├── launch/
-│   ├── controllers.launch.py    # Main controller manager + spawners
-│   └── slider_controller.launch.py  # Joint slider GUI for testing
-├── config/
-│   └── robot_controllers.yaml   # Controller definitions (arm + gripper)
-└── package.xml
-```
+    ## 3. Thành phần chính
+    - `config/robot_controllers.yaml`: controller manager, joint state broadcaster, arm/gripper controller.
+- `config/arm_controller.yaml`, `gripper_controller.yaml`: cấu hình controller riêng.
+- `config/initial_positions.yaml`: giá trị khởi tạo joint.
+- `launch/controllers.launch.py`: chạy `robot_state_publisher`, `ros2_control_node`, controller spawner.
+- `launch/slider_controller.launch.py`: test slider GUI/launch phụ thuộc `panda_controller`.
 
-## Launch Files
+    ## 4. Node / executable
+    | Node / executable | Nguồn | Vai trò |
+    |---|---|---|
+    | Không build executable riêng. Launch chạy node từ `robot_state_publisher`, `controller_manager`, `joint_state_publisher_gui` và package ngoài. | package source/launch | Runtime của package hoặc node được launch |
 
-### `controllers.launch.py`
+    ## 5. Topic / Service / Action
+    | Interface | Type | Vai trò |
+    |---|---|---|
+    | Xem mô tả bên dưới | runtime interface | package dependent |
 
-Spawns the ros2_control node and starts all controllers.
+    Ghi chú interface: Topic/controller interface do ros2_control tạo, tiêu biểu `/joint_states`, `arm_controller/joint_trajectory`, `gripper_controller/joint_trajectory`.
 
-```bash
-ros2 launch robot_control controllers.launch.py
-```
+    ## 6. File launch liên quan
+    controllers.launch.py, slider_controller.launch.py
 
-| Argument | Default | Description |
-|----------|---------|-------------|
-| `use_sim_time` | `false` | Use simulation time |
-| `use_mock` | `true` | Use mock hardware instead of real RS485 |
-| `start_controller_manager` | `true` | Start local ros2_control node |
+    ## 7. File cấu hình liên quan
+    config/robot_controllers.yaml, config/arm_controller.yaml, config/gripper_controller.yaml, config/initial_positions.yaml
 
-Spawns in order:
-1. `joint_state_broadcaster`
-2. `arm_controller` (after broadcaster is ready)
-3. `gripper_controller` (after arm is ready)
+    ## 8. Cách build riêng package
+    ```bash
+    cd ~/ros2_dev
+    colcon build --packages-select robot_control
+    source install/setup.bash
+    ```
 
-### `slider_controller.launch.py`
+    ## 9. Cách chạy nhanh
+    ```bash
+    source ~/ros2_dev/install/setup.bash
+    ros2 launch robot_control controllers.launch.py
+    ```
+    Nếu package không có launch/runtime node, dùng nó bằng cách phụ thuộc interface hoặc include file từ package khác.
 
-Joint slider GUI for manual joint control. Forwards `/joint_states` as `/joint_commands`.
-
-```bash
-ros2 launch robot_control slider_controller.launch.py is_sim:=false is_ignition:=false use_mock_hardware:=true
-```
-
-## ros2_control Hardware Selection (URDF)
-
-The xacro macro `robot_ros2_control` in `robot_description` selects hardware based on flags:
-
-| Mode | Plugin |
-|------|--------|
-| Simulation (Gazebo) | `gz_ros2_control/GazeboSimSystem` |
-| Real + mock | `mock_components/GenericSystem` |
-| Real hardware | `robot_hardware_interface/RobotSystemHardware` |
-
-## Joint Interfaces
-
-All joints expose both **position** and **velocity** command/state interfaces:
-
-- `joint_1` through `joint_6` — 6-DOF arm
-- `joint_gl`, `joint_gr` — gripper left/right
-
-## Build
-
-```bash
-cd ~/ros2
-colcon build --packages-select robot_control
-source install/setup.bash
-```
+    ## 10. Ghi chú kỹ thuật / giới hạn hiện tại
+    - Source of truth là source code hiện tại trong `robot_control`.
+    - Tài liệu này không thay thế kiểm tra runtime bằng `ros2 node list`, `ros2 topic list`, `ros2 service list`, `ros2 action list` sau khi launch.
+    - Không có phụ thuộc MoveIt/action đặc biệt được xác định từ source.

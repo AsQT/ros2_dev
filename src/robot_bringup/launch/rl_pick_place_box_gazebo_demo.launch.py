@@ -1,4 +1,4 @@
-"""Gazebo demo: 3 cm box + sim ground-truth perception + RL pick-place."""
+"""Gazebo demo: pick_wood object + obstacle_box ground truth + RL pick-place."""
 
 import os
 
@@ -11,16 +11,24 @@ from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
 from launch_ros.parameter_descriptions import ParameterValue
 
+RL_PYTHON = "/home/minhquang/venvs/ros_rl/bin/python3"
+
 
 def generate_launch_description() -> LaunchDescription:
     bringup_share = get_package_share_directory("robot_bringup")
-    task_executor_share = get_package_share_directory("robot_task_executor")
+    drl_executor_share = get_package_share_directory("robot_drl_executor")
 
     args = [
-        DeclareLaunchArgument("randomize_box", default_value="false"),
-        DeclareLaunchArgument("box_x", default_value="0.42"),
-        DeclareLaunchArgument("box_y", default_value="0.00"),
-        DeclareLaunchArgument("box_size", default_value="0.03"),
+        DeclareLaunchArgument("randomize_objects", default_value="false"),
+        DeclareLaunchArgument("wood_x", default_value="0.44"),
+        DeclareLaunchArgument("wood_y", default_value="0.06"),
+        DeclareLaunchArgument("wood_size", default_value="[0.03, 0.03, 0.03]"),
+        DeclareLaunchArgument("box_x", default_value="0.34"),
+        DeclareLaunchArgument("box_y", default_value="-0.09"),
+        DeclareLaunchArgument("box_size", default_value="[0.10, 0.10, 0.10]"),
+        DeclareLaunchArgument("randomize_box_size", default_value="true"),
+        DeclareLaunchArgument("box_size_min", default_value="[0.05, 0.05, 0.05]"),
+        DeclareLaunchArgument("box_size_max", default_value="[0.15, 0.15, 0.15]"),
         DeclareLaunchArgument(
             "table_height",
             default_value="-1.0",
@@ -28,12 +36,13 @@ def generate_launch_description() -> LaunchDescription:
         ),
         DeclareLaunchArgument("robot_base_world_z", default_value="1.02"),
         DeclareLaunchArgument("gripper_close_width", default_value="0.025"),
+        DeclareLaunchArgument("execute", default_value="true"),
         DeclareLaunchArgument(
             "pick_z_offset",
             default_value="0.06",
-            description="Added to the perceived box center Z before sending target_pick",
+            description="Added to the pick_wood center Z before sending target_pick",
         ),
-        DeclareLaunchArgument("place_xyz", default_value="[0.34, -0.10, 0.12]"),
+        DeclareLaunchArgument("place_xyz", default_value="[0.46, 0.12, 0.12]"),
         DeclareLaunchArgument("run_demo_client", default_value="true"),
         DeclareLaunchArgument("spawn_startup_delay", default_value="3.0"),
         DeclareLaunchArgument("demo_client_delay", default_value="50.0"),
@@ -45,12 +54,13 @@ def generate_launch_description() -> LaunchDescription:
         ),
         launch_arguments={
             "spawn_demo_woods": "false",
+            "enable_drl_backend": "false",
         }.items(),
     )
 
-    task_executor = IncludeLaunchDescription(
+    drl_executor = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
-            os.path.join(task_executor_share, "launch", "task_executor.launch.py")
+            os.path.join(drl_executor_share, "launch", "robot_drl_executor.launch.py")
         ),
         launch_arguments={
             "use_sim_time": "true",
@@ -64,26 +74,41 @@ def generate_launch_description() -> LaunchDescription:
         }.items(),
     )
 
-    pick_box = Node(
-        package="robot_description",
-        executable="spawn_pick_box.py",
-        name="pick_box_spawner",
+    sim_objects = Node(
+        package="robot_gazebo",
+        executable="spawn_pick_wood_obstacle_box.py",
+        name="pick_wood_obstacle_box_spawner",
         output="screen",
         parameters=[{
             "use_sim_time": True,
-            "object_name": "pick_box",
             "frame_id": "base_link",
-            "info_topic": "/sim/pick_box_info",
-            "box_size": ParameterValue(LaunchConfiguration("box_size"), value_type=float),
+            "wood_name": "pick_wood",
+            "wood_info_topic": "/sim/pick_wood_info",
+            "wood_size": ParameterValue(LaunchConfiguration("wood_size"), value_type=list[float]),
+            "wood_x": ParameterValue(LaunchConfiguration("wood_x"), value_type=float),
+            "wood_y": ParameterValue(LaunchConfiguration("wood_y"), value_type=float),
+            "box_name": "obstacle_box",
+            "box_info_topic": "/sim/obstacle_box_info",
+            "box_size": ParameterValue(LaunchConfiguration("box_size"), value_type=list[float]),
+            "randomize_box_size": ParameterValue(LaunchConfiguration("randomize_box_size"), value_type=bool),
+            "box_size_min": ParameterValue(LaunchConfiguration("box_size_min"), value_type=list[float]),
+            "box_size_max": ParameterValue(LaunchConfiguration("box_size_max"), value_type=list[float]),
+            "box_x": ParameterValue(LaunchConfiguration("box_x"), value_type=float),
+            "box_y": ParameterValue(LaunchConfiguration("box_y"), value_type=float),
+            "place_xyz": ParameterValue(LaunchConfiguration("place_xyz"), value_type=list[float]),
             "table_height": ParameterValue(LaunchConfiguration("table_height"), value_type=float),
             "robot_base_world_z": ParameterValue(LaunchConfiguration("robot_base_world_z"), value_type=float),
-            "x": ParameterValue(LaunchConfiguration("box_x"), value_type=float),
-            "y": ParameterValue(LaunchConfiguration("box_y"), value_type=float),
-            "randomize": ParameterValue(LaunchConfiguration("randomize_box"), value_type=bool),
-            "x_min": 0.35,
-            "x_max": 0.50,
-            "y_min": -0.12,
-            "y_max": 0.12,
+            "randomize": ParameterValue(LaunchConfiguration("randomize_objects"), value_type=bool),
+            "wood_x_min": 0.38,
+            "wood_x_max": 0.48,
+            "wood_y_min": 0.02,
+            "wood_y_max": 0.12,
+            "box_x_min": 0.34,
+            "box_x_max": 0.43,
+            "box_y_min": -0.12,
+            "box_y_max": -0.05,
+            "min_xy_separation": 0.09,
+            "avoidance_margin_m": 0.02,
             "startup_delay": LaunchConfiguration("spawn_startup_delay"),
             "publish_rate_hz": 2.0,
         }],
@@ -94,6 +119,7 @@ def generate_launch_description() -> LaunchDescription:
         executable="drl_unified_planner_node",
         name="drl_unified_planner_node",
         output="screen",
+        prefix=RL_PYTHON,
         parameters=[{
             "use_sim_time": True,
             "input_mode": "manual",
@@ -128,20 +154,24 @@ def generate_launch_description() -> LaunchDescription:
 
     demo_client = Node(
         package="robot_task_manager",
-        executable="drl_pick_place_box_demo_client.py",
-        name="drl_pick_place_box_demo_client",
+        executable="drl_pick_place_wood_box_demo_client.py",
+        name="drl_pick_place_wood_box_demo_client",
         output="screen",
         parameters=[{
             "use_sim_time": True,
-            "object_info_topic": "/sim/pick_box_info",
+            "wood_info_topic": "/sim/pick_wood_info",
+            "box_info_topic": "/sim/obstacle_box_info",
             "action_name": "drl_pickplace",
             "frame_id": "base_link",
             "place_xyz": ParameterValue(LaunchConfiguration("place_xyz"), value_type=list[float]),
             "pick_z_offset_m": ParameterValue(LaunchConfiguration("pick_z_offset"), value_type=float),
             "gripper_close_width_m": ParameterValue(LaunchConfiguration("gripper_close_width"), value_type=float),
+            "execute": ParameterValue(LaunchConfiguration("execute"), value_type=bool),
+            "obstacle_id": "obstacle_box",
             "min_pick_z_m": 0.025,
             "object_timeout_sec": 60.0,
             "action_server_timeout_sec": 120.0,
+            "planning_scene_timeout_sec": 20.0,
             "goal_timeout_sec": 420.0,
         }],
         condition=IfCondition(LaunchConfiguration("run_demo_client")),
@@ -152,19 +182,19 @@ def generate_launch_description() -> LaunchDescription:
         LogInfo(msg="[rl_pick_place_box_gazebo_demo] Starting Gazebo + MoveIt + task servers"),
         sim_stack,
         TimerAction(period=10.0, actions=[
-            LogInfo(msg="[rl_pick_place_box_gazebo_demo] Starting robot_task_executor"),
-            task_executor,
+            LogInfo(msg="[rl_pick_place_box_gazebo_demo] Starting robot_drl_executor"),
+            drl_executor,
         ]),
         TimerAction(period=14.0, actions=[
             LogInfo(msg="[rl_pick_place_box_gazebo_demo] Starting DRL planner"),
             drl_node,
         ]),
         TimerAction(period=16.0, actions=[
-            LogInfo(msg="[rl_pick_place_box_gazebo_demo] Spawning 3 cm box and publishing /sim/pick_box_info"),
-            pick_box,
+            LogInfo(msg="[rl_pick_place_box_gazebo_demo] Spawning pick_wood and obstacle_box from Gazebo ground truth"),
+            sim_objects,
         ]),
         TimerAction(period=LaunchConfiguration("demo_client_delay"), actions=[
-            LogInfo(msg="[rl_pick_place_box_gazebo_demo] Sending RL pick-place goal from sim perception"),
+            LogInfo(msg="[rl_pick_place_box_gazebo_demo] Sending RL pick-place goal from wood pose and box obstacle"),
             demo_client,
         ]),
     ])

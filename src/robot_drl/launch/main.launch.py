@@ -42,6 +42,8 @@ from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
 
+RL_PYTHON = "/home/minhquang/venvs/ros_rl/bin/python3"
+
 
 def generate_launch_description() -> LaunchDescription:
     pkg_bringup = "robot_bringup"
@@ -139,6 +141,7 @@ def generate_launch_description() -> LaunchDescription:
         executable="drl_unified_planner_node",
         name="drl_unified_planner_node",
         output="screen",
+        prefix=RL_PYTHON,
         parameters=[{
             "use_sim_time": use_sim_time,
             "calibrated_start_tcp_base": LaunchConfiguration("calibrated_start_tcp_base"),

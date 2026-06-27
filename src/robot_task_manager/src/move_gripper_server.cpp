@@ -24,7 +24,7 @@ public:
 
     // Theo MoveGripper.action: goal chỉ có position.
     // Velocity/acceleration scale lấy bằng parameter nội bộ của server.
-    default_velocity_scale_ = declare_parameter<double>("velocity_scale", 0.5);
+    default_velocity_scale_ = declare_parameter<double>("velocity_scale", 0.1);
     default_acceleration_scale_ = declare_parameter<double>("acceleration_scale", 0.5);
 
     action_server_ = rclcpp_action::create_server<MoveGripper>(
@@ -46,7 +46,7 @@ public:
 private:
   std::string planning_group_;
   std::string base_frame_;
-  double default_velocity_scale_ = 0.5;
+  double default_velocity_scale_ = 0.1;
   double default_acceleration_scale_ = 0.5;
 
   std::shared_ptr<robot_task_manager::GripperExecutor> gripper_executor_;

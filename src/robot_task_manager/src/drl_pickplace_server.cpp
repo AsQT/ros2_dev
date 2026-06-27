@@ -96,7 +96,7 @@ public:
     gripper_open_width_m_ = declare_parameter<double>("gripper_open_width_m", 0.05);
     gripper_default_close_width_m_ = declare_parameter<double>("gripper_default_close_width_m", 0.028);
     pick_approach_height_m_ = declare_parameter<double>("pick_approach_height_m", 0.05);
-    cartesian_velocity_scale_ = declare_parameter<double>("cartesian_velocity_scale", 0.3);
+    cartesian_velocity_scale_ = declare_parameter<double>("cartesian_velocity_scale", 0.1);
     tf_timeout_sec_ = declare_parameter<double>("tf_timeout_sec", 2.0);
     planner_node_name_ = declare_parameter<std::string>(
       "planner_node_name", "/drl_unified_planner_node");
@@ -146,7 +146,7 @@ private:
   double gripper_open_width_m_{0.05};
   double gripper_default_close_width_m_{0.028};
   double pick_approach_height_m_{0.05};
-  double cartesian_velocity_scale_{0.3};
+  double cartesian_velocity_scale_{0.1};
   double tf_timeout_sec_{2.0};
 
   tf2_ros::Buffer tf_buffer_;

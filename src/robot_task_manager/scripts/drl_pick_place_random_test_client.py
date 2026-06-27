@@ -52,7 +52,7 @@ class DrlPickPlaceRandomTestClient(Node):
         self.declare_parameter("action_server_timeout_sec", 30.0)
         self.declare_parameter("wait_for_joint_states", False)
         self.declare_parameter("joint_states_timeout_sec", 30.0)
-        self.declare_parameter("start_velocity_scale", 0.35)
+        self.declare_parameter("start_velocity_scale", 0.1)
         self.declare_parameter("execute", True)
         self.declare_parameter("obstacle_id", "drl_pick_place_random_obstacle")
         self.declare_parameter("obstacle_size_min", [0.018, 0.018, 0.018])

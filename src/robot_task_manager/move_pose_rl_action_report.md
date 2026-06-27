@@ -122,7 +122,7 @@ Fail-safe khi chua co `/joint_states`:
 
 ```bash
 ros2 action send_goal /move_pose_rl robot_task_manager/action/MovePoseRl \
-  "{target_pose: {position: {x: 0.40, y: 0.10, z: 0.35}, orientation: {x: 0.0, y: 0.0, z: 0.0, w: 1.0}}, velocity_scale: 0.5, execute: false}" \
+  "{target_pose: {position: {x: 0.40, y: 0.10, z: 0.35}, orientation: {x: 0.0, y: 0.0, z: 0.0, w: 1.0}}, velocity_scale: 0.1, execute: false}" \
   --feedback
 ```
 
@@ -145,7 +145,7 @@ ros2 launch robot_drl drl_mock_hw.launch.py \
 ros2 launch robot_task_manager task_servers.launch.py
 
 ros2 action send_goal /move_pose_rl robot_task_manager/action/MovePoseRl \
-  "{target_pose: {position: {x: 0.375, y: 0.0, z: 0.25}, orientation: {x: 0.0, y: 0.0, z: 0.0, w: 1.0}}, velocity_scale: 0.5, execute: false}" \
+  "{target_pose: {position: {x: 0.375, y: 0.0, z: 0.25}, orientation: {x: 0.0, y: 0.0, z: 0.0, w: 1.0}}, velocity_scale: 0.1, execute: false}" \
   --feedback
 ```
 
@@ -160,7 +160,7 @@ Execute voi DRL mock hardware:
 
 ```bash
 ros2 action send_goal /move_pose_rl robot_task_manager/action/MovePoseRl \
-  "{target_pose: {position: {x: 0.375, y: 0.0, z: 0.25}, orientation: {x: 0.0, y: 0.0, z: 0.0, w: 1.0}}, velocity_scale: 0.5, execute: true}" \
+  "{target_pose: {position: {x: 0.375, y: 0.0, z: 0.25}, orientation: {x: 0.0, y: 0.0, z: 0.0, w: 1.0}}, velocity_scale: 0.1, execute: true}" \
   --feedback
 ```
 

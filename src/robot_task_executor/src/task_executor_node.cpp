@@ -124,7 +124,7 @@ private:
     declare_parameter<std::string>("pose_waypoints_config_path", "");
     declare_parameter<double>("planning_time", 2.0);
     declare_parameter<int>("num_planning_attempts", 5);
-    declare_parameter<double>("max_velocity_scaling_factor", 0.5);
+    declare_parameter<double>("max_velocity_scaling_factor", 0.1);
     declare_parameter<double>("max_acceleration_scaling_factor", 0.5);
 
     get_parameter("move_group_name", move_group_name_);

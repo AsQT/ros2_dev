@@ -1,128 +1,56 @@
-# `robot_drl`
+    # robot_drl
 
-Deep Reinforcement Learning inference package for autonomous robot pick-and-place. Runs pre-trained DDPG/SAC/TD3 policies to compute smooth robot trajectories from vision detections or manual input, then executes them via MoveIt.
+    ## 1. Vai trò package
+    Package Python DRL planner cho quỹ đạo tránh vật cản. Node chính `drl_unified_planner_node` publish trajectory PoseArray và cung cấp service điều khiển plan/execute/clear/status.
 
-**Preferred node:** `drl_unified_planner_node` — a single unified node that handles planning, execution, and visualization for both manual and vision modes.
+    ## 2. Vị trí trong hệ thống
+    Nằm giữa perception/mock target và executor MoveIt. Nhận target/box từ mock hoặc vision, gọi service planning scene/IK/Cartesian executor, và được `robot_task_manager` gọi qua `/drl/*`.
 
-DRL trajectory markers are styled for light RViz backgrounds: forward trajectories use dark blue, backward trajectories use dark purple, and endpoint markers use darker waypoint colors.
+    ## 3. Thành phần chính
+    - `robot_drl/drl_unified_planner_node.py`: planner DDPG/SAC/TD3 unified.
+- `robot_drl/drl_planner_node_base.py`: service `/drl/execute_forward`, `/drl/clear_trajectory`, marker/pose publisher.
+- `robot_drl/mock_environment_node.py`: publish target/box mock.
+- `mock_hw_obstacle_test.py`, `gazebo_obstacle_test.py`: test obstacle.
+- `models/run*/model/*.zip`: model DRL được cài vào share.
+- Launch mock/gazebo/main/rviz/test trong `launch/`.
 
-## Package Structure
+    ## 4. Node / executable
+    | Node / executable | Nguồn | Vai trò |
+    |---|---|---|
+    | Console scripts: `drl_unified_planner_node`, `mock_environment_node`, `mock_hw_obstacle_test`, `gazebo_obstacle_test`. | package source/launch | Runtime của package hoặc node được launch |
 
-```
-robot_drl/
-├── robot_drl/
-│   ├── __init__.py
-│   ├── config.py                 # FRAME_Z_OFFSET, ACTION_STEP constants
-│   ├── model_loader.py           # Stable-Baselines3 model loading + inference
-│   ├── state_builder.py         # 15D observation vector builder
-│   ├── drl_planner_core.py      # Trajectory computation logic
-│   ├── drl_planner_node_base.py # Base class (publishers, services, execution)
-│   ├── drl_unified_planner_node.py  # [PREFERRED] single unified node
-│   └── mock_environment_node.py  # Synthetic vision data for simulation
-├── launch/
-│   ├── main.launch.py            # Full stack: robot + vision + planner
-│   ├── drl_unified_planner.launch.py  # Planner + robot bringup
-│   ├── mock_environment.launch.py     # Synthetic vision only
-│   ├── rl_sim_rviz.launch.py         # RL sim + RViz
-│   └── rviz_drl.launch.py             # RViz only
-├── models/                       # Saved policy (.zip) + VecNormalize stats
-├── rviz/
-│   ├── DRL_Rviz.rviz
-│   └── drl_markers.rviz
-├── setup.py
-└── package.xml
-```
+    ## 5. Topic / Service / Action
+    | Interface | Type | Vai trò |
+    |---|---|---|
+    | /drl/plan | service/topic | DRL planner |
+| /drl/execute_forward | service/topic | DRL planner |
+| /drl/clear_trajectory | service/topic | DRL planner |
+| /drl/get_execution_status | service/topic | DRL planner |
+| /drl/forward_poses | service/topic | DRL planner |
 
-## Quick Start
+    Ghi chú interface: Service `/drl/plan`, `/drl/replan`, `/drl/execute_forward`, `/drl/execute_backward`, `/drl/execute_trajectory`, `/drl/clear_trajectory`, `/drl/get_execution_status`; service client `/compute_ik`, planning scene và `/move_cartesian_pose_sequence`; topic `/drl/forward_poses`, `/drl/backward_poses`, `/drl/next_pose`, `/drl/execution_status`, mock target/box topics.
 
-```bash
-# Full stack via unified planner (recommended)
-ros2 launch robot_drl main.launch.py
+    ## 6. File launch liên quan
+    main.launch.py, drl_unified_planner.launch.py, mock_environment.launch.py, mock_drl.launch.py, mock_drl_rviz.launch.py, drl_mock_hw.launch.py, drl_gazebo.launch.py, rl_sim_rviz.launch.py, drl_mock_hw_obstacle_test.launch.py, drl_gazebo_obstacle_test.launch.py, rviz_drl.launch.py
 
-# Or directly
-ros2 launch robot_drl drl_unified_planner.launch.py
-```
+    ## 7. File cấu hình liên quan
+    models/run*/config.json, models/run2/config.yaml, rviz/drl_markers.rviz
 
-## Node: `drl_unified_planner_node` (preferred)
+    ## 8. Cách build riêng package
+    ```bash
+    cd ~/ros2_dev
+    colcon build --packages-select robot_drl
+    source install/setup.bash
+    ```
 
-Single node handling both manual and vision input modes, planning, and execution.
+    ## 9. Cách chạy nhanh
+    ```bash
+    source ~/ros2_dev/install/setup.bash
+    ros2 launch robot_drl main.launch.py
+    ```
+    Nếu package không có launch/runtime node, dùng nó bằng cách phụ thuộc interface hoặc include file từ package khác.
 
-```bash
-# Manual mode (terminal prompt)
-ros2 run robot_drl drl_unified_planner_node \
-    --ros-args \
-    -p input_mode:=manual \
-    -p auto_plan_on_start:=true
-
-# Vision mode (live detections)
-ros2 run robot_drl drl_unified_planner_node \
-    --ros-args \
-    -p input_mode:=vision \
-    -p auto_plan_on_start:=false
-```
-
-### Key Parameters
-
-| Parameter | Default | Description |
-|-----------|---------|-------------|
-| `input_mode` | `manual` | `manual` (terminal) or `vision` (live detections) |
-| `auto_plan_on_start` | `true` | Auto-plan on startup (manual mode only) |
-| `calibrated_start_tcp_base` | `[0.5241, 0.000, 0.315]` | Start TCP in base_link [x, y, z] m |
-| `use_sim_time` | `false` | Use /clock for simulation |
-
-Trained workspace in `base_link`: `x=[0.425, 0.675]`, `y=[-0.200, 0.200]`, `z=[0.020, 0.600]`.
-
-## Published Topics
-
-| Topic | Type | Description |
-|-------|------|-------------|
-| `/drl/forward_trajectory_marker` | `MarkerArray` | Forward trajectory markers |
-| `/drl/backward_trajectory_marker` | `MarkerArray` | Backward trajectory markers |
-| `/drl/forward_trajectory_poses` | `PoseArray` | Forward trajectory waypoints |
-| `/drl/backward_trajectory_poses` | `PoseArray` | Backward trajectory waypoints |
-| `/drl/next_pose` | `PoseStamped` | Streaming waypoint during execution |
-| `/drl/execution_status` | `String` | Execution state at 2 Hz |
-
-## Services
-
-| Service | Type | Description |
-|---------|------|-------------|
-| `/drl/plan` | `std_srvs/Trigger` | Plan a new trajectory |
-| `/drl/replan` | `std_srvs/Trigger` | Force a replan |
-| `/drl/execute_forward` | `std_srvs/Trigger` | Execute forward trajectory |
-| `/drl/execute_backward` | `std_srvs/Trigger` | Execute backward trajectory |
-| `/drl/clear_trajectory` | `std_srvs/Trigger` | Clear all trajectory state |
-| `/drl/get_execution_status` | `std_srvs/Trigger` | Query execution state |
-
-## Coordinate Frames
-
-| Frame | Description | Z reference |
-|-------|-------------|-------------|
-| `base_link` | Robot kinematic root | 0 = mounting surface |
-| `WORLD` / `DRL` | PyBullet training frame | 0 = table surface |
-
-Conversion: `base_link.z = WORLD/DRL.z + 0.330`
-
-## Coordinate Frame Notes
-
-- All trajectory poses are in `base_link` frame.
-- The DRL model was trained in a PyBullet frame where `z=0` is the table surface.
-- The `FRAME_Z_OFFSET = 0.330` maps PyBullet `z` to `base_link.z`.
-- Gripper tool points downward: `RPY = [π, 0, 0]`.
-
-## Removed Deprecated Nodes
-
-| Node | Replacement |
-|------|-------------|
-| `trajectory_test_node` | `drl_unified_planner_node` |
-| `manual_trajectory_test_node` | `drl_unified_planner_node input_mode:=manual` |
-| `vision_trajectory_preview_node` | `drl_unified_planner_node input_mode:=vision` |
-| `drl_inference_node` | `drl_unified_planner_node` |
-| `drl_action_bridge_node` | `drl_unified_planner_node` |
-
-## Dependencies
-
-- `stable-baselines3` — DRL policy inference
-- `robot_task_executor_msgs` — service types
-- `robot_vision_pipeline` — object detection input (vision mode)
-- `moveit_ros_planning_interface` — trajectory execution
+    ## 10. Ghi chú kỹ thuật / giới hạn hiện tại
+    - Source of truth là source code hiện tại trong `robot_drl`.
+    - Tài liệu này không thay thế kiểm tra runtime bằng `ros2 node list`, `ros2 topic list`, `ros2 service list`, `ros2 action list` sau khi launch.
+    - DRL không dùng MoveGroupInterface trực tiếp trong file chính như C++, nhưng phụ thuộc MoveIt qua `/compute_ik`, planning scene và service Cartesian executor `/move_cartesian_pose_sequence`. Plan-only là gọi `/drl/plan` nhưng không execute; execute gọi `/drl/execute_forward`.

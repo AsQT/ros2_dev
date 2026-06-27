@@ -16,7 +16,7 @@ class RepeatabilityTestClient(Node):
         self.declare_parameter("axis", int(RepeatabilityTest.Goal.AXIS_X))
         self.declare_parameter("repeat_count", 3)
         self.declare_parameter("meas_offset", 0.02)
-        self.declare_parameter("velocity_scale", 0.25)
+        self.declare_parameter("velocity_scale", 0.1)
         self.declare_parameter("execute", True)
         self.declare_parameter("frame_id", "world")
         self.declare_parameter("goal_timeout_sec", 600.0)

@@ -81,7 +81,7 @@ def generate_launch_description() -> LaunchDescription:
             description="Number of planning attempts"),
         DeclareLaunchArgument(
             "max_velocity_scaling_factor",
-            default_value="0.5",
+            default_value="0.1",
             description="Max velocity scaling factor (0-1)"),
         DeclareLaunchArgument(
             "max_acceleration_scaling_factor",

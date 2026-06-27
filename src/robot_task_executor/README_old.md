@@ -47,7 +47,7 @@ ros2 launch robot_task_executor task_executor.launch.py
 | `ee_link` | `tcp_link` | End-effector link |
 | `planning_time` | `2.0` | Planning time (s) |
 | `num_planning_attempts` | `5` | Number of planning attempts |
-| `max_velocity_scaling_factor` | `0.5` | Velocity scaling (0–1) |
+| `max_velocity_scaling_factor` | `0.1` | Velocity scaling (0–1) |
 | `max_acceleration_scaling_factor` | `0.5` | Acceleration scaling (0–1) |
 
 ---

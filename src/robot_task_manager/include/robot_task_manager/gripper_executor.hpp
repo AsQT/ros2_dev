@@ -27,7 +27,7 @@ public:
   bool moveToOpening(
     double opening,
     std::string & error_msg,
-    double velocity_scale = 0.5,
+    double velocity_scale = 0.1,
     double acceleration_scale = 0.5,
     bool execute = true);
 

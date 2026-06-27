@@ -1382,13 +1382,95 @@ background:transparent;
        </property>
       </widget>
       </widget>
+      <widget class="QFrame" name="movePoseVelocityGroup">
+       <property name="geometry">
+        <rect>
+         <x>0</x>
+         <y>345</y>
+         <width>337</width>
+         <height>36</height>
+        </rect>
+       </property>
+       <property name="styleSheet">
+        <string>QFrame{background:rgba(255,255,255,220); border:1px solid #c1d7df; border-radius:8px;}</string>
+       </property>
+      <widget class="QLabel" name="lblMovePoseVelocity">
+       <property name="geometry">
+        <rect>
+         <x>12</x>
+         <y>6</y>
+         <width>130</width>
+         <height>24</height>
+        </rect>
+       </property>
+       <property name="font">
+        <font>
+         <family>Arial</family>
+         <pointsize>8</pointsize>
+        </font>
+       </property>
+       <property name="styleSheet">
+        <string>background:transparent; color:#102d3d; border:0px;</string>
+       </property>
+       <property name="text">
+        <string>Velocity scale</string>
+       </property>
+      </widget>
+      <widget class="QLineEdit" name="txtMovePoseVelocity">
+       <property name="geometry">
+        <rect>
+         <x>164</x>
+         <y>4</y>
+         <width>70</width>
+         <height>28</height>
+        </rect>
+       </property>
+       <property name="styleSheet">
+        <string>QLineEdit{background:white; color:black; border-radius:3px; border:1px solid #b8cfd8; padding-left:3px; padding-right:3px; selection-background-color:#00a6c7;}</string>
+       </property>
+       <property name="alignment">
+        <set>Qt::AlignCenter</set>
+       </property>
+       <property name="text">
+        <string>0.1</string>
+       </property>
+       <property name="placeholderText">
+        <string>0.1</string>
+       </property>
+      </widget>
+      <widget class="QLabel" name="lblMovePoseVelocityRange">
+       <property name="geometry">
+        <rect>
+         <x>246</x>
+         <y>6</y>
+         <width>72</width>
+         <height>24</height>
+        </rect>
+       </property>
+       <property name="font">
+        <font>
+         <family>Arial</family>
+         <pointsize>8</pointsize>
+        </font>
+       </property>
+       <property name="styleSheet">
+        <string>background:transparent; color:#102d3d; border:0px;</string>
+       </property>
+       <property name="text">
+        <string>0..1</string>
+       </property>
+       <property name="alignment">
+        <set>Qt::AlignCenter</set>
+       </property>
+      </widget>
+      </widget>
       <widget class="QFrame" name="movePosePreviewGroup">
        <property name="geometry">
         <rect>
          <x>0</x>
-         <y>355</y>
+         <y>393</y>
          <width>337</width>
-         <height>100</height>
+         <height>62</height>
         </rect>
        </property>
        <property name="styleSheet">
@@ -1400,7 +1482,7 @@ background:transparent;
          <x>0</x>
          <y>0</y>
          <width>337</width>
-         <height>100</height>
+         <height>62</height>
         </rect>
        </property>
        <property name="font">
@@ -2568,13 +2650,95 @@ background:transparent;
        </property>
       </widget>
       </widget>
+      <widget class="QFrame" name="pickPlaceVelocityGroup">
+       <property name="geometry">
+        <rect>
+         <x>0</x>
+         <y>326</y>
+         <width>337</width>
+         <height>36</height>
+        </rect>
+       </property>
+       <property name="styleSheet">
+        <string>QFrame{background:rgba(255,255,255,220); border:1px solid #c1d7df; border-radius:8px;}</string>
+       </property>
+      <widget class="QLabel" name="lblPickPlaceVelocity">
+       <property name="geometry">
+        <rect>
+         <x>12</x>
+         <y>6</y>
+         <width>130</width>
+         <height>24</height>
+        </rect>
+       </property>
+       <property name="font">
+        <font>
+         <family>Arial</family>
+         <pointsize>8</pointsize>
+        </font>
+       </property>
+       <property name="styleSheet">
+        <string>background:transparent; color:#102d3d; border:0px;</string>
+       </property>
+       <property name="text">
+        <string>Velocity scale</string>
+       </property>
+      </widget>
+      <widget class="QLineEdit" name="txtPickPlaceVelocity">
+       <property name="geometry">
+        <rect>
+         <x>164</x>
+         <y>4</y>
+         <width>70</width>
+         <height>28</height>
+        </rect>
+       </property>
+       <property name="styleSheet">
+        <string>QLineEdit{background:white; color:black; border-radius:3px; border:1px solid #b8cfd8; padding-left:3px; padding-right:3px; selection-background-color:#00a6c7;}</string>
+       </property>
+       <property name="alignment">
+        <set>Qt::AlignCenter</set>
+       </property>
+       <property name="text">
+        <string>0.1</string>
+       </property>
+       <property name="placeholderText">
+        <string>0.1</string>
+       </property>
+      </widget>
+      <widget class="QLabel" name="lblPickPlaceVelocityRange">
+       <property name="geometry">
+        <rect>
+         <x>246</x>
+         <y>6</y>
+         <width>72</width>
+         <height>24</height>
+        </rect>
+       </property>
+       <property name="font">
+        <font>
+         <family>Arial</family>
+         <pointsize>8</pointsize>
+        </font>
+       </property>
+       <property name="styleSheet">
+        <string>background:transparent; color:#102d3d; border:0px;</string>
+       </property>
+       <property name="text">
+        <string>0..1</string>
+       </property>
+       <property name="alignment">
+        <set>Qt::AlignCenter</set>
+       </property>
+      </widget>
+      </widget>
       <widget class="QFrame" name="pickPlacePreviewGroup">
        <property name="geometry">
         <rect>
          <x>0</x>
-         <y>338</y>
+         <y>370</y>
          <width>337</width>
-         <height>118</height>
+         <height>86</height>
         </rect>
        </property>
        <property name="styleSheet">
@@ -2586,7 +2750,7 @@ background:transparent;
          <x>0</x>
          <y>0</y>
          <width>337</width>
-         <height>118</height>
+         <height>86</height>
         </rect>
        </property>
        <property name="font">
@@ -2894,13 +3058,95 @@ background:transparent;
        </property>
       </widget>
       </widget>
+      <widget class="QFrame" name="pickPlaceVisionVelocityGroup">
+       <property name="geometry">
+        <rect>
+         <x>0</x>
+         <y>218</y>
+         <width>337</width>
+         <height>36</height>
+        </rect>
+       </property>
+       <property name="styleSheet">
+        <string>QFrame{background:rgba(255,255,255,220); border:1px solid #c1d7df; border-radius:8px;}</string>
+       </property>
+      <widget class="QLabel" name="lblPickPlaceVisionVelocity">
+       <property name="geometry">
+        <rect>
+         <x>12</x>
+         <y>6</y>
+         <width>130</width>
+         <height>24</height>
+        </rect>
+       </property>
+       <property name="font">
+        <font>
+         <family>Arial</family>
+         <pointsize>8</pointsize>
+        </font>
+       </property>
+       <property name="styleSheet">
+        <string>background:transparent; color:#102d3d; border:0px;</string>
+       </property>
+       <property name="text">
+        <string>Velocity scale</string>
+       </property>
+      </widget>
+      <widget class="QLineEdit" name="txtPickPlaceVisionVelocity">
+       <property name="geometry">
+        <rect>
+         <x>164</x>
+         <y>4</y>
+         <width>70</width>
+         <height>28</height>
+        </rect>
+       </property>
+       <property name="styleSheet">
+        <string>QLineEdit{background:white; color:black; border-radius:3px; border:1px solid #b8cfd8; padding-left:3px; padding-right:3px; selection-background-color:#00a6c7;}</string>
+       </property>
+       <property name="alignment">
+        <set>Qt::AlignCenter</set>
+       </property>
+       <property name="text">
+        <string>0.1</string>
+       </property>
+       <property name="placeholderText">
+        <string>0.1</string>
+       </property>
+      </widget>
+      <widget class="QLabel" name="lblPickPlaceVisionVelocityRange">
+       <property name="geometry">
+        <rect>
+         <x>246</x>
+         <y>6</y>
+         <width>72</width>
+         <height>24</height>
+        </rect>
+       </property>
+       <property name="font">
+        <font>
+         <family>Arial</family>
+         <pointsize>8</pointsize>
+        </font>
+       </property>
+       <property name="styleSheet">
+        <string>background:transparent; color:#102d3d; border:0px;</string>
+       </property>
+       <property name="text">
+        <string>0..1</string>
+       </property>
+       <property name="alignment">
+        <set>Qt::AlignCenter</set>
+       </property>
+      </widget>
+      </widget>
       <widget class="QFrame" name="VisionPreviewGroup">
        <property name="geometry">
         <rect>
          <x>0</x>
-         <y>230</y>
+         <y>262</y>
          <width>337</width>
-         <height>226</height>
+         <height>194</height>
         </rect>
        </property>
        <property name="styleSheet">
@@ -2912,7 +3158,7 @@ background:transparent;
          <x>0</x>
          <y>0</y>
          <width>337</width>
-         <height>226</height>
+         <height>194</height>
         </rect>
        </property>
        <property name="font">
@@ -3540,13 +3786,95 @@ background:transparent;
       </property>
       </widget>
       </widget>
+      <widget class="QFrame" name="checkBoardVelocityGroup">
+       <property name="geometry">
+        <rect>
+         <x>0</x>
+         <y>218</y>
+         <width>337</width>
+         <height>36</height>
+        </rect>
+       </property>
+       <property name="styleSheet">
+        <string>QFrame{background:rgba(255,255,255,220); border:1px solid #c1d7df; border-radius:8px;}</string>
+       </property>
+      <widget class="QLabel" name="lblCheckBoardVelocity">
+       <property name="geometry">
+        <rect>
+         <x>12</x>
+         <y>6</y>
+         <width>130</width>
+         <height>24</height>
+        </rect>
+       </property>
+       <property name="font">
+        <font>
+         <family>Arial</family>
+         <pointsize>8</pointsize>
+        </font>
+       </property>
+       <property name="styleSheet">
+        <string>background:transparent; color:#102d3d; border:0px;</string>
+       </property>
+       <property name="text">
+        <string>Velocity scale</string>
+       </property>
+      </widget>
+      <widget class="QLineEdit" name="txtCheckBoardVelocity">
+       <property name="geometry">
+        <rect>
+         <x>164</x>
+         <y>4</y>
+         <width>70</width>
+         <height>28</height>
+        </rect>
+       </property>
+       <property name="styleSheet">
+        <string>QLineEdit{background:white; color:black; border-radius:3px; border:1px solid #b8cfd8; padding-left:3px; padding-right:3px; selection-background-color:#00a6c7;}</string>
+       </property>
+       <property name="alignment">
+        <set>Qt::AlignCenter</set>
+       </property>
+       <property name="text">
+        <string>0.1</string>
+       </property>
+       <property name="placeholderText">
+        <string>0.1</string>
+       </property>
+      </widget>
+      <widget class="QLabel" name="lblCheckBoardVelocityRange">
+       <property name="geometry">
+        <rect>
+         <x>246</x>
+         <y>6</y>
+         <width>72</width>
+         <height>24</height>
+        </rect>
+       </property>
+       <property name="font">
+        <font>
+         <family>Arial</family>
+         <pointsize>8</pointsize>
+        </font>
+       </property>
+       <property name="styleSheet">
+        <string>background:transparent; color:#102d3d; border:0px;</string>
+       </property>
+       <property name="text">
+        <string>0..1</string>
+       </property>
+       <property name="alignment">
+        <set>Qt::AlignCenter</set>
+       </property>
+      </widget>
+      </widget>
       <widget class="QFrame" name="checkBoardPreviewGroup">
        <property name="geometry">
         <rect>
          <x>0</x>
-         <y>230</y>
+         <y>262</y>
          <width>337</width>
-         <height>226</height>
+         <height>194</height>
         </rect>
        </property>
        <property name="styleSheet">
@@ -3558,7 +3886,7 @@ background:transparent;
          <x>0</x>
          <y>0</y>
          <width>337</width>
-         <height>226</height>
+         <height>194</height>
         </rect>
        </property>
        <property name="font">
@@ -4115,13 +4443,95 @@ background:transparent;
        </property>
       </widget>
       </widget>
-      <widget class="QFrame" name="repeatPreviewGroup">
+      <widget class="QFrame" name="repeatabilityVelocityGroup">
        <property name="geometry">
         <rect>
          <x>0</x>
          <y>297</y>
          <width>337</width>
-         <height>88</height>
+         <height>36</height>
+        </rect>
+       </property>
+       <property name="styleSheet">
+        <string>QFrame{background:rgba(255,255,255,220); border:1px solid #c1d7df; border-radius:8px;}</string>
+       </property>
+      <widget class="QLabel" name="lblRepeatabilityVelocity">
+       <property name="geometry">
+        <rect>
+         <x>12</x>
+         <y>6</y>
+         <width>130</width>
+         <height>24</height>
+        </rect>
+       </property>
+       <property name="font">
+        <font>
+         <family>Arial</family>
+         <pointsize>8</pointsize>
+        </font>
+       </property>
+       <property name="styleSheet">
+        <string>background:transparent; color:#102d3d; border:0px;</string>
+       </property>
+       <property name="text">
+        <string>Velocity scale</string>
+       </property>
+      </widget>
+      <widget class="QLineEdit" name="txtRepeatabilityVelocity">
+       <property name="geometry">
+        <rect>
+         <x>164</x>
+         <y>4</y>
+         <width>70</width>
+         <height>28</height>
+        </rect>
+       </property>
+       <property name="styleSheet">
+        <string>QLineEdit{background:white; color:black; border-radius:3px; border:1px solid #b8cfd8; padding-left:3px; padding-right:3px; selection-background-color:#00a6c7;}</string>
+       </property>
+       <property name="alignment">
+        <set>Qt::AlignCenter</set>
+       </property>
+       <property name="text">
+        <string>0.1</string>
+       </property>
+       <property name="placeholderText">
+        <string>0.1</string>
+       </property>
+      </widget>
+      <widget class="QLabel" name="lblRepeatabilityVelocityRange">
+       <property name="geometry">
+        <rect>
+         <x>246</x>
+         <y>6</y>
+         <width>72</width>
+         <height>24</height>
+        </rect>
+       </property>
+       <property name="font">
+        <font>
+         <family>Arial</family>
+         <pointsize>8</pointsize>
+        </font>
+       </property>
+       <property name="styleSheet">
+        <string>background:transparent; color:#102d3d; border:0px;</string>
+       </property>
+       <property name="text">
+        <string>0..1</string>
+       </property>
+       <property name="alignment">
+        <set>Qt::AlignCenter</set>
+       </property>
+      </widget>
+      </widget>
+      <widget class="QFrame" name="repeatPreviewGroup">
+       <property name="geometry">
+        <rect>
+         <x>0</x>
+         <y>341</y>
+         <width>337</width>
+         <height>44</height>
         </rect>
        </property>
        <property name="styleSheet">
@@ -4133,7 +4543,7 @@ background:transparent;
          <x>0</x>
          <y>0</y>
          <width>337</width>
-         <height>88</height>
+         <height>44</height>
         </rect>
        </property>
        <property name="font">
@@ -11436,7 +11846,7 @@ QPushButton:pressed {
         <string>QLineEdit { background:white; border-radius:3px; border:1px solid #cbd8e0; padding-left:6px; color:black;}</string>
        </property>
        <property name="text">
-        <string>0.2</string>
+        <string>0.1</string>
        </property>
       </widget>
       <widget class="QLabel" name="txtAccelerationScale_label">

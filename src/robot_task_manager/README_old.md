@@ -49,7 +49,7 @@ ros2 topic echo /joint_states
 ```
 
 ```bash
-ros2 action send_goal /pickplace robot_task_manager/action/PickPlace "{ pose_pick: { position: {x: 0.40, y: 0.10, z: 0.03}, orientation: {x: 1.0, y: 1.0, z: 0.0, w: 0.0} }, pose_place: { position: {x: 0.30, y: -0.10, z: 0.1}, orientation: {x: 1.0, y: 1.0, z: 0.0, w: 0.0} }, gripper: 0.025, velocity_scale: 0.2, execute: true}" --feedback
+ros2 action send_goal /pickplace robot_task_manager/action/PickPlace "{ pose_pick: { position: {x: 0.40, y: 0.10, z: 0.03}, orientation: {x: 1.0, y: 1.0, z: 0.0, w: 0.0} }, pose_place: { position: {x: 0.30, y: -0.10, z: 0.1}, orientation: {x: 1.0, y: 1.0, z: 0.0, w: 0.0} }, gripper: 0.025, velocity_scale: 0.1, execute: true}" --feedback
 
 ```
 # Active venvvenv
@@ -120,4 +120,4 @@ ros2 launch robot_task_manager repeatability_test_client.launch.py \
   axis:=0 \
   repeat_count:=3 \
   meas_offset:=0.02 \
-  velocity_scale:=0.25
+  velocity_scale:=0.1

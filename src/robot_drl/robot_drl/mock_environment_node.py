@@ -6,10 +6,10 @@ tested in a closed loop without hardware or a RealSense camera.
 Published topics:
   /vision/target_position  geometry_msgs/PointStamped — target in base_link
   /vision/target_detected  std_msgs/Bool              — target valid flag
-  /vision/box              robot_vision_pipeline/Box  — obstacle/box in base_link
+  /vision/box              robot_vision_pipeline_msgs/Box — obstacle/box in base_link
   /vision/box_detected     std_msgs/Bool              — box valid flag
   /detected_object/pose    geometry_msgs/PoseStamped  — legacy target pose
-  /vision/box_detection    robot_vision_pipeline/BoxDetection — legacy bbox
+  /vision/box_detection    robot_vision_pipeline_msgs/BoxDetection — legacy bbox
 
 Supports two object classes matching the YOLO model:
   box     — the primary manipulation target
@@ -48,7 +48,7 @@ from geometry_msgs.msg import PointStamped, PoseStamped
 from std_msgs.msg import Bool
 from std_msgs.msg import Header
 
-from robot_vision_pipeline.msg import Box, BoxDetection
+from robot_vision_pipeline_msgs.msg import Box, BoxDetection
 
 
 class MockEnvironmentNode(Node):
