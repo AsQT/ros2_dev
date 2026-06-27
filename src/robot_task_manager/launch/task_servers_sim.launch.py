@@ -160,6 +160,7 @@ def generate_launch_description():
         parameters=common_moveit_params + [{
             "planning_frame": "base_link",
             "ee_link": "tcp_link",
+            "sub_action_timeout_sec": 180.0,
             "planner_node_name": LaunchConfiguration("planner_node_name"),
         }],
     )

@@ -12,7 +12,7 @@ namespace robot_task_manager
 
 namespace
 {
-constexpr auto kPathMarkerColor = rviz_visual_tools::DARK_GREY;
+constexpr auto kPathMarkerColor = rviz_visual_tools::LIME_GREEN;
 constexpr auto kTextMarkerColor = rviz_visual_tools::BLACK;
 constexpr double kCurrentStateTimeoutSec = 2.0;
 }  // namespace

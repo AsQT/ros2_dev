@@ -583,6 +583,31 @@ private:
         return;
       }
 
+      publish_feedback(
+        goal_handle,
+        i,
+        execute_motion ? "Cartesian to meas_pose" : "Plan Cartesian to meas_pose (execution skipped)");
+      if (!call_move_to_pose_cartesian(meas_pose, goal->velocity_scale, execute_motion, error_msg)) {
+        abort_goal(goal_handle, result, fail_message("Cartesian to meas_pose", i, error_msg), completed_count);
+        return;
+      }
+
+      publish_feedback(goal_handle, i, execute_motion ? "Wait at meas_pose" : "Skip measurement settle wait (plan-only)");
+      if (execute_motion) {
+        if (!sleep_with_cancel(goal_handle, result, completed_count)) {
+          return;
+        }
+      }
+
+      publish_feedback(
+        goal_handle,
+        i,
+        execute_motion ? "Cartesian back to working_retract_pose" : "Plan Cartesian back to working_retract_pose (execution skipped)");
+      if (!call_move_to_pose_cartesian(working_retract_pose, fast_velocity_scale_, execute_motion, error_msg)) {
+        abort_goal(goal_handle, result, fail_message("Cartesian back to working_retract_pose", i, error_msg), completed_count);
+        return;
+      }
+
       completed_count = i;
     }
 

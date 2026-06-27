@@ -43,7 +43,9 @@ from geometry_msgs.msg import PointStamped
 from moveit_msgs.msg import PlanningSceneComponents
 from moveit_msgs.srv import GetPlanningScene, GetPositionIK
 from sensor_msgs.msg import JointState
-from std_msgs.msg import Bool
+import json as _json
+
+from std_msgs.msg import Bool, String
 
 from robot_drl import config
 from robot_drl.drl_planner_core import (
@@ -409,6 +411,7 @@ class DrlUnifiedPlannerNode(DrlPlannerNodeBase):
         self._init_base_publishers()
         self._init_base_services()
         self._init_base_execution()
+        self._plan_stats_pub = self.create_publisher(String, "/drl/plan_stats", 10)
         self._planning_scene_client = self.create_client(
             GetPlanningScene,
             self._planning_scene_service_name,
@@ -1126,6 +1129,19 @@ class DrlUnifiedPlannerNode(DrlPlannerNodeBase):
 
         self.log_planning_result(result, source=scene.source)
         self.publish_planning_result(result)
+
+        traj = result.trajectory_forward_base
+        path_len_m = float(np.sum([
+            np.linalg.norm(traj[i] - traj[i - 1]) for i in range(1, len(traj))
+        ])) if len(traj) > 1 else 0.0
+        self._plan_stats_pub.publish(String(data=_json.dumps({
+            "planning_time_s": float(result.planning_time_sec),
+            "num_rl_waypoints": len(traj),
+            "planned_path_len_m": path_len_m,
+            "convergence_dist_m": float(result.convergence_dist),
+            "target_base": result.target_base.tolist(),
+        })))
+
         if self._auto_execute_after_plan:
             resp, started = self._start_execution_thread(
                 self._get_trajectory_for_direction("forward"), "forward"

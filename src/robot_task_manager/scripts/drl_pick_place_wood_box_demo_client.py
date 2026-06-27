@@ -23,7 +23,7 @@ class DrlPickPlaceWoodBoxDemoClient(Node):
         self.declare_parameter("action_name", "drl_pickplace")
         self.declare_parameter("frame_id", "base_link")
         self.declare_parameter("place_xyz", [0.46, 0.12, 0.12])
-        self.declare_parameter("pick_z_offset_m", 0.06)
+        self.declare_parameter("grasp_tcp_offset_z", 0.015)
         self.declare_parameter("place_z_offset_m", 0.0)
         self.declare_parameter("min_pick_z_m", 0.025)
         self.declare_parameter("gripper_close_width_m", 0.025)
@@ -231,10 +231,11 @@ class DrlPickPlaceWoodBoxDemoClient(Node):
 
     def _build_goal(self, wood_marker: Marker) -> DrlPickPlace.Goal:
         frame_id = str(self.get_parameter("frame_id").value)
-        pick_z = (
-            float(wood_marker.pose.position.z)
-            + float(self.get_parameter("pick_z_offset_m").value)
-        )
+        wood_center_z = float(wood_marker.pose.position.z)
+        wood_size_z = float(wood_marker.scale.z)
+        wood_top_z = wood_center_z + wood_size_z / 2.0
+        grasp_tcp_offset_z = float(self.get_parameter("grasp_tcp_offset_z").value)
+        pick_z = wood_center_z + grasp_tcp_offset_z
         pick_z = max(pick_z, float(self.get_parameter("min_pick_z_m").value))
 
         place_xyz = [float(v) for v in self.get_parameter("place_xyz").value]
@@ -256,6 +257,12 @@ class DrlPickPlaceWoodBoxDemoClient(Node):
             self.get_parameter("gripper_close_width_m").value
         )
         goal.execute = bool(self.get_parameter("execute").value)
+        self.get_logger().info(
+            f"[Z_DEBUG] wood_center_z={wood_center_z:.4f} wood_top_z={wood_top_z:.4f} "
+            f"grasp_tcp_offset_z={grasp_tcp_offset_z:.4f} pick_z={pick_z:.4f} "
+            f"(offset_above_top={pick_z - wood_top_z:.4f}) "
+            f"place_z={goal.target_place.pose.position.z:.4f}"
+        )
         return goal
 
     def run(self) -> int:

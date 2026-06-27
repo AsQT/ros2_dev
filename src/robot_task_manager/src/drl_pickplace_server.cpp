@@ -676,6 +676,17 @@ private:
     }
     const double close_width_m = sanitize_close_width(goal->gripper_close_width_m);
 
+    RCLCPP_INFO(
+      get_logger(),
+      "[Z_DEBUG] planning_frame=%s input_pick_frame=%s target_pick_z=%.4f "
+      "target_place_z=%.4f pick_approach_height=%.4f close_width=%.4f",
+      planning_frame_.c_str(),
+      goal->target_pick.header.frame_id.c_str(),
+      target_pick.pose.position.z,
+      target_place.pose.position.z,
+      pick_approach_height_m_,
+      close_width_m);
+
     publish_feedback(goal_handle, "WAIT_FOR_SERVERS", 3.0f);
     if (!wait_for_servers(error_msg)) {
       abort_goal(goal_handle, result, "WAIT_FOR_SERVERS", error_msg);
@@ -688,6 +699,14 @@ private:
     auto pre_pick = target_pick.pose;
     pre_pick.position.z += pick_approach_height_m_;
     auto lift_pose = pre_pick;
+    RCLCPP_INFO(
+      get_logger(),
+      "[Z_DEBUG] pick_sequence_z pre_pick=%.4f pick=%.4f lift=%.4f "
+      "pre_pick_minus_pick=%.4f",
+      pre_pick.position.z,
+      target_pick.pose.position.z,
+      lift_pose.position.z,
+      pre_pick.position.z - target_pick.pose.position.z);
 
     publish_feedback(goal_handle, execute_motion ? "OPEN_GRIPPER" : "PLAN_OPEN_GRIPPER_EXECUTION_SKIPPED", 8.0f);
     if (!call_move_gripper(gripper_open_width_m_, execute_motion, error_msg)) {

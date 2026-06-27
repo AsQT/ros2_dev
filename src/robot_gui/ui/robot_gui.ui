@@ -4297,7 +4297,7 @@ background:transparent;
        <set>Qt::AlignCenter</set>
       </property>
       <property name="placeholderText">
-       <string>-80</string>
+       <string>-50</string>
       </property>
       </widget>
       <widget class="QLabel" name="repeatDisturb1Z_label">
@@ -4341,7 +4341,7 @@ background:transparent;
        <set>Qt::AlignCenter</set>
       </property>
       <property name="placeholderText">
-       <string>180</string>
+       <string>120</string>
       </property>
       </widget>
       </widget>
@@ -4398,7 +4398,7 @@ background:transparent;
         <set>Qt::AlignCenter</set>
        </property>
        <property name="placeholderText">
-        <string>20</string>
+        <string>50</string>
        </property>
       </widget>
       <widget class="QLabel" name="lblRepeatCount">

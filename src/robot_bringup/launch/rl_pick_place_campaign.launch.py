@@ -1,11 +1,10 @@
-"""Gazebo demo: pick_wood object + obstacle_box ground truth + RL pick-place."""
+"""Campaign launch: N randomized DRL pick-place runs with CSV telemetry."""
 
 import os
 
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription, LogInfo, TimerAction
-from launch.conditions import IfCondition
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
@@ -19,33 +18,26 @@ def generate_launch_description() -> LaunchDescription:
     drl_executor_share = get_package_share_directory("robot_drl_executor")
 
     args = [
-        DeclareLaunchArgument("randomize_objects", default_value="false"),
-        DeclareLaunchArgument("wood_x", default_value="0.44"),
-        DeclareLaunchArgument("wood_y", default_value="0.06"),
-        DeclareLaunchArgument("wood_size", default_value="[0.03, 0.03, 0.03]"),
-        DeclareLaunchArgument("box_x", default_value="0.34"),
-        DeclareLaunchArgument("box_y", default_value="-0.09"),
-        DeclareLaunchArgument("box_size", default_value="[0.10, 0.10, 0.10]"),
-        DeclareLaunchArgument("randomize_box_size", default_value="true"),
-        DeclareLaunchArgument("box_size_min", default_value="[0.05, 0.05, 0.05]"),
-        DeclareLaunchArgument("box_size_max", default_value="[0.15, 0.15, 0.15]"),
-        DeclareLaunchArgument(
-            "table_height",
-            default_value="-1.0",
-            description="Negative value means infer from the table world SDF",
-        ),
-        DeclareLaunchArgument("robot_base_world_z", default_value="1.02"),
+        DeclareLaunchArgument("num_runs", default_value="20"),
+        DeclareLaunchArgument("save_csv", default_value="true"),
+        DeclareLaunchArgument("output_dir", default_value="",
+                              description="CSV output dir; empty = auto-timestamped"),
+        DeclareLaunchArgument("grasp_tcp_offset_z", default_value="0.015",
+                              description="TCP Z above wood center at grasp (tune empirically)"),
+        DeclareLaunchArgument("place_xyz", default_value="[0.46, 0.12, 0.12]"),
         DeclareLaunchArgument("gripper_close_width", default_value="0.025"),
         DeclareLaunchArgument("execute", default_value="true"),
-        DeclareLaunchArgument(
-            "grasp_tcp_offset_z",
-            default_value="0.015",
-            description="TCP Z above wood center when fingers contact wood (tune empirically)",
-        ),
-        DeclareLaunchArgument("place_xyz", default_value="[0.46, 0.12, 0.12]"),
-        DeclareLaunchArgument("run_demo_client", default_value="true"),
+        DeclareLaunchArgument("wood_size", default_value="[0.03, 0.03, 0.03]"),
+        DeclareLaunchArgument("wood_x", default_value="0.44"),
+        DeclareLaunchArgument("wood_y", default_value="0.06"),
+        DeclareLaunchArgument("box_size_min", default_value="[0.05, 0.05, 0.05]"),
+        DeclareLaunchArgument("box_size_max", default_value="[0.15, 0.15, 0.15]"),
+        DeclareLaunchArgument("robot_base_world_z", default_value="1.02"),
+        DeclareLaunchArgument("table_height", default_value="-1.0"),
         DeclareLaunchArgument("spawn_startup_delay", default_value="3.0"),
-        DeclareLaunchArgument("demo_client_delay", default_value="50.0"),
+        DeclareLaunchArgument("campaign_start_delay", default_value="55.0",
+                              description="Seconds to wait before starting the first run"),
+        DeclareLaunchArgument("tf_sample_hz", default_value="50.0"),
     ]
 
     sim_stack = IncludeLaunchDescription(
@@ -89,16 +81,16 @@ def generate_launch_description() -> LaunchDescription:
             "wood_y": ParameterValue(LaunchConfiguration("wood_y"), value_type=float),
             "box_name": "obstacle_box",
             "box_info_topic": "/sim/obstacle_box_info",
-            "box_size": ParameterValue(LaunchConfiguration("box_size"), value_type=list[float]),
-            "randomize_box_size": ParameterValue(LaunchConfiguration("randomize_box_size"), value_type=bool),
+            "box_size": [0.10, 0.10, 0.10],
+            "randomize_box_size": True,
             "box_size_min": ParameterValue(LaunchConfiguration("box_size_min"), value_type=list[float]),
             "box_size_max": ParameterValue(LaunchConfiguration("box_size_max"), value_type=list[float]),
-            "box_x": ParameterValue(LaunchConfiguration("box_x"), value_type=float),
-            "box_y": ParameterValue(LaunchConfiguration("box_y"), value_type=float),
+            "box_x": 0.34,
+            "box_y": -0.09,
             "place_xyz": ParameterValue(LaunchConfiguration("place_xyz"), value_type=list[float]),
             "table_height": ParameterValue(LaunchConfiguration("table_height"), value_type=float),
             "robot_base_world_z": ParameterValue(LaunchConfiguration("robot_base_world_z"), value_type=float),
-            "randomize": ParameterValue(LaunchConfiguration("randomize_objects"), value_type=bool),
+            "randomize": True,
             "wood_x_min": 0.38,
             "wood_x_max": 0.48,
             "wood_y_min": 0.02,
@@ -109,6 +101,7 @@ def generate_launch_description() -> LaunchDescription:
             "box_y_max": -0.05,
             "min_xy_separation": 0.09,
             "avoidance_margin_m": 0.02,
+            "gz_world_name": "arm_and_table",
             "startup_delay": LaunchConfiguration("spawn_startup_delay"),
             "publish_rate_hz": 2.0,
         }],
@@ -152,49 +145,53 @@ def generate_launch_description() -> LaunchDescription:
         }],
     )
 
-    demo_client = Node(
+    campaign_runner = Node(
         package="robot_task_manager",
-        executable="drl_pick_place_wood_box_demo_client.py",
-        name="drl_pick_place_wood_box_demo_client",
+        executable="drl_pick_place_campaign_runner.py",
+        name="drl_pick_place_campaign_runner",
         output="screen",
         parameters=[{
             "use_sim_time": True,
+            "num_runs": ParameterValue(LaunchConfiguration("num_runs"), value_type=int),
+            "save_csv": ParameterValue(LaunchConfiguration("save_csv"), value_type=bool),
+            "output_dir": ParameterValue(LaunchConfiguration("output_dir"), value_type=str),
+            "grasp_tcp_offset_z": ParameterValue(LaunchConfiguration("grasp_tcp_offset_z"), value_type=float),
+            "place_xyz": ParameterValue(LaunchConfiguration("place_xyz"), value_type=list[float]),
+            "gripper_close_width_m": ParameterValue(LaunchConfiguration("gripper_close_width"), value_type=float),
+            "execute": ParameterValue(LaunchConfiguration("execute"), value_type=bool),
+            "tf_sample_hz": ParameterValue(LaunchConfiguration("tf_sample_hz"), value_type=float),
+            "startup_delay_sec": ParameterValue(LaunchConfiguration("campaign_start_delay"), value_type=float),
             "wood_info_topic": "/sim/pick_wood_info",
             "box_info_topic": "/sim/obstacle_box_info",
             "action_name": "drl_pickplace",
             "frame_id": "base_link",
-            "place_xyz": ParameterValue(LaunchConfiguration("place_xyz"), value_type=list[float]),
-            "grasp_tcp_offset_z": ParameterValue(LaunchConfiguration("grasp_tcp_offset_z"), value_type=float),
-            "gripper_close_width_m": ParameterValue(LaunchConfiguration("gripper_close_width"), value_type=float),
-            "execute": ParameterValue(LaunchConfiguration("execute"), value_type=bool),
             "obstacle_id": "obstacle_box",
             "min_pick_z_m": 0.025,
-            "object_timeout_sec": 60.0,
+            "object_timeout_sec": 30.0,
             "action_server_timeout_sec": 120.0,
             "planning_scene_timeout_sec": 20.0,
             "goal_timeout_sec": 420.0,
         }],
-        condition=IfCondition(LaunchConfiguration("run_demo_client")),
     )
 
     return LaunchDescription([
         *args,
-        LogInfo(msg="[rl_pick_place_box_gazebo_demo] Starting Gazebo + MoveIt + task servers"),
+        LogInfo(msg="[rl_pick_place_campaign] Starting Gazebo + MoveIt + task servers"),
         sim_stack,
         TimerAction(period=10.0, actions=[
-            LogInfo(msg="[rl_pick_place_box_gazebo_demo] Starting robot_drl_executor"),
+            LogInfo(msg="[rl_pick_place_campaign] Starting robot_drl_executor"),
             drl_executor,
         ]),
         TimerAction(period=14.0, actions=[
-            LogInfo(msg="[rl_pick_place_box_gazebo_demo] Starting DRL planner"),
+            LogInfo(msg="[rl_pick_place_campaign] Starting DRL planner"),
             drl_node,
         ]),
         TimerAction(period=16.0, actions=[
-            LogInfo(msg="[rl_pick_place_box_gazebo_demo] Spawning pick_wood and obstacle_box from Gazebo ground truth"),
+            LogInfo(msg="[rl_pick_place_campaign] Spawning initial objects"),
             sim_objects,
         ]),
-        TimerAction(period=LaunchConfiguration("demo_client_delay"), actions=[
-            LogInfo(msg="[rl_pick_place_box_gazebo_demo] Sending RL pick-place goal from wood pose and box obstacle"),
-            demo_client,
+        TimerAction(period=20.0, actions=[
+            LogInfo(msg="[rl_pick_place_campaign] Starting campaign runner"),
+            campaign_runner,
         ]),
     ])

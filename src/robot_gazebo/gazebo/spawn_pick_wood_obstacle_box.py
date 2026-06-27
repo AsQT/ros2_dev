@@ -12,6 +12,7 @@ import rclpy
 from ament_index_python.packages import get_package_share_directory
 from rclpy.node import Node
 from rclpy.qos import DurabilityPolicy, QoSProfile, ReliabilityPolicy
+from std_srvs.srv import Trigger
 from visualization_msgs.msg import Marker
 
 
@@ -69,6 +70,7 @@ class PickWoodObstacleBoxSpawner(Node):
         self.declare_parameter("min_xy_separation", 0.09)
         self.declare_parameter("place_xyz", [0.46, 0.12, 0.12])
         self.declare_parameter("avoidance_margin_m", 0.02)
+        self.declare_parameter("gz_world_name", "arm_and_table")
 
         self._frame_id = str(self.get_parameter("frame_id").value)
         self._table_height = self._resolve_table_height()
@@ -76,6 +78,7 @@ class PickWoodObstacleBoxSpawner(Node):
         seed = int(self.get_parameter("seed").value)
         self._rng = random.Random(seed if seed != 0 else None)
         self._objects = self._make_objects()
+        self._log_z_audit()
 
         qos = QoSProfile(depth=1)
         qos.reliability = ReliabilityPolicy.RELIABLE
@@ -95,6 +98,10 @@ class PickWoodObstacleBoxSpawner(Node):
         rate_hz = max(0.1, float(self.get_parameter("publish_rate_hz").value))
         self._timer = self.create_timer(1.0 / rate_hz, self._publish_markers)
         self._publish_markers()
+
+        self._respawn_srv = self.create_service(
+            Trigger, "/sim/respawn_objects", self._on_respawn
+        )
 
     def _default_world_file(self) -> str:
         pkg_share = get_package_share_directory("robot_gazebo")
@@ -277,6 +284,65 @@ class PickWoodObstacleBoxSpawner(Node):
         )
         return [wood, obstacle]
 
+    def _log_z_audit(self) -> None:
+        base_world_z = float(self.get_parameter("robot_base_world_z").value)
+        self.get_logger().info(
+            f"[Z_DEBUG] table_top_z = {self._table_height:.4f}"
+        )
+        self.get_logger().info(
+            f"[Z_DEBUG] robot_base_world_z = {base_world_z:.4f}"
+        )
+        self.get_logger().info(
+            f"[Z_AUDIT][spawner] table_top_world_z={self._table_height:.4f} "
+            f"robot_base_world_z={base_world_z:.4f} "
+            f"model_origin=box_center marker_frame={self._frame_id}"
+        )
+        for obj in self._objects:
+            center_world_z = obj.center_world[2]
+            top_world_z = center_world_z + obj.size[2] / 2.0
+            bottom_world_z = center_world_z - obj.size[2] / 2.0
+            center_base_z = center_world_z - base_world_z
+            top_base_z = top_world_z - base_world_z
+            bottom_base_z = bottom_world_z - base_world_z
+            if obj.role == "pick_object":
+                self.get_logger().info(
+                    f"[Z_DEBUG] wood_height = {obj.size[2]:.4f}"
+                )
+                self.get_logger().info(
+                    f"[Z_DEBUG] wood_pose_world.z = {center_world_z:.4f}"
+                )
+                self.get_logger().info(
+                    f"[Z_DEBUG] before_transform_world_z = {center_world_z:.4f}"
+                )
+                self.get_logger().info(
+                    f"[Z_DEBUG] after_transform_base_z = {center_base_z:.4f}"
+                )
+                self.get_logger().info(
+                    f"[Z_DEBUG] transform_delta_z = {center_base_z - center_world_z:.4f}"
+                )
+                self.get_logger().info(
+                    f"[Z_DEBUG] wood_pose_base.z = {center_base_z:.4f}"
+                )
+                self.get_logger().info(
+                    f"[Z_DEBUG] expected_wood_top_z = {top_world_z:.4f}"
+                )
+                self.get_logger().info(
+                    f"[Z_DEBUG] measured_expected_z = {center_world_z:.4f}"
+                )
+                self.get_logger().info(
+                    f"[Z_DEBUG] current_used_z = {base_world_z:.4f}"
+                )
+                self.get_logger().info(
+                    f"[Z_DEBUG] z_error = {center_world_z - base_world_z:.4f}"
+                )
+            self.get_logger().info(
+                f"[Z_AUDIT][spawner] {obj.name} role={obj.role} size_z={obj.size[2]:.4f} "
+                f"world_z bottom/center/top=({bottom_world_z:.4f} "
+                f"{center_world_z:.4f} {top_world_z:.4f}) "
+                f"base_z bottom/center/top=({bottom_base_z:.4f} "
+                f"{center_base_z:.4f} {top_base_z:.4f})"
+            )
+
     def _make_box_sdf(
         self,
         model_name: str,
@@ -343,6 +409,54 @@ class PickWoodObstacleBoxSpawner(Node):
             )
         else:
             self.get_logger().info(f"Spawn {obj.name} OK")
+
+    def _delete_object(self, name: str) -> None:
+        gz_world = str(self.get_parameter("gz_world_name").value)
+        req_str = f'name: "{name}" type: 2'
+        cmd = [
+            "gz", "service",
+            "-s", f"/world/{gz_world}/remove",
+            "--reqtype", "gz.msgs.Entity",
+            "--reptype", "gz.msgs.Boolean",
+            "--timeout", "3000",
+            "--req", req_str,
+        ]
+        self.get_logger().info(f"Deleting '{name}' from Gazebo world '{gz_world}'")
+        try:
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=10.0)
+            if result.returncode != 0:
+                self.get_logger().warn(
+                    f"Delete '{name}' returned non-zero: "
+                    f"{(result.stderr or result.stdout).strip()}"
+                )
+            else:
+                self.get_logger().info(f"Delete '{name}' OK")
+        except Exception as exc:
+            self.get_logger().warn(f"Delete '{name}' exception: {exc}")
+
+    def _on_respawn(
+        self, request: Trigger.Request, response: Trigger.Response
+    ) -> Trigger.Response:
+        self.get_logger().info("[respawn] Respawning objects with new random poses...")
+        try:
+            for obj in self._objects:
+                self._delete_object(obj.name)
+                try:
+                    os.unlink(obj.sdf_path)
+                except Exception:
+                    pass
+            self._objects = self._make_objects()
+            for obj in self._objects:
+                self._spawn_object(obj)
+            self._publish_markers()
+            response.success = True
+            response.message = f"Respawned {len(self._objects)} objects"
+            self.get_logger().info(f"[respawn] {response.message}")
+        except Exception as exc:
+            response.success = False
+            response.message = str(exc)
+            self.get_logger().error(f"[respawn] Failed: {exc}")
+        return response
 
     def _publish_markers(self) -> None:
         for idx, obj in enumerate(self._objects):

@@ -268,7 +268,7 @@
     <child  link  ="link_1" />
     <axis   xyz   ="0 0 1" />
     <limit  lower ="-2.0943"               upper     ="2.0943"
-            effort="1000"                  velocity  ="5.0" />
+            effort="1000"                  velocity  ="1.0" />
   </joint>
   <!-- JOINT 2 -->
   <joint    name  ="joint_2"               type      ="revolute">
@@ -277,7 +277,7 @@
     <child  link  ="link_2" />
     <axis   xyz   ="0 0 1" />
     <limit  lower ="-1.5707"               upper     ="2.6179"
-            effort="1000"                  velocity  ="5.0" />
+            effort="1000"                  velocity  ="1.0" />
   </joint>
   <!-- JOINT 3 -->
   <joint    name  ="joint_3"               type      ="revolute">
@@ -286,7 +286,7 @@
     <child  link  ="link_3" />
     <axis   xyz   ="0 0 1" />
     <limit  lower ="-1.5707"               upper     ="1.5707"
-            effort="1000"                  velocity  ="5.0" />
+            effort="1000"                  velocity  ="1.0" />
   </joint>
   <!-- JOINT 4 -->
   <joint    name  ="joint_4"               type    ="revolute">
@@ -295,7 +295,7 @@
     <child  link  ="link_4" />
     <axis   xyz   ="0 0 1" />
     <limit  lower ="-1.5707"               upper     ="1.5707"
-            effort="1000"                  velocity  ="5.0" />
+            effort="1000"                  velocity  ="2.0" />
   </joint>
   <!-- JOINT 5 -->
   <joint    name  ="joint_5"               type    ="revolute">
@@ -304,7 +304,7 @@
     <child  link  ="link_5" />
     <axis   xyz   ="0 0 1" />
     <limit  lower ="-1.5707"               upper    ="1.5707"
-            effort="1000"                  velocity ="5.0" />
+            effort="1000"                  velocity ="2.0" />
   </joint>
   <!-- JOINT 6 -->
   <joint    name  ="joint_6"               type    ="revolute">
@@ -313,7 +313,7 @@
     <child  link  ="link_6" />
     <axis   xyz   ="0 0 1" />
     <limit  lower ="-3.14159"               upper     ="3.14159"
-            effort="1000"                  velocity  ="5.0" />
+            effort="1000"                  velocity  ="2.0" />
   </joint>
   <!-- joint_gl -->
   <joint    name  ="joint_gl"              type      ="prismatic">
