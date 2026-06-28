@@ -46,7 +46,7 @@ def generate_launch_description():
             "base_frame": "link_6",
             "velocity_scale": 1.0,
             "acceleration_scale": 1.0,
-            "gripper_max_open": 0.0381,
+            "gripper_max_open": 0.05,
         },
     ]
 

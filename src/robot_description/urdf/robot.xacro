@@ -321,8 +321,8 @@
     <parent link  ="link_6" />
     <child  link  ="gripper_l" />
     <axis   xyz   ="1 0 0" />
-    <limit  lower ="-0.001"                upper     ="0.02"
-            effort="50"                    velocity  ="0.05" />
+    <limit  lower ="-0.001"                upper     ="0.025"
+            effort="50"                    velocity  ="0.5" />
   </joint>
   <!-- joint_gr -->
   <joint    name  ="joint_gr"              type      ="prismatic">
@@ -330,8 +330,8 @@
     <parent link  ="link_6" />
     <child  link  ="gripper_r" />
     <axis   xyz   ="1 0 0" />
-    <limit  lower ="-0.001"                upper     ="0.02"
-            effort="50"                    velocity  ="0.05" />
+    <limit  lower ="-0.001"                upper     ="0.025"
+            effort="50"                    velocity  ="0.5" />
   </joint>
 
   <gazebo reference="gripper_l">

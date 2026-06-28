@@ -576,7 +576,7 @@ double RobotTcpClient::get_pos_axis_deg(uint8_t axis_id, int timeout_ms)
 
 void RobotTcpClient::run_axis(uint8_t axis_id, double pos_deg, double vel_deg_s)
 {
-  pos_deg = clamp(pos_deg, -90.0, 90.0);
+  pos_deg = clamp(pos_deg, -180.0, 180.0);
   vel_deg_s = clamp(vel_deg_s, 0.001, 89.999);
 
   const int32_t pos_i = static_cast<int32_t>(std::llround(pos_deg * 1000.0));
