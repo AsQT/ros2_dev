@@ -19,6 +19,10 @@ find_package(geometry_msgs REQUIRED)
 find_package(trajectory_msgs REQUIRED)
 find_package(robot_hardware_interface REQUIRED)
 find_package(robot_task_manager REQUIRED)
+find_package(robot_vision_pipeline_msgs REQUIRED)
+find_package(tf2 REQUIRED)
+find_package(tf2_ros REQUIRED)
+find_package(tf2_geometry_msgs REQUIRED)
 find_package(ament_index_cpp REQUIRED)
 find_package(rviz_common REQUIRED)
 find_package(rviz_rendering REQUIRED)
@@ -53,6 +57,10 @@ ament_target_dependencies(robot_gui_node
   trajectory_msgs
   robot_hardware_interface
   robot_task_manager
+  robot_vision_pipeline_msgs
+  tf2
+  tf2_ros
+  tf2_geometry_msgs
   ament_index_cpp
   rviz_common
   rviz_rendering

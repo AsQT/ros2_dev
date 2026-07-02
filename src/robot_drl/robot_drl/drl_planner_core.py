@@ -125,10 +125,12 @@ class DrlTrajectoryPlannerCore:
         vn_stats: Optional[config.VecNormalizeStats],
         env_cfg: dict,
         calibrated_start_tcp_base: np.ndarray,
+        model_path: str = "",
     ) -> None:
         self._model = model
         self._vn_stats = vn_stats
         self._env_cfg = env_cfg
+        self._model_path = str(model_path)
 
         # Planning parameters from env config
         self._action_step = float(env_cfg.get("action_step", config.ACTION_STEP))
@@ -217,6 +219,11 @@ class DrlTrajectoryPlannerCore:
     def calibrated_start_tcp_base(self) -> np.ndarray:
         """Original calibrated value in BASE frame."""
         return self._calibrated_start_tcp_base.copy()
+
+    @property
+    def model_path(self) -> str:
+        """Path or configured subpath of the loaded model."""
+        return self._model_path
 
     @property
     def action_step(self) -> float:
@@ -902,6 +909,7 @@ def load_planner(
         vn_stats=vn_stats,
         env_cfg=env_cfg,
         calibrated_start_tcp_base=tcp,
+        model_path=str(model_path),
     )
 
     return planner, env_cfg

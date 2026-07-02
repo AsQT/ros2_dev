@@ -156,8 +156,17 @@ class YoloJsonToObjectDetectionNode(Node):
             dist_m = float(center_dist)
 
         if dist_m <= 0.0:
+            # Not fatal: this adapter still publishes the detection below with
+            # bbox/class/id regardless of depth validity (codex2.md
+            # "vision_depth_roi_and_height_reference_fix" section 11, Cách A —
+            # depth robustness is the mapper's job). pixel_to_base_mapper_node
+            # samples a much larger bbox-scaled ROI and will typically still
+            # resolve a usable surface depth even when this narrow center
+            # patch is invalid (e.g. an IR dropout hole on a white/glossy box).
             self.get_logger().warn(
-                f"Invalid depth near bbox center ({cx}, {cy}); encoding={depth_msg.encoding}."
+                f"Invalid depth near bbox center ({cx}, {cy}); encoding={depth_msg.encoding}. "
+                f"Detection still published; pixel_to_base_mapper_node may still resolve "
+                f"depth from a wider ROI."
             )
 
         return (

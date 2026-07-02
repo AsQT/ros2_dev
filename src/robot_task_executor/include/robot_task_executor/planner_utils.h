@@ -16,6 +16,7 @@ namespace robot_task_executor
 
 class WaypointLoader;
 class TransformUtils;
+class ExecutorExperimentLogger;
 
 struct PlanResult
 {
@@ -48,6 +49,13 @@ public:
   geometry_msgs::msg::Quaternion cartesian_quat() const { return cartesian_quat_; }
   double last_cartesian_fraction() const { return last_cartesian_fraction_; }
   std::shared_ptr<moveit::planning_interface::MoveGroupInterface> get_move_group() const { return move_group_; }
+
+  void set_executor_logger(std::shared_ptr<ExecutorExperimentLogger> logger);
+  void set_log_context(
+      uint64_t action_call_id,
+      const std::string& execute_mode,
+      const std::vector<geometry_msgs::msg::Pose>& refs = {});
+  void clear_log_context();
 
   PlanResult plan_joint_target(
       const std::string& target_name,
@@ -95,6 +103,10 @@ private:
   std::string task_frame_ = "base_link";
   double last_cartesian_fraction_ = 0.0;
   geometry_msgs::msg::Quaternion cartesian_quat_;
+  std::shared_ptr<ExecutorExperimentLogger> executor_logger_;
+  uint64_t log_action_call_id_ = 0;
+  std::string log_execute_mode_;
+  std::vector<geometry_msgs::msg::Pose> log_refs_;
 
   rclcpp::Logger logger() const { return node_->get_logger(); }
 };

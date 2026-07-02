@@ -49,3 +49,29 @@
     - Source of truth là source code hiện tại trong `robot_bringup`.
     - Tài liệu này không thay thế kiểm tra runtime bằng `ros2 node list`, `ros2 topic list`, `ros2 service list`, `ros2 action list` sau khi launch.
     - Bringup không gọi MoveIt trực tiếp trong code, nhưng launch `move_group`, `task_servers_*`, `robot_drl_executor_node` và GUI/client. Thất bại thường đến từ include thiếu package, controller chưa active hoặc action/server chưa sẵn sàng.
+
+
+Lấy Data PickPlace
+
+ros2 launch robot_bringup rl_pick_place_campaign.launch.py \ num_runs:=50 \
+  output_dir:=/home/minhquang/rl_eval_runs/experiment_01
+
+Cần bạn chạy lệnh này trong terminal (cần nhập password sudo một lần):
+
+
+echo "minhquang ALL=(ALL) NOPASSWD: /sbin/shutdown" | sudo tee /etc/sudoers.d/shutdown-nopasswd
+Sau đó kiểm tra lại:
+
+
+sudo -n /bin/true && echo "OK"
+Khi OK rồi, quy trình chạy campaign 100 lần:
+
+Terminal 1:
+
+
+ros2 launch robot_bringup rl_pick_place_campaign.launch.py num_runs:=100
+Terminal 2 (chạy ngay sau hoặc trước cũng được):
+
+
+/home/minhquang/shutdown_after_campaign.sh
+Script sẽ tự chờ campaign runner xuất hiện, rồi đợi nó chạy xong 100 lần, rồi đếm ngược 60s rồi tắt máy.

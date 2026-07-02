@@ -10,7 +10,11 @@
 #include "moveit_msgs/msg/move_it_error_codes.hpp"
 #include "moveit_msgs/msg/robot_trajectory.hpp"
 #include "rclcpp/rclcpp.hpp"
+#include "robot_drl_executor/executor_experiment_logger.hpp"
 #include "robot_task_executor_msgs/srv/move_cartesian_pose_sequence.hpp"
+#include "std_srvs/srv/trigger.hpp"
+#include "tf2_ros/buffer.h"
+#include "tf2_ros/transform_listener.h"
 
 namespace
 {
@@ -58,6 +62,8 @@ public:
   : Node("robot_drl_executor_node")
   {
     init_parameters();
+    tf_buffer_ = std::make_shared<tf2_ros::Buffer>(get_clock());
+    tf_listener_ = std::make_shared<tf2_ros::TransformListener>(*tf_buffer_);
     create_services();
 
     RCLCPP_INFO(get_logger(), "robot_drl_executor_node constructed.");
@@ -92,6 +98,7 @@ public:
     RCLCPP_INFO(get_logger(), "  Planning frame:       '%s'", raw_planning_frame.c_str());
     RCLCPP_INFO(get_logger(), "  Pose reference frame: '%s'", raw_pose_ref_frame.c_str());
     RCLCPP_INFO(get_logger(), "  EE link:              '%s'", raw_ee_link.c_str());
+    init_executor_logger();
   }
 
 private:
@@ -109,6 +116,13 @@ private:
     declare_parameter<double>("cartesian_eef_step", 0.01);
     declare_parameter<double>("cartesian_jump_threshold", 0.0);
     declare_parameter<double>("cartesian_success_threshold", 0.95);
+    declare_parameter<bool>("enable_executor_logging", false);
+    declare_parameter<std::string>("log_root_dir", "/home/minhquang/ros2_dev/Log_robot_data");
+    declare_parameter<std::string>(
+      "executor_log_dir", "/home/minhquang/ros2_dev/Log_robot_data/executor_logs/DrlExecutor");
+    declare_parameter<double>("executor_sample_rate_hz", 50.0);
+    declare_parameter<std::string>("executor_base_frame", "base_link");
+    declare_parameter<std::string>("executor_tcp_frame", "tcp_link");
 
     get_parameter("move_group_name", move_group_name_);
     get_parameter("base_frame", base_frame_);
@@ -121,6 +135,32 @@ private:
     get_parameter("cartesian_eef_step", cartesian_eef_step_);
     get_parameter("cartesian_jump_threshold", cartesian_jump_threshold_);
     get_parameter("cartesian_success_threshold", cartesian_success_threshold_);
+    get_parameter("enable_executor_logging", enable_executor_logging_);
+    get_parameter("executor_log_dir", executor_log_dir_);
+    get_parameter("executor_sample_rate_hz", executor_sample_rate_hz_);
+    get_parameter("executor_base_frame", executor_base_frame_);
+    get_parameter("executor_tcp_frame", executor_tcp_frame_);
+  }
+
+  void init_executor_logger()
+  {
+    if (!enable_executor_logging_) {
+      RCLCPP_INFO(get_logger(), "Executor experiment logging disabled.");
+      return;
+    }
+
+    try {
+      executor_logger_ = std::make_shared<robot_task_executor::ExecutorExperimentLogger>(
+        shared_from_this(),
+        tf_buffer_,
+        executor_log_dir_,
+        executor_sample_rate_hz_,
+        executor_base_frame_,
+        executor_tcp_frame_);
+    } catch (const std::exception & ex) {
+      executor_logger_.reset();
+      RCLCPP_WARN(get_logger(), "Executor experiment logger unavailable: %s", ex.what());
+    }
   }
 
   void create_services()
@@ -141,10 +181,95 @@ private:
       rmw_qos_profile_services_default,
       service_callback_group_);
 
+    // Stop service (codex.md section 7.5/7.6): halt the in-flight cartesian
+    // trajectory so an RL action-wrapper's Stop actually stops the robot.
+    // Same Reentrant group so it can run while the sequence handler blocks.
+    stop_service_ = create_service<std_srvs::srv::Trigger>(
+      "/move_cartesian_stop",
+      [this](
+        const std::shared_ptr<std_srvs::srv::Trigger::Request>,
+        const std::shared_ptr<std_srvs::srv::Trigger::Response> response)
+      {
+        if (!move_group_) {
+          response->success = false;
+          response->message = "move_group not initialized";
+          return;
+        }
+        RCLCPP_WARN(get_logger(), "/move_cartesian_stop: stopping active trajectory");
+        move_group_->stop();
+        response->success = true;
+        response->message = "move_group stop requested";
+      },
+      rmw_qos_profile_services_default,
+      service_callback_group_);
+
     RCLCPP_INFO(
       get_logger(),
-      "DRL executor service ready: %s",
+      "DRL executor service ready: %s, /move_cartesian_stop",
       pose_sequence_service_name_.c_str());
+  }
+
+  uint64_t start_executor_log(
+    const std::string & action_name,
+    const std::string & execute_mode,
+    const std::string & note = "")
+  {
+    if (!executor_logger_ || !executor_logger_->enabled()) {
+      return 0;
+    }
+    return executor_logger_->start_call(action_name, execute_mode, note);
+  }
+
+  void finish_executor_log(
+    const uint64_t action_call_id,
+    const std::string & status,
+    const bool success,
+    const std::string & message,
+    const double fraction,
+    const std::string & note = "")
+  {
+    if (executor_logger_ && executor_logger_->enabled() && action_call_id != 0) {
+      executor_logger_->log_summary(action_call_id, status, success, message, fraction, note);
+    }
+  }
+
+  void log_ref_waypoint(
+    const uint64_t action_call_id,
+    const size_t index,
+    const geometry_msgs::msg::Pose & pose,
+    const rclcpp::Time & stamp,
+    const std::string & note = "")
+  {
+    if (executor_logger_ && executor_logger_->enabled() && action_call_id != 0) {
+      executor_logger_->log_ref_waypoint(action_call_id, index, pose, stamp, note);
+    }
+  }
+
+  void log_joint_command(
+    const uint64_t action_call_id,
+    const moveit_msgs::msg::RobotTrajectory & trajectory,
+    const std::string & note)
+  {
+    if (executor_logger_ && executor_logger_->enabled() && action_call_id != 0) {
+      executor_logger_->log_joint_command(action_call_id, trajectory, note);
+    }
+  }
+
+  void start_sampling(
+    const uint64_t action_call_id,
+    const std::string & execute_mode,
+    const std::vector<geometry_msgs::msg::Pose> & refs)
+  {
+    if (executor_logger_ && executor_logger_->enabled() && action_call_id != 0) {
+      executor_logger_->start_sampling(action_call_id, execute_mode, refs);
+    }
+  }
+
+  void stop_sampling(const uint64_t action_call_id)
+  {
+    if (executor_logger_ && executor_logger_->enabled() && action_call_id != 0) {
+      executor_logger_->stop_sampling(action_call_id);
+    }
   }
 
   void handle_cartesian_pose_sequence(
@@ -155,6 +280,10 @@ private:
   {
     const auto & poses = request->poses;
     const bool execute = request->execute;
+    const uint64_t action_call_id = start_executor_log(
+      pose_sequence_service_name_,
+      execute ? "cartesian" : "plan_only",
+      "callback_start");
 
     RCLCPP_INFO(
       get_logger(),
@@ -165,16 +294,19 @@ private:
 
     if (poses.empty()) {
       fail_response(response, "poses must not be empty", 0.0);
+      finish_executor_log(action_call_id, "failed", false, response->message, response->fraction);
       return;
     }
 
     if (!move_group_) {
       fail_response(response, "MoveGroup not initialized. Call init_move_group() first.", 0.0);
+      finish_executor_log(action_call_id, "failed", false, response->message, response->fraction);
       return;
     }
 
     std::vector<geometry_msgs::msg::Pose> waypoints;
-    if (!normalize_request_poses(poses, waypoints, response)) {
+    if (!normalize_request_poses(poses, waypoints, response, action_call_id)) {
+      finish_executor_log(action_call_id, "failed", false, response->message, response->fraction);
       return;
     }
 
@@ -198,7 +330,7 @@ private:
         response->fraction,
         cartesian_success_threshold_);
 
-      const auto fallback = execute_pose_waypoints_ptp(waypoints, execute);
+      const auto fallback = execute_pose_waypoints_ptp(waypoints, execute, action_call_id);
       if (!fallback.success) {
         response->success = false;
         response->message =
@@ -206,6 +338,13 @@ private:
           "; PTP fallback failed at fraction: " + std::to_string(fallback.fraction);
         RCLCPP_ERROR(get_logger(), "[%s] %s", pose_sequence_service_name_.c_str(),
           response->message.c_str());
+        finish_executor_log(
+          action_call_id,
+          "failed",
+          false,
+          response->message,
+          response->fraction,
+          "ptp_fallback_failed");
         return;
       }
 
@@ -216,6 +355,13 @@ private:
         : "Cartesian path was partial; PTP waypoint fallback planned successfully";
       RCLCPP_INFO(get_logger(), "[%s] %s", pose_sequence_service_name_.c_str(),
         response->message.c_str());
+      finish_executor_log(
+        action_call_id,
+        "completed",
+        response->success,
+        response->message,
+        response->fraction,
+        "ptp_fallback");
       return;
     }
 
@@ -223,7 +369,10 @@ private:
       const bool timing_ok = trajectory_has_strictly_increasing_time(cartesian.trajectory);
       bool exec_ok = false;
       if (timing_ok) {
+        log_joint_command(action_call_id, cartesian.trajectory, "robot_drl_executor cartesian");
+        start_sampling(action_call_id, "cartesian", waypoints);
         exec_ok = execute_trajectory(cartesian.trajectory);
+        stop_sampling(action_call_id);
       } else {
         RCLCPP_WARN(
           get_logger(),
@@ -238,6 +387,7 @@ private:
           std::to_string(response->fraction) + ")";
         RCLCPP_INFO(get_logger(), "[%s] %s", pose_sequence_service_name_.c_str(),
           response->message.c_str());
+        finish_executor_log(action_call_id, "completed", true, response->message, response->fraction);
         return;
       }
 
@@ -245,7 +395,7 @@ private:
         get_logger(),
         "[%s] Cartesian execution failed or was not executable; trying PTP fallback.",
         pose_sequence_service_name_.c_str());
-      const auto fallback = execute_pose_waypoints_ptp(waypoints, true);
+      const auto fallback = execute_pose_waypoints_ptp(waypoints, true, action_call_id);
       response->success = fallback.success;
       response->fraction = fallback.fraction;
       response->message = fallback.success
@@ -260,22 +410,32 @@ private:
         RCLCPP_ERROR(get_logger(), "[%s] %s", pose_sequence_service_name_.c_str(),
           response->message.c_str());
       }
+      finish_executor_log(
+        action_call_id,
+        response->success ? "completed" : "failed",
+        response->success,
+        response->message,
+        response->fraction,
+        "cartesian_execute_ptp_fallback");
       return;
     }
 
+    log_joint_command(action_call_id, cartesian.trajectory, "robot_drl_executor plan_only");
     response->success = true;
     response->message =
       "Cartesian pose sequence planned successfully (fraction=" +
       std::to_string(response->fraction) + "), plan-only";
     RCLCPP_INFO(get_logger(), "[%s] %s", pose_sequence_service_name_.c_str(),
       response->message.c_str());
+    finish_executor_log(action_call_id, "completed", true, response->message, response->fraction);
   }
 
   bool normalize_request_poses(
     const std::vector<geometry_msgs::msg::PoseStamped> & poses,
     std::vector<geometry_msgs::msg::Pose> & waypoints,
     const std::shared_ptr<
-      robot_task_executor_msgs::srv::MoveCartesianPoseSequence::Response> response)
+      robot_task_executor_msgs::srv::MoveCartesianPoseSequence::Response> response,
+    const uint64_t action_call_id)
   {
     const auto fallback_quat = default_cartesian_quaternion();
 
@@ -335,7 +495,8 @@ private:
       }
 
       geometry_msgs::msg::Pose waypoint_pose = pose_stamped.pose;
-      if (quaternion_norm(waypoint_pose.orientation) < 1e-9) {
+      const bool replaced_quaternion = quaternion_norm(waypoint_pose.orientation) < 1e-9;
+      if (replaced_quaternion) {
         RCLCPP_WARN(
           get_logger(),
           "[%s] pose[%zu]: quaternion has zero norm, replacing with fallback quat=(%.6f, %.6f, %.6f, %.6f)",
@@ -349,6 +510,12 @@ private:
       }
 
       waypoints.push_back(waypoint_pose);
+      log_ref_waypoint(
+        action_call_id,
+        i,
+        waypoint_pose,
+        rclcpp::Time(pose_stamped.header.stamp),
+        replaced_quaternion ? "zero_quaternion_replaced_with_default" : "");
       log_pose(i, waypoints.size(), waypoint_pose, frame_id);
     }
 
@@ -411,7 +578,8 @@ private:
 
   PlanResult execute_pose_waypoints_ptp(
     const std::vector<geometry_msgs::msg::Pose> & waypoints,
-    const bool execute)
+    const bool execute,
+    const uint64_t action_call_id)
   {
     PlanResult result;
     if (waypoints.empty()) {
@@ -479,13 +647,24 @@ private:
       }
 
       if (execute) {
+        log_joint_command(
+          action_call_id,
+          plan.trajectory,
+          "robot_drl_executor ptp_fallback waypoint=" + std::to_string(i));
+        start_sampling(action_call_id, "ptp_fallback", ptp_waypoints);
         const auto exec_result = move_group_->execute(plan.trajectory);
+        stop_sampling(action_call_id);
         if (exec_result != moveit::core::MoveItErrorCode::SUCCESS) {
           result.error_code = exec_result.val;
           result.fraction = static_cast<double>(completed) / static_cast<double>(ptp_waypoints.size());
           move_group_->clearPoseTargets();
           return result;
         }
+      } else {
+        log_joint_command(
+          action_call_id,
+          plan.trajectory,
+          "robot_drl_executor ptp_fallback plan_only waypoint=" + std::to_string(i));
       }
 
       ++completed;
@@ -619,9 +798,13 @@ private:
   }
 
   std::shared_ptr<moveit::planning_interface::MoveGroupInterface> move_group_;
+  std::shared_ptr<tf2_ros::Buffer> tf_buffer_;
+  std::shared_ptr<tf2_ros::TransformListener> tf_listener_;
+  std::shared_ptr<robot_task_executor::ExecutorExperimentLogger> executor_logger_;
   rclcpp::CallbackGroup::SharedPtr service_callback_group_;
   rclcpp::Service<robot_task_executor_msgs::srv::MoveCartesianPoseSequence>::SharedPtr
     pose_sequence_service_;
+  rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr stop_service_;
 
   std::string move_group_name_;
   std::string base_frame_;
@@ -634,6 +817,11 @@ private:
   double cartesian_eef_step_ = 0.01;
   double cartesian_jump_threshold_ = 0.0;
   double cartesian_success_threshold_ = 0.95;
+  bool enable_executor_logging_ = false;
+  std::string executor_log_dir_;
+  double executor_sample_rate_hz_ = 50.0;
+  std::string executor_base_frame_;
+  std::string executor_tcp_frame_;
 };
 
 int main(int argc, char ** argv)

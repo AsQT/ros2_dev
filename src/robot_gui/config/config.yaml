@@ -1,6 +1,11 @@
 robot_gui:
   ros__parameters:
     image_topics:
-      raw: "/camera/color/image_raw"
-      detection: "/yolo/detection_image"
-      yolo: "/yolo/image"
+      raw: "/camera/camera/color/image_raw"
+      # "detection" is the shared processed/annotated feed used by the Vision
+      # tab's second cell and by the PickPlace Vision / PickPlace RL / MovePoseRL
+      # preview widgets (codex.md section 8: both PickPlace tabs must default to
+      # the same processed image topic).
+      detection: "/vision/yolo/image_annotated"
+      # "yolo" is the alternate processed feed selectable in the Vision tab combo.
+      yolo: "/vision/yolo/roi_debug_image"

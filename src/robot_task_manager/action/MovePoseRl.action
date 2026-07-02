@@ -1,6 +1,9 @@
 geometry_msgs/Pose target_pose
 float64 velocity_scale
 bool execute
+
+# Opt-in per-goal CSV metrics summary logging (default false: no file written)
+bool enable_metrics_log
 ---
 bool success
 string message

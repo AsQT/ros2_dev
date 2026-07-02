@@ -1,4 +1,5 @@
 #include "robot_task_executor/planner_utils.h"
+#include "robot_task_executor/executor_experiment_logger.hpp"
 #include "robot_task_executor/transform_utils.h"
 #include "robot_task_executor/waypoint_loader.h"
 
@@ -44,6 +45,28 @@ void PlannerUtils::init(
 void PlannerUtils::set_task_frame(const std::string& frame)
 {
   task_frame_ = frame;
+}
+
+void PlannerUtils::set_executor_logger(std::shared_ptr<ExecutorExperimentLogger> logger)
+{
+  executor_logger_ = std::move(logger);
+}
+
+void PlannerUtils::set_log_context(
+    const uint64_t action_call_id,
+    const std::string& execute_mode,
+    const std::vector<geometry_msgs::msg::Pose>& refs)
+{
+  log_action_call_id_ = action_call_id;
+  log_execute_mode_ = execute_mode;
+  log_refs_ = refs;
+}
+
+void PlannerUtils::clear_log_context()
+{
+  log_action_call_id_ = 0;
+  log_execute_mode_.clear();
+  log_refs_.clear();
 }
 
 void PlannerUtils::rpy_to_quaternion(const double roll, const double pitch, const double yaw,
@@ -114,10 +137,27 @@ PlanResult PlannerUtils::plan_joint_target(
   result.trajectory = plan.trajectory;
   result.success = true;
 
+  if (executor_logger_ && log_action_call_id_ != 0)
+  {
+    executor_logger_->log_joint_command(
+        log_action_call_id_, result.trajectory, "PlannerUtils::plan_joint_target");
+  }
+
   if (execute)
   {
     RCLCPP_INFO(logger(), "[Planner] Executing '%s'...", target_name.c_str());
+    if (executor_logger_ && log_action_call_id_ != 0)
+    {
+      executor_logger_->start_sampling(
+          log_action_call_id_,
+          log_execute_mode_.empty() ? "joint_target" : log_execute_mode_,
+          log_refs_);
+    }
     const auto exec_result = move_group_->execute(plan.trajectory);
+    if (executor_logger_ && log_action_call_id_ != 0)
+    {
+      executor_logger_->stop_sampling(log_action_call_id_);
+    }
     if (exec_result != moveit::core::MoveItErrorCode::SUCCESS)
     {
       result.error_code = exec_result.val;
@@ -221,10 +261,27 @@ PlanResult PlannerUtils::plan_named_pose_target(
   result.trajectory = plan.trajectory;
   result.success = true;
 
+  if (executor_logger_ && log_action_call_id_ != 0)
+  {
+    executor_logger_->log_joint_command(
+        log_action_call_id_, result.trajectory, "PlannerUtils::plan_named_pose_target");
+  }
+
   if (execute)
   {
     RCLCPP_INFO(logger(), "[Planner] Executing trajectory for '%s'...", target_name.c_str());
+    if (executor_logger_ && log_action_call_id_ != 0)
+    {
+      executor_logger_->start_sampling(
+          log_action_call_id_,
+          log_execute_mode_.empty() ? "ptp" : log_execute_mode_,
+          log_refs_);
+    }
     const auto exec_result = move_group_->execute(plan.trajectory);
+    if (executor_logger_ && log_action_call_id_ != 0)
+    {
+      executor_logger_->stop_sampling(log_action_call_id_);
+    }
     if (exec_result != moveit::core::MoveItErrorCode::SUCCESS)
     {
       result.error_code = exec_result.val;
@@ -403,7 +460,19 @@ PlanResult PlannerUtils::execute_pose_waypoints_ptp(
 
     if (execute)
     {
+      if (executor_logger_ && log_action_call_id_ != 0)
+      {
+        executor_logger_->log_joint_command(
+            log_action_call_id_,
+            plan.trajectory,
+            "PlannerUtils::execute_pose_waypoints_ptp waypoint=" + std::to_string(i));
+        executor_logger_->start_sampling(log_action_call_id_, "ptp_fallback", log_refs_);
+      }
       const auto exec_result = move_group_->execute(plan.trajectory);
+      if (executor_logger_ && log_action_call_id_ != 0)
+      {
+        executor_logger_->stop_sampling(log_action_call_id_);
+      }
       if (exec_result != moveit::core::MoveItErrorCode::SUCCESS)
       {
         result.error_code = exec_result.val;
@@ -418,6 +487,13 @@ PlanResult PlannerUtils::execute_pose_waypoints_ptp(
         result.fraction = static_cast<double>(completed) / static_cast<double>(waypoints.size());
         return result;
       }
+    }
+    else if (executor_logger_ && log_action_call_id_ != 0)
+    {
+      executor_logger_->log_joint_command(
+          log_action_call_id_,
+          plan.trajectory,
+          "PlannerUtils::execute_pose_waypoints_ptp plan_only waypoint=" + std::to_string(i));
     }
 
     ++completed;
@@ -576,7 +652,21 @@ bool PlannerUtils::execute_trajectory(const moveit_msgs::msg::RobotTrajectory& t
     }
   }
 
+  if (executor_logger_ && log_action_call_id_ != 0)
+  {
+    executor_logger_->log_joint_command(
+        log_action_call_id_, trajectory_to_execute, "PlannerUtils::execute_trajectory");
+    executor_logger_->start_sampling(
+        log_action_call_id_,
+        log_execute_mode_.empty() ? "execute" : log_execute_mode_,
+        log_refs_);
+  }
+
   const auto exec_result = move_group_->execute(trajectory_to_execute);
+  if (executor_logger_ && log_action_call_id_ != 0)
+  {
+    executor_logger_->stop_sampling(log_action_call_id_);
+  }
   if (exec_result != moveit::core::MoveItErrorCode::SUCCESS)
   {
     RCLCPP_ERROR(logger(), "[Planner] execute() failed (error code: %d)", exec_result.val);

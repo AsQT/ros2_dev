@@ -70,3 +70,10 @@ ros2 launch robot_task_manager task_servers_sim.launch.py
 - `execute=false` dùng để plan-only.
 - DRL actions cần `drl_unified_planner_node` và service `/drl/*` khả dụng.
 - Repeatability test gọi action con `/move_to_pose` và `/move_to_pose_cartesian` theo loop.
+
+## 11. TCP CSV logging
+`/pickplace` (luôn log riêng) và `/move_to_pose`, `/move_to_pose_cartesian`,
+`/repeatability_test`, `/move_checker_board` (opt-in qua `goal.enable_tcp_log`, cần thêm tham số
+launch `enable_executor_logging:=true`) đều hỗ trợ ghi 1 file CSV set/actual TCP pose riêng cho
+mỗi lần gọi action, dùng để đánh giá độ chính xác bám quỹ đạo. Xem hướng dẫn chi tiết tại
+[docs/tcp_csv_logging_usage.md](docs/tcp_csv_logging_usage.md).

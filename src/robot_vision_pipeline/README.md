@@ -34,7 +34,7 @@ Pipeline perception Python dùng YOLO, ArUco, depth/intrinsic/extrinsic và mark
 | `/vision/yolo/detections_json` | String | YOLO detections JSON |
 | `/vision/yolo/hough_yaw_json` | String | Yaw estimation JSON |
 | `/vision/woods`, `/vision/boxes` | WoodArray/BoxArray | Object pose output |
-| `/vision/detection_markers` | MarkerArray | RViz visualization |
+| `/vision/object_markers` | MarkerArray | RViz visualization |
 
 ## 6. File launch liên quan
 `vision_full_pipeline.launch.py`, `vision_image_test.launch.py`, `yolo_detect_real.launch.py`, `yolo_detect_sim.launch.py`, `yolo_hough_yaw_estimator.launch.py`, `yolo_depth_xyz_from_intrinsic.launch.py`, `aruco_detect.launch.py`, `aruco_extrinsic_calibrator.launch.py`.

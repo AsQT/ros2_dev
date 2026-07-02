@@ -17,6 +17,76 @@ pixel_to_base_mapper_node:
     default_box_size_z_m: 0.05
     box_obstacle_margin_m: 0.02
 
+    # Depth robust sampling: a hole at the exact bbox center pixel (common on
+    # white/glossy boxes where the RealSense IR pattern washes out) must not
+    # drop the whole detection when the surrounding bbox area still has
+    # valid depth. See depth_utils.robust_bbox_roi_depth().
+    depth_roi_enable: true
+    depth_roi_scale: 0.6
+    depth_roi_min_width_px: 15
+    depth_roi_min_height_px: 15
+    depth_roi_max_width_px: 120
+    depth_roi_max_height_px: 120
+    depth_roi_stride_px: 1
+    depth_min_valid_samples: 20
+    depth_outlier_threshold_m: 0.03
+    depth_statistic: "percentile"
+    depth_percentile: 20.0
+
+    # Fixed camera/table reference: distance from the camera to the table
+    # surface along the depth image, in metres. Measured from this rig's
+    # camera->world extrinsic translation Z (config/Extrinsic_camera_to_world.yaml
+    # t_camera_to_world ~= 0.8695 m); re-measure and update if the camera
+    # mount changes.
+    camera_table_depth_m: 0.868
+
+    # Object height = camera_table_depth_m - object_surface_depth_m (both
+    # raw camera-frame distances) instead of differencing z in the output
+    # frame against box_table_z_m — robust to a pad/riser under the object.
+    use_camera_table_depth_for_height: true
+    wood_nominal_size_m: 0.030
+
+    # Box height estimation by 4x4 grid sampling + clustering. Primary path
+    # when box_height_grid_enable=true (falls back to the single ROI-wide
+    # height above, then to skipping the object, if the grid fails).
+    box_height_grid_enable: true
+    box_height_grid_rows: 4
+    box_height_grid_cols: 4
+    box_height_grid_inner_scale: 0.70
+    box_height_grid_patch_half_size_px: 3
+    box_height_grid_patch_min_valid_px: 5
+    box_height_grid_min_valid_points: 6
+    box_height_cluster_tolerance_m: 0.020
+    box_height_cluster_min_points: 4
+    box_height_cluster_statistic: "mean"   # mean hoặc median
+
+    # Reject pad/support-plane height being selected as box height: never
+    # pick a cluster below box_height_low_cluster_threshold_m if a higher
+    # valid cluster is also available, even if the low cluster has more
+    # points (this is what previously locked box.pose.position.z onto the
+    # pad's ~0.05 m height instead of the box's real height).
+    box_height_prefer_higher_cluster: true
+    box_height_low_cluster_reject_enable: true
+    box_height_low_cluster_threshold_m: 0.070
+    box_height_expected_min_m: 0.080
+
+    # Legacy box height path (world-frame z-cloud minus box_table_z_m), only
+    # used when use_camera_table_depth_for_height is false.
+    use_measured_box_height: true
+
+    box_height_roi_radius_px: 8
+    box_height_min_valid_samples: 5
+    box_height_outlier_threshold_m: 0.02
+    box_height_use_median: true
+
+    # Table height in mapper output frame. Only used by the legacy height
+    # path above. If output frame is aruco_world and aruco_world origin lies
+    # on the table plane, this can stay 0.0 temporarily.
+    box_table_z_m: 0.0
+
+    box_height_min_m: 0.005
+    box_height_max_m: 0.500
+
     fake_depth_m: 0.55
     use_fake_depth_if_missing: false
 

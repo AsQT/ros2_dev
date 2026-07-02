@@ -1,0 +1,32 @@
+# Goal
+geometry_msgs/Pose target_pose
+float64 velocity_scale
+bool execute
+
+# Obstacle source
+bool use_vision_obstacle
+string obstacle_class
+bool require_obstacle
+
+# Fallback obstacle for no-camera test
+bool use_fallback_obstacle
+geometry_msgs/Point fallback_obstacle_center
+geometry_msgs/Vector3 fallback_obstacle_size
+
+# Opt-in per-goal CSV metrics summary logging (default false: no file written)
+bool enable_metrics_log
+---
+# Result
+bool success
+string message
+string failed_stage
+
+geometry_msgs/PoseStamped target_pose
+geometry_msgs/PoseStamped obstacle_pose
+geometry_msgs/Vector3 obstacle_size
+---
+# Feedback
+string current_stage
+float32 progress
+geometry_msgs/PoseStamped current_pose
+geometry_msgs/PoseStamped obstacle_pose

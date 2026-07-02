@@ -35,6 +35,8 @@ def generate_launch_description():
             "planning_group": "arm",
             "home_target": "home",
             "base_frame": "world",
+            "log_root_dir": "/home/minhquang/ros2_dev/Log_robot_data",
+            "executor_log_dir": "/home/minhquang/ros2_dev/Log_robot_data/executor_logs",
         },
     ]
 
@@ -191,6 +193,47 @@ def generate_launch_description():
         }],
     )
 
+    move_target_rl = Node(
+        package="robot_task_manager",
+        executable="move_target_rl_server",
+        name="move_target_rl_action_server",
+        output="screen",
+        parameters=common_moveit_params + [{
+            "planning_frame": "base_link",
+            "ee_link": "tcp_link",
+            "target_class": "wood",
+            "obstacle_class": "box",
+            "vision_timeout_sec": 1.0,
+            "default_box_size": [0.10, 0.10, 0.10],
+            "target_position_tolerance_m": 0.02,
+            "wood_objects_topic": "/vision/wood_objects",
+            "box_objects_topic": "/vision/box_objects",
+            "position_tolerance_m": 0.01,
+            "drl_timeout_sec": 300.0,
+            "drl_trajectory_endpoint_tolerance_m": 0.015,
+            "drl_plan_attempts": 3,
+            "tf_timeout_sec": 2.0,
+            "sub_action_timeout_sec": 60.0,
+            "drl_planner_node_name": LaunchConfiguration("planner_node_name"),
+        }],
+    )
+
+    move_to_pose_obstacle = Node(
+        package="robot_task_manager",
+        executable="move_to_pose_obstacle_server",
+        name="move_to_pose_obstacle_action_server",
+        output="screen",
+        parameters=common_moveit_params + [{
+            "obstacle_frame": "base_link",
+            "ee_link": "tcp_link",
+            "obstacle_class": "box",
+            "vision_timeout_sec": 1.0,
+            "box_objects_topic": "/vision/box_objects",
+            "tf_timeout_sec": 2.0,
+            "collision_object_id": "move_to_pose_obstacle_box",
+        }],
+    )
+
     repeatability_test = Node(
         package="robot_task_manager",
         executable="repeatability_test_server",
@@ -220,5 +263,7 @@ def generate_launch_description():
         pickplace,
         drl_pickplace,
         move_pose_rl,
+        move_target_rl,
+        move_to_pose_obstacle,
         repeatability_test,
     ])

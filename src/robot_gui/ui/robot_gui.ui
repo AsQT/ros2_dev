@@ -62,289 +62,456 @@
     <property name="frameShape">
      <enum>QFrame::NoFrame</enum>
     </property>
-    <widget class="QFrame" name="ConnectStatus">
+    <widget class="QGroupBox" name="TcpPositionGroup">
      <property name="geometry">
       <rect>
-       <x>10</x>
-       <y>20</y>
-       <width>215</width>
-       <height>44</height>
+       <x>8</x>
+       <y>3</y>
+       <width>560</width>
+       <height>80</height>
       </rect>
      </property>
-     <property name="styleSheet">
-      <string notr="true">QFrame { color:white; border-radius:8px; border:1px solid #5da4cf; background: qlineargradient(x1:0,y1:0,x2:0,y2:1, stop:0 #bcd9e7 , stop:0.45 #7dbde9, stop:1 #95c7ea); padding:2px 10px;} QFrame:pressed {background:#003d60;}</string>
+     <property name="font">
+      <font>
+       <family>Arial</family>
+       <pointsize>11</pointsize>
+       <bold>true</bold>
+      </font>
      </property>
-     <widget class="QLabel" name="ConnectStatus_label">
-      <property name="geometry">
-       <rect>
-        <x>10</x>
-        <y>0</y>
-        <width>139</width>
-        <height>44</height>
-       </rect>
-      </property>
-      <property name="font">
-       <font>
-        <family>Arial</family>
-        <pointsize>18</pointsize>
-       </font>
-      </property>
-      <property name="styleSheet">
-       <string>color:white; background:transparent; border:0px;</string>
-      </property>
-      <property name="text">
-       <string>Connect</string>
-      </property>
-      <property name="alignment">
-       <set>Qt::AlignCenter</set>
-      </property>
-     </widget>
-     <widget class="QLabel" name="ConnectStatus_led">
-      <property name="geometry">
-       <rect>
-        <x>185</x>
-        <y>15</y>
-        <width>14</width>
-        <height>14</height>
-       </rect>
-      </property>
-      <property name="sizePolicy">
-       <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
-        <horstretch>0</horstretch>
-        <verstretch>0</verstretch>
-       </sizepolicy>
-      </property>
-      <property name="minimumSize">
-       <size>
-        <width>14</width>
-        <height>14</height>
-       </size>
-      </property>
-      <property name="maximumSize">
-       <size>
-        <width>14</width>
-        <height>14</height>
-       </size>
-      </property>
-      <property name="styleSheet">
-       <string>QLabel#ConnectStatus_led {
-    background-color: #9ca3af;
-    border: 1px solid #4b5563;
-    border-radius: 2px;
-}</string>
-      </property>
-      <property name="text">
-       <string/>
-      </property>
-      <property name="alignment">
-       <set>Qt::AlignCenter</set>
-      </property>
-     </widget>
+     <property name="styleSheet">
+      <string notr="true">QGroupBox { border:1px solid #5da4cf; border-radius:8px; margin-top:10px; background:#ffffff; } QGroupBox::title { subcontrol-origin: margin; subcontrol-position: top left; left:14px; padding:0 5px; color:#003d60; }</string>
+     </property>
+     <property name="title">
+      <string>TCP Position [mm]</string>
+     </property>
+    <widget class="QLabel" name="TcpAxisX">
+     <property name="geometry">
+      <rect>
+       <x>12</x>
+       <y>34</y>
+       <width>20</width>
+       <height>34</height>
+      </rect>
+     </property>
+     <property name="font">
+      <font>
+       <family>Arial</family>
+       <pointsize>15</pointsize>
+       <bold>true</bold>
+      </font>
+     </property>
+     <property name="styleSheet">
+      <string notr="true">color:#003d60; background:transparent; border:0px;</string>
+     </property>
+     <property name="text">
+      <string>X</string>
+     </property>
+     <property name="alignment">
+      <set>Qt::AlignRight|Qt::AlignVCenter</set>
+     </property>
     </widget>
-    <widget class="QFrame" name="PingStatus">
+    <widget class="QLabel" name="lblTcpXValue">
      <property name="geometry">
       <rect>
-       <x>263</x>
-       <y>22</y>
-       <width>215</width>
-       <height>44</height>
+       <x>36</x>
+       <y>34</y>
+       <width>95</width>
+       <height>34</height>
       </rect>
      </property>
-     <property name="styleSheet">
-      <string notr="true">QFrame { color:white; border-radius:8px; border:1px solid #5da4cf; background: qlineargradient(x1:0,y1:0,x2:0,y2:1, stop:0 #bcd9e7 , stop:0.45 #7dbde9, stop:1 #95c7ea); padding:2px 10px;} QFrame:pressed {background:#003d60;}</string>
+     <property name="font">
+      <font>
+       <family>Arial</family>
+       <pointsize>16</pointsize>
+      </font>
      </property>
-     <widget class="QLabel" name="PingStatus_label">
-      <property name="geometry">
-       <rect>
-        <x>0</x>
-        <y>0</y>
-        <width>91</width>
-        <height>44</height>
-       </rect>
-      </property>
-      <property name="font">
-       <font>
-        <family>Arial</family>
-        <pointsize>18</pointsize>
-       </font>
-      </property>
-      <property name="styleSheet">
-       <string notr="true">color:white; background:transparent; border:0px;</string>
-      </property>
-      <property name="text">
-       <string>Ping</string>
-      </property>
-      <property name="alignment">
-       <set>Qt::AlignCenter</set>
-      </property>
-     </widget>
-     <widget class="QLabel" name="PingStatus_value">
-      <property name="geometry">
-       <rect>
-        <x>90</x>
-        <y>7</y>
-        <width>101</width>
-        <height>31</height>
-       </rect>
-      </property>
-      <property name="font">
-       <font>
-        <family>Arial</family>
-        <pointsize>11</pointsize>
-       </font>
-      </property>
-      <property name="styleSheet">
-       <string notr="true">background:transparent; color:black;</string>
-      </property>
-      <property name="text">
-       <string>2 mms</string>
-      </property>
-      <property name="alignment">
-       <set>Qt::AlignCenter</set>
-      </property>
-     </widget>
+     <property name="styleSheet">
+      <string notr="true">color:#0b2545; background:transparent; border:0px;</string>
+     </property>
+     <property name="text">
+      <string>--</string>
+     </property>
+     <property name="alignment">
+      <set>Qt::AlignLeft|Qt::AlignVCenter</set>
+     </property>
     </widget>
-    <widget class="QFrame" name="PlannerStatus">
+    <widget class="QLabel" name="TcpAxisY">
      <property name="geometry">
       <rect>
-       <x>996</x>
-       <y>22</y>
-       <width>300</width>
-       <height>44</height>
+       <x>195</x>
+       <y>34</y>
+       <width>20</width>
+       <height>34</height>
       </rect>
      </property>
-     <property name="styleSheet">
-      <string notr="true">QFrame { color:white; border-radius:8px; border:1px solid #5da4cf; background: qlineargradient(x1:0,y1:0,x2:0,y2:1, stop:0 #bcd9e7 , stop:0.45 #7dbde9, stop:1 #95c7ea); padding:2px 10px;} QFrame:pressed {background:#003d60;}</string>
+     <property name="font">
+      <font>
+       <family>Arial</family>
+       <pointsize>15</pointsize>
+       <bold>true</bold>
+      </font>
      </property>
-     <widget class="QLabel" name="PlannerStatus_label">
-      <property name="geometry">
-       <rect>
-        <x>-30</x>
-        <y>0</y>
-        <width>195</width>
-        <height>44</height>
-       </rect>
-      </property>
-      <property name="font">
-       <font>
-        <family>Arial</family>
-        <pointsize>18</pointsize>
-       </font>
-      </property>
-      <property name="styleSheet">
-       <string>color:white; background:transparent; border:0px;</string>
-      </property>
-      <property name="text">
-       <string>Planner</string>
-      </property>
-      <property name="alignment">
-       <set>Qt::AlignCenter</set>
-      </property>
-     </widget>
-     <widget class="QLabel" name="PlannerStatus_value">
-      <property name="geometry">
-       <rect>
-        <x>125</x>
-        <y>5</y>
-        <width>171</width>
-        <height>31</height>
-       </rect>
-      </property>
-      <property name="font">
-       <font>
-        <family>Arial</family>
-        <pointsize>11</pointsize>
-       </font>
-      </property>
-      <property name="styleSheet">
-       <string notr="true">background:transparent; color:black;</string>
-      </property>
-      <property name="text">
-       <string>RL|Cartesian</string>
-      </property>
-      <property name="alignment">
-       <set>Qt::AlignCenter</set>
-      </property>
-     </widget>
+     <property name="styleSheet">
+      <string notr="true">color:#003d60; background:transparent; border:0px;</string>
+     </property>
+     <property name="text">
+      <string>Y</string>
+     </property>
+     <property name="alignment">
+      <set>Qt::AlignRight|Qt::AlignVCenter</set>
+     </property>
+    </widget>
+    <widget class="QLabel" name="lblTcpYValue">
+     <property name="geometry">
+      <rect>
+       <x>219</x>
+       <y>34</y>
+       <width>95</width>
+       <height>34</height>
+      </rect>
+     </property>
+     <property name="font">
+      <font>
+       <family>Arial</family>
+       <pointsize>16</pointsize>
+      </font>
+     </property>
+     <property name="styleSheet">
+      <string notr="true">color:#0b2545; background:transparent; border:0px;</string>
+     </property>
+     <property name="text">
+      <string>--</string>
+     </property>
+     <property name="alignment">
+      <set>Qt::AlignLeft|Qt::AlignVCenter</set>
+     </property>
+    </widget>
+    <widget class="QLabel" name="TcpAxisZ">
+     <property name="geometry">
+      <rect>
+       <x>378</x>
+       <y>34</y>
+       <width>20</width>
+       <height>34</height>
+      </rect>
+     </property>
+     <property name="font">
+      <font>
+       <family>Arial</family>
+       <pointsize>15</pointsize>
+       <bold>true</bold>
+      </font>
+     </property>
+     <property name="styleSheet">
+      <string notr="true">color:#003d60; background:transparent; border:0px;</string>
+     </property>
+     <property name="text">
+      <string>Z</string>
+     </property>
+     <property name="alignment">
+      <set>Qt::AlignRight|Qt::AlignVCenter</set>
+     </property>
+    </widget>
+    <widget class="QLabel" name="lblTcpZValue">
+     <property name="geometry">
+      <rect>
+       <x>402</x>
+       <y>34</y>
+       <width>95</width>
+       <height>34</height>
+      </rect>
+     </property>
+     <property name="font">
+      <font>
+       <family>Arial</family>
+       <pointsize>16</pointsize>
+      </font>
+     </property>
+     <property name="styleSheet">
+      <string notr="true">color:#0b2545; background:transparent; border:0px;</string>
+     </property>
+     <property name="text">
+      <string>--</string>
+     </property>
+     <property name="alignment">
+      <set>Qt::AlignLeft|Qt::AlignVCenter</set>
+     </property>
+    </widget>
+    </widget>
+    <widget class="QGroupBox" name="TcpOrientationGroup">
+     <property name="geometry">
+      <rect>
+       <x>576</x>
+       <y>3</y>
+       <width>560</width>
+       <height>80</height>
+      </rect>
+     </property>
+     <property name="font">
+      <font>
+       <family>Arial</family>
+       <pointsize>11</pointsize>
+       <bold>true</bold>
+      </font>
+     </property>
+     <property name="styleSheet">
+      <string notr="true">QGroupBox { border:1px solid #5da4cf; border-radius:8px; margin-top:10px; background:#ffffff; } QGroupBox::title { subcontrol-origin: margin; subcontrol-position: top left; left:14px; padding:0 5px; color:#003d60; }</string>
+     </property>
+     <property name="title">
+      <string>TCP Orientation [deg]</string>
+     </property>
+    <widget class="QLabel" name="TcpAxisRoll">
+     <property name="geometry">
+      <rect>
+       <x>12</x>
+       <y>34</y>
+       <width>20</width>
+       <height>34</height>
+      </rect>
+     </property>
+     <property name="font">
+      <font>
+       <family>Arial</family>
+       <pointsize>15</pointsize>
+       <bold>true</bold>
+      </font>
+     </property>
+     <property name="styleSheet">
+      <string notr="true">color:#003d60; background:transparent; border:0px;</string>
+     </property>
+     <property name="text">
+      <string>R</string>
+     </property>
+     <property name="alignment">
+      <set>Qt::AlignRight|Qt::AlignVCenter</set>
+     </property>
+    </widget>
+    <widget class="QLabel" name="lblTcpRollValue">
+     <property name="geometry">
+      <rect>
+       <x>36</x>
+       <y>34</y>
+       <width>95</width>
+       <height>34</height>
+      </rect>
+     </property>
+     <property name="font">
+      <font>
+       <family>Arial</family>
+       <pointsize>16</pointsize>
+      </font>
+     </property>
+     <property name="styleSheet">
+      <string notr="true">color:#0b2545; background:transparent; border:0px;</string>
+     </property>
+     <property name="text">
+      <string>--</string>
+     </property>
+     <property name="alignment">
+      <set>Qt::AlignLeft|Qt::AlignVCenter</set>
+     </property>
+    </widget>
+    <widget class="QLabel" name="TcpAxisPitch">
+     <property name="geometry">
+      <rect>
+       <x>195</x>
+       <y>34</y>
+       <width>20</width>
+       <height>34</height>
+      </rect>
+     </property>
+     <property name="font">
+      <font>
+       <family>Arial</family>
+       <pointsize>15</pointsize>
+       <bold>true</bold>
+      </font>
+     </property>
+     <property name="styleSheet">
+      <string notr="true">color:#003d60; background:transparent; border:0px;</string>
+     </property>
+     <property name="text">
+      <string>P</string>
+     </property>
+     <property name="alignment">
+      <set>Qt::AlignRight|Qt::AlignVCenter</set>
+     </property>
+    </widget>
+    <widget class="QLabel" name="lblTcpPitchValue">
+     <property name="geometry">
+      <rect>
+       <x>219</x>
+       <y>34</y>
+       <width>95</width>
+       <height>34</height>
+      </rect>
+     </property>
+     <property name="font">
+      <font>
+       <family>Arial</family>
+       <pointsize>16</pointsize>
+      </font>
+     </property>
+     <property name="styleSheet">
+      <string notr="true">color:#0b2545; background:transparent; border:0px;</string>
+     </property>
+     <property name="text">
+      <string>--</string>
+     </property>
+     <property name="alignment">
+      <set>Qt::AlignLeft|Qt::AlignVCenter</set>
+     </property>
+    </widget>
+    <widget class="QLabel" name="TcpAxisYaw">
+     <property name="geometry">
+      <rect>
+       <x>378</x>
+       <y>34</y>
+       <width>20</width>
+       <height>34</height>
+      </rect>
+     </property>
+     <property name="font">
+      <font>
+       <family>Arial</family>
+       <pointsize>15</pointsize>
+       <bold>true</bold>
+      </font>
+     </property>
+     <property name="styleSheet">
+      <string notr="true">color:#003d60; background:transparent; border:0px;</string>
+     </property>
+     <property name="text">
+      <string>Y</string>
+     </property>
+     <property name="alignment">
+      <set>Qt::AlignRight|Qt::AlignVCenter</set>
+     </property>
+    </widget>
+    <widget class="QLabel" name="lblTcpYawValue">
+     <property name="geometry">
+      <rect>
+       <x>402</x>
+       <y>34</y>
+       <width>95</width>
+       <height>34</height>
+      </rect>
+     </property>
+     <property name="font">
+      <font>
+       <family>Arial</family>
+       <pointsize>16</pointsize>
+      </font>
+     </property>
+     <property name="styleSheet">
+      <string notr="true">color:#0b2545; background:transparent; border:0px;</string>
+     </property>
+     <property name="text">
+      <string>--</string>
+     </property>
+     <property name="alignment">
+      <set>Qt::AlignLeft|Qt::AlignVCenter</set>
+     </property>
+    </widget>
+    </widget>
+    <widget class="QLabel" name="lblTcpPoseStatus">
+     <property name="geometry">
+      <rect>
+       <x>1146</x>
+       <y>33</y>
+       <width>120</width>
+       <height>24</height>
+      </rect>
+     </property>
+     <property name="font">
+      <font>
+       <family>Arial</family>
+       <pointsize>10</pointsize>
+       <bold>true</bold>
+      </font>
+     </property>
+     <property name="styleSheet">
+      <string notr="true">color:#003d60; background:transparent; border:0px;</string>
+     </property>
+     <property name="text">
+      <string>Waiting for TF...</string>
+     </property>
+     <property name="alignment">
+      <set>Qt::AlignRight|Qt::AlignVCenter</set>
+     </property>
     </widget>
     <widget class="QFrame" name="RobotEnableStatus">
      <property name="geometry">
       <rect>
-       <x>1346</x>
-       <y>22</y>
-       <width>270</width>
-       <height>44</height>
+       <x>1276</x>
+       <y>20</y>
+       <width>366</width>
+       <height>48</height>
       </rect>
      </property>
      <property name="styleSheet">
       <string notr="true">QFrame { color:white; border-radius:8px; border:1px solid #5da4cf; background: qlineargradient(x1:0,y1:0,x2:0,y2:1, stop:0 #bcd9e7 , stop:0.45 #7dbde9, stop:1 #95c7ea); padding:2px 10px;} QFrame:pressed {background:#003d60;}</string>
      </property>
-     <widget class="QLabel" name="RobotEnableStatus_label">
-      <property name="geometry">
-       <rect>
-        <x>0</x>
-        <y>0</y>
-        <width>221</width>
-        <height>44</height>
-       </rect>
-      </property>
-      <property name="font">
-       <font>
-        <family>Arial</family>
-        <pointsize>18</pointsize>
-       </font>
-      </property>
-      <property name="styleSheet">
-       <string>color:white; background:transparent; border:0px;</string>
-      </property>
-      <property name="text">
-       <string>Robot Enable</string>
-      </property>
-      <property name="alignment">
-       <set>Qt::AlignCenter</set>
-      </property>
-     </widget>
-     <widget class="QLabel" name="RobotEnableStatus_led">
-      <property name="geometry">
-       <rect>
-        <x>240</x>
-        <y>15</y>
-        <width>14</width>
-        <height>14</height>
-       </rect>
-      </property>
-      <property name="sizePolicy">
-       <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
-        <horstretch>0</horstretch>
-        <verstretch>0</verstretch>
-       </sizepolicy>
-      </property>
-      <property name="minimumSize">
-       <size>
-        <width>14</width>
-        <height>14</height>
-       </size>
-      </property>
-      <property name="maximumSize">
-       <size>
-        <width>14</width>
-        <height>14</height>
-       </size>
-      </property>
-      <property name="styleSheet">
-       <string>QLabel#RobotEnableStatus_led {
+    <widget class="QLabel" name="RobotEnableStatus_label">
+     <property name="geometry">
+      <rect>
+       <x>0</x>
+       <y>0</y>
+       <width>300</width>
+       <height>48</height>
+      </rect>
+     </property>
+     <property name="font">
+      <font>
+       <family>Arial</family>
+       <pointsize>18</pointsize>
+      </font>
+     </property>
+     <property name="styleSheet">
+      <string notr="true">color:white; background:transparent; border:0px;</string>
+     </property>
+     <property name="text">
+      <string>Robot Enable</string>
+     </property>
+     <property name="alignment">
+      <set>Qt::AlignCenter</set>
+     </property>
+    </widget>
+    <widget class="QLabel" name="RobotEnableStatus_led">
+     <property name="geometry">
+      <rect>
+       <x>322</x>
+       <y>17</y>
+       <width>14</width>
+       <height>14</height>
+      </rect>
+     </property>
+     <property name="minimumSize">
+      <size>
+       <width>14</width>
+       <height>14</height>
+      </size>
+     </property>
+     <property name="maximumSize">
+      <size>
+       <width>14</width>
+       <height>14</height>
+      </size>
+     </property>
+     <property name="styleSheet">
+      <string notr="true">QLabel#RobotEnableStatus_led {
     background-color: #9ca3af;
     border: 1px solid #4b5563;
     border-radius: 2px;
 }</string>
-      </property>
-      <property name="text">
-       <string/>
-      </property>
-      <property name="alignment">
-       <set>Qt::AlignCenter</set>
-      </property>
-     </widget>
+     </property>
+     <property name="text">
+      <string></string>
+     </property>
+     <property name="alignment">
+      <set>Qt::AlignCenter</set>
+     </property>
+    </widget>
     </widget>
    </widget>
    <widget class="QFrame" name="SideMenu">
@@ -493,6 +660,12 @@ QFrame#SideMenu QPushButton:checked:hover {
        <pointsize>25</pointsize>
       </font>
      </property>
+     <property name="styleSheet">
+      <string>QPushButton#btnSetting, QPushButton#btnLog {background-color: transparent; border: none; color: transparent;}
+QPushButton#btnSetting:hover, QPushButton#btnLog:hover {background-color: transparent; border: none; color: transparent;}
+QPushButton#btnSetting:pressed, QPushButton#btnLog:pressed {background-color: transparent; border: none; color: transparent;}
+QPushButton#btnSetting:checked, QPushButton#btnLog:checked {background-color: transparent; border: none; color: transparent;}</string>
+     </property>
      <property name="text">
       <string>SETTING</string>
      </property>
@@ -514,6 +687,12 @@ QFrame#SideMenu QPushButton:checked:hover {
        <family>Arial</family>
        <pointsize>25</pointsize>
       </font>
+     </property>
+     <property name="styleSheet">
+      <string>QPushButton#btnSetting, QPushButton#btnLog {background-color: transparent; border: none; color: transparent;}
+QPushButton#btnSetting:hover, QPushButton#btnLog:hover {background-color: transparent; border: none; color: transparent;}
+QPushButton#btnSetting:pressed, QPushButton#btnLog:pressed {background-color: transparent; border: none; color: transparent;}
+QPushButton#btnSetting:checked, QPushButton#btnLog:checked {background-color: transparent; border: none; color: transparent;}</string>
      </property>
      <property name="text">
       <string>LOG</string>
@@ -944,13 +1123,122 @@ background:transparent;
         <set>Qt::AlignCenter</set>
        </property>
       </widget>
+      <widget class="QPushButton" name="chkMovePoseLog">
+       <property name="geometry">
+        <rect>
+         <x>6</x>
+         <y>50</y>
+         <width>108</width>
+         <height>30</height>
+        </rect>
+       </property>
+       <property name="font">
+        <font>
+         <family>Arial</family>
+         <pointsize>9</pointsize>
+        </font>
+       </property>
+       <property name="styleSheet">
+        <string>QPushButton{background:#eef2f4; color:#555555; border:1px solid #b8cfd8; border-radius:4px;} QPushButton:checked{background:#01BABE; color:white; font-weight:600; border:1px solid #01BABE;}</string>
+       </property>
+       <property name="text">
+        <string>Log: OFF</string>
+       </property>
+       <property name="checkable">
+        <bool>true</bool>
+       </property>
+      </widget>
+      <widget class="QComboBox" name="cbMovePoseMode">
+       <property name="geometry">
+        <rect>
+         <x>12</x>
+         <y>86</y>
+         <width>313</width>
+         <height>36</height>
+        </rect>
+       </property>
+       <property name="font">
+        <font>
+         <family>Arial</family>
+         <pointsize>11</pointsize>
+        </font>
+       </property>
+       <property name="styleSheet">
+        <string>QComboBox{
+background:white;
+color:#111111;
+border-radius:5px;
+border:1px solid #66b7c7;
+padding-left:12px;
+padding-right:30px;
+font: 11pt Arial;
+}
+QComboBox::drop-down{
+subcontrol-origin:padding;
+subcontrol-position:top right;
+width:28px;
+border-left:1px solid #66b7c7;
+border-top-right-radius:5px;
+border-bottom-right-radius:5px;
+background:qlineargradient(x1:0,y1:0,x2:0,y2:1, stop:0 #e8fbff, stop:1 #bcecf1);
+}
+QComboBox QAbstractItemView{
+background:white;
+color:#111111;
+selection-background-color:#007aa5;
+selection-color:white;
+border:1px solid #66b7c7;
+font: 10pt Arial;
+}</string>
+       </property>
+       <property name="maxVisibleItems">
+        <number>6</number>
+       </property>
+       <item>
+        <property name="text">
+         <string>MoveToPose (Joint)</string>
+        </property>
+       </item>
+       <item>
+        <property name="text">
+         <string>MoveToPoseCartesian</string>
+        </property>
+       </item>
+       <item>
+        <property name="text">
+         <string>MoveToPoseObstacle</string>
+        </property>
+       </item>
+      </widget>
+      <widget class="QPushButton" name="btnGoHome">
+       <property name="geometry">
+        <rect>
+         <x>132</x>
+         <y>130</y>
+         <width>72</width>
+         <height>34</height>
+        </rect>
+       </property>
+       <property name="font">
+        <font>
+         <family>Arial</family>
+         <pointsize>9</pointsize>
+        </font>
+       </property>
+       <property name="styleSheet">
+        <string>QPushButton#btnGoHome{background-color:#8FE388; border:1px solid #6cbf66; border-radius:6px; color:black;} QPushButton#btnGoHome:hover{background-color:#A6EFA0;} QPushButton#btnGoHome:pressed{background-color:#72CF6C;}</string>
+       </property>
+       <property name="text">
+        <string>GoHome</string>
+       </property>
+      </widget>
       <widget class="QLabel" name="lblMovePoseCartesian">
        <property name="geometry">
         <rect>
          <x>0</x>
-         <y>54</y>
-         <width>210</width>
-         <height>30</height>
+         <y>0</y>
+         <width>0</width>
+         <height>0</height>
         </rect>
        </property>
        <property name="font">
@@ -969,13 +1257,41 @@ background:transparent;
         <set>Qt::AlignVCenter|Qt::AlignLeft</set>
        </property>
       </widget>
+      <widget class="QPushButton" name="chkMoveObstacleUseVision">
+       <property name="geometry">
+        <rect>
+         <x>210</x>
+         <y>130</y>
+         <width>121</width>
+         <height>34</height>
+        </rect>
+       </property>
+       <property name="font">
+        <font>
+         <family>Arial</family>
+         <pointsize>8</pointsize>
+        </font>
+       </property>
+       <property name="toolTip">
+        <string>MoveToPoseObstacle: khi bật, dùng /vision/box_objects (use_vision_obstacle=true, require_obstacle=true). Chỉ áp dụng khi mode = MoveToPoseObstacle.</string>
+       </property>
+       <property name="styleSheet">
+        <string>QPushButton{background:#eef2f4; color:#555555; border:1px solid #b8cfd8; border-radius:4px;} QPushButton:checked{background:#01BABE; color:white; font-weight:600; border:1px solid #01BABE;}</string>
+       </property>
+       <property name="text">
+        <string>Vision Obstacle: OFF</string>
+       </property>
+       <property name="checkable">
+        <bool>true</bool>
+       </property>
+      </widget>
       <widget class="QCheckBox" name="chkMovePoseCartesian">
        <property name="geometry">
         <rect>
-         <x>270</x>
-         <y>58</y>
-         <width>44</width>
-         <height>24</height>
+         <x>0</x>
+         <y>0</y>
+         <width>0</width>
+         <height>0</height>
         </rect>
        </property>
        <property name="styleSheet">
@@ -989,7 +1305,7 @@ background:transparent;
        <property name="geometry">
         <rect>
          <x>15</x>
-         <y>104</y>
+         <y>176</y>
          <width>72</width>
          <height>34</height>
         </rect>
@@ -1011,7 +1327,7 @@ background:transparent;
        <property name="geometry">
         <rect>
          <x>132</x>
-         <y>104</y>
+         <y>176</y>
          <width>72</width>
          <height>34</height>
         </rect>
@@ -1033,7 +1349,7 @@ background:transparent;
        <property name="geometry">
         <rect>
          <x>249</x>
-         <y>104</y>
+         <y>176</y>
          <width>72</width>
          <height>34</height>
         </rect>
@@ -1045,7 +1361,7 @@ background:transparent;
         </font>
        </property>
        <property name="styleSheet">
-        <string>QPushButton{background:qlineargradient(x1:0,y1:0,x2:0,y2:1, stop:0 #ff5757, stop:1 #e00000); color:#00334f; border:1px solid #b80000; border-radius:6px;} QPushButton:pressed{background:#c50000;}</string>
+        <string>QPushButton{background-color:#E53935; border:1px solid #b71c1c; border-radius:6px; color:black;} QPushButton:hover{background-color:#FF5252;} QPushButton:pressed{background-color:#B71C1C;}</string>
        </property>
        <property name="text">
         <string>Stop</string>
@@ -1055,7 +1371,7 @@ background:transparent;
        <property name="geometry">
         <rect>
          <x>0</x>
-         <y>158</y>
+         <y>220</y>
          <width>337</width>
          <height>88</height>
         </rect>
@@ -1225,7 +1541,7 @@ background:transparent;
        <property name="geometry">
         <rect>
          <x>0</x>
-         <y>251</y>
+         <y>314</y>
          <width>337</width>
          <height>88</height>
         </rect>
@@ -1386,7 +1702,7 @@ background:transparent;
        <property name="geometry">
         <rect>
          <x>0</x>
-         <y>345</y>
+         <y>410</y>
          <width>337</width>
          <height>36</height>
         </rect>
@@ -1468,9 +1784,9 @@ background:transparent;
        <property name="geometry">
         <rect>
          <x>0</x>
-         <y>393</y>
+         <y>456</y>
          <width>337</width>
-         <height>62</height>
+         <height>36</height>
         </rect>
        </property>
        <property name="styleSheet">
@@ -1482,7 +1798,7 @@ background:transparent;
          <x>0</x>
          <y>0</y>
          <width>337</width>
-         <height>62</height>
+         <height>36</height>
         </rect>
        </property>
        <property name="font">
@@ -1514,9 +1830,9 @@ background:transparent;
        <property name="geometry">
         <rect>
          <x>0</x>
-         <y>6</y>
+         <y>2</y>
          <width>337</width>
-         <height>42</height>
+         <height>36</height>
         </rect>
        </property>
        <property name="font">
@@ -1535,11 +1851,132 @@ background:transparent;
         <set>Qt::AlignCenter</set>
        </property>
       </widget>
+      <widget class="QPushButton" name="chkMovePoseRlLog">
+       <property name="geometry">
+        <rect>
+         <x>6</x>
+         <y>42</y>
+         <width>100</width>
+         <height>30</height>
+        </rect>
+       </property>
+       <property name="font">
+        <font>
+         <family>Arial</family>
+         <pointsize>9</pointsize>
+        </font>
+       </property>
+       <property name="styleSheet">
+        <string>QPushButton{background:#eef2f4; color:#555555; border:1px solid #b8cfd8; border-radius:4px;} QPushButton:checked{background:#01BABE; color:white; font-weight:600; border:1px solid #01BABE;}</string>
+       </property>
+       <property name="text">
+        <string>Log: OFF</string>
+       </property>
+       <property name="checkable">
+        <bool>true</bool>
+       </property>
+      </widget>
+      <widget class="QPushButton" name="btnMovePoseRlAutoPlan">
+       <property name="geometry">
+        <rect>
+         <x>110</x>
+         <y>42</y>
+         <width>116</width>
+         <height>30</height>
+        </rect>
+       </property>
+       <property name="font">
+        <font>
+         <family>Arial</family>
+         <pointsize>9</pointsize>
+        </font>
+       </property>
+       <property name="toolTip">
+        <string>Auto Plan: periodically run MovePoseRL plan-only to keep the RViz trajectory adapting to the live scene. Never executes the robot.</string>
+       </property>
+       <property name="styleSheet">
+        <string>QPushButton{background:#eef2f4; color:#555555; border:1px solid #b8cfd8; border-radius:4px;} QPushButton:checked{background:#F9A825; color:white; font-weight:600; border:1px solid #F9A825;}</string>
+       </property>
+       <property name="text">
+        <string>Auto Plan: OFF</string>
+       </property>
+       <property name="checkable">
+        <bool>true</bool>
+       </property>
+      </widget>
+      <widget class="QPushButton" name="btnMovePoseRlVisionTarget">
+       <property name="geometry">
+        <rect>
+         <x>230</x>
+         <y>42</y>
+         <width>126</width>
+         <height>30</height>
+        </rect>
+       </property>
+       <property name="font">
+        <font>
+         <family>Arial</family>
+         <pointsize>9</pointsize>
+        </font>
+       </property>
+       <property name="toolTip">
+        <string>Wood Target: use the highest-confidence /vision/wood_objects detection (transformed to base_link) as the MovePoseRL target instead of the manual X/Y/Z fields.</string>
+       </property>
+       <property name="styleSheet">
+        <string>QPushButton{background:#eef2f4; color:#555555; border:1px solid #b8cfd8; border-radius:4px;} QPushButton:checked{background:#2E7D32; color:white; font-weight:600; border:1px solid #2E7D32;}</string>
+       </property>
+       <property name="text">
+        <string>Wood Target: OFF</string>
+       </property>
+       <property name="checkable">
+        <bool>true</bool>
+       </property>
+      </widget>
+      <widget class="QDoubleSpinBox" name="spinMovePoseRlAutoPlanIntervalSec">
+       <property name="geometry">
+        <rect>
+         <x>300</x>
+         <y>8</y>
+         <width>56</width>
+         <height>26</height>
+        </rect>
+       </property>
+       <property name="font">
+        <font>
+         <family>Arial</family>
+         <pointsize>9</pointsize>
+        </font>
+       </property>
+       <property name="toolTip">
+        <string>Auto Plan interval [s]</string>
+       </property>
+       <property name="alignment">
+        <set>Qt::AlignHCenter|Qt::AlignVCenter</set>
+       </property>
+       <property name="suffix">
+        <string> s</string>
+       </property>
+       <property name="decimals">
+        <number>1</number>
+       </property>
+       <property name="minimum">
+        <double>1.000000000000000</double>
+       </property>
+       <property name="maximum">
+        <double>2.000000000000000</double>
+       </property>
+       <property name="singleStep">
+        <double>0.100000000000000</double>
+       </property>
+       <property name="value">
+        <double>1.500000000000000</double>
+       </property>
+      </widget>
       <widget class="QPushButton" name="btnRLPlan">
        <property name="geometry">
         <rect>
          <x>15</x>
-         <y>92</y>
+         <y>78</y>
          <width>72</width>
          <height>34</height>
         </rect>
@@ -1561,7 +1998,7 @@ background:transparent;
        <property name="geometry">
         <rect>
          <x>132</x>
-         <y>92</y>
+         <y>78</y>
          <width>72</width>
          <height>34</height>
         </rect>
@@ -1583,7 +2020,7 @@ background:transparent;
        <property name="geometry">
         <rect>
          <x>249</x>
-         <y>92</y>
+         <y>78</y>
          <width>72</width>
          <height>34</height>
         </rect>
@@ -1595,7 +2032,7 @@ background:transparent;
         </font>
        </property>
        <property name="styleSheet">
-        <string>QPushButton{background:qlineargradient(x1:0,y1:0,x2:0,y2:1, stop:0 #ff5757, stop:1 #e00000); color:#00334f; border:1px solid #b80000; border-radius:6px;} QPushButton:pressed{background:#c50000;}</string>
+        <string>QPushButton{background-color:#E53935; border:1px solid #b71c1c; border-radius:6px; color:black;} QPushButton:hover{background-color:#FF5252;} QPushButton:pressed{background-color:#B71C1C;}</string>
        </property>
        <property name="text">
         <string>Stop</string>
@@ -1605,9 +2042,9 @@ background:transparent;
        <property name="geometry">
         <rect>
          <x>0</x>
-         <y>146</y>
+         <y>120</y>
          <width>337</width>
-         <height>88</height>
+         <height>70</height>
         </rect>
        </property>
        <property name="styleSheet">
@@ -1617,9 +2054,9 @@ background:transparent;
        <property name="geometry">
         <rect>
          <x>0</x>
-         <y>5</y>
+         <y>3</y>
          <width>337</width>
-         <height>24</height>
+         <height>20</height>
         </rect>
        </property>
        <property name="font">
@@ -1642,9 +2079,9 @@ background:transparent;
        <property name="geometry">
         <rect>
          <x>20</x>
-         <y>32</y>
+         <y>28</y>
          <width>72</width>
-         <height>16</height>
+         <height>14</height>
         </rect>
        </property>
        <property name="font">
@@ -1667,9 +2104,9 @@ background:transparent;
        <property name="geometry">
         <rect>
          <x>20</x>
-         <y>48</y>
+         <y>42</y>
          <width>72</width>
-         <height>30</height>
+         <height>24</height>
         </rect>
        </property>
        <property name="styleSheet">
@@ -1686,9 +2123,9 @@ background:transparent;
        <property name="geometry">
         <rect>
          <x>132</x>
-         <y>32</y>
+         <y>28</y>
          <width>72</width>
-         <height>16</height>
+         <height>14</height>
         </rect>
        </property>
        <property name="font">
@@ -1711,9 +2148,9 @@ background:transparent;
        <property name="geometry">
         <rect>
          <x>132</x>
-         <y>48</y>
+         <y>42</y>
          <width>72</width>
-         <height>30</height>
+         <height>24</height>
         </rect>
        </property>
        <property name="styleSheet">
@@ -1730,9 +2167,9 @@ background:transparent;
        <property name="geometry">
         <rect>
          <x>244</x>
-         <y>32</y>
+         <y>28</y>
          <width>72</width>
-         <height>16</height>
+         <height>14</height>
         </rect>
        </property>
        <property name="font">
@@ -1755,9 +2192,9 @@ background:transparent;
        <property name="geometry">
         <rect>
          <x>244</x>
-         <y>48</y>
+         <y>42</y>
          <width>72</width>
-         <height>30</height>
+         <height>24</height>
         </rect>
        </property>
        <property name="styleSheet">
@@ -1775,9 +2212,9 @@ background:transparent;
        <property name="geometry">
         <rect>
          <x>0</x>
-         <y>239</y>
+         <y>196</y>
          <width>337</width>
-         <height>88</height>
+         <height>70</height>
         </rect>
        </property>
        <property name="styleSheet">
@@ -1787,9 +2224,9 @@ background:transparent;
        <property name="geometry">
         <rect>
          <x>0</x>
-         <y>5</y>
+         <y>3</y>
          <width>337</width>
-         <height>24</height>
+         <height>20</height>
         </rect>
        </property>
        <property name="font">
@@ -1812,9 +2249,9 @@ background:transparent;
        <property name="geometry">
         <rect>
          <x>20</x>
-         <y>32</y>
+         <y>28</y>
          <width>72</width>
-         <height>16</height>
+         <height>14</height>
         </rect>
        </property>
        <property name="font">
@@ -1837,9 +2274,9 @@ background:transparent;
        <property name="geometry">
         <rect>
          <x>20</x>
-         <y>48</y>
+         <y>42</y>
          <width>72</width>
-         <height>30</height>
+         <height>24</height>
         </rect>
        </property>
        <property name="styleSheet">
@@ -1853,9 +2290,9 @@ background:transparent;
        <property name="geometry">
         <rect>
          <x>132</x>
-         <y>32</y>
+         <y>28</y>
          <width>72</width>
-         <height>16</height>
+         <height>14</height>
         </rect>
        </property>
        <property name="font">
@@ -1878,9 +2315,9 @@ background:transparent;
        <property name="geometry">
         <rect>
          <x>132</x>
-         <y>48</y>
+         <y>42</y>
          <width>72</width>
-         <height>30</height>
+         <height>24</height>
         </rect>
        </property>
        <property name="styleSheet">
@@ -1894,9 +2331,9 @@ background:transparent;
        <property name="geometry">
         <rect>
          <x>244</x>
-         <y>32</y>
+         <y>28</y>
          <width>72</width>
-         <height>16</height>
+         <height>14</height>
         </rect>
        </property>
        <property name="font">
@@ -1919,9 +2356,9 @@ background:transparent;
        <property name="geometry">
         <rect>
          <x>244</x>
-         <y>48</y>
+         <y>42</y>
          <width>72</width>
-         <height>30</height>
+         <height>24</height>
         </rect>
        </property>
        <property name="styleSheet">
@@ -1935,10 +2372,10 @@ background:transparent;
       <widget class="QFrame" name="rlPosePreviewGroup">
        <property name="geometry">
         <rect>
-         <x>0</x>
-         <y>343</y>
-         <width>337</width>
-         <height>112</height>
+         <x>28</x>
+         <y>274</y>
+         <width>280</width>
+         <height>210</height>
         </rect>
        </property>
        <property name="styleSheet">
@@ -1949,8 +2386,8 @@ background:transparent;
         <rect>
          <x>0</x>
          <y>0</y>
-         <width>337</width>
-         <height>112</height>
+         <width>280</width>
+         <height>210</height>
         </rect>
        </property>
        <property name="font">
@@ -2184,11 +2621,36 @@ background:transparent;
         <set>Qt::AlignCenter</set>
        </property>
       </widget>
+      <widget class="QPushButton" name="chkPickPlaceLog">
+       <property name="geometry">
+        <rect>
+         <x>6</x>
+         <y>50</y>
+         <width>108</width>
+         <height>30</height>
+        </rect>
+       </property>
+       <property name="font">
+        <font>
+         <family>Arial</family>
+         <pointsize>9</pointsize>
+        </font>
+       </property>
+       <property name="styleSheet">
+        <string>QPushButton{background:#eef2f4; color:#555555; border:1px solid #b8cfd8; border-radius:4px;} QPushButton:checked{background:#01BABE; color:white; font-weight:600; border:1px solid #01BABE;}</string>
+       </property>
+       <property name="text">
+        <string>Log: OFF</string>
+       </property>
+       <property name="checkable">
+        <bool>true</bool>
+       </property>
+      </widget>
       <widget class="QPushButton" name="btnPickPlaceStart">
        <property name="geometry">
         <rect>
          <x>15</x>
-         <y>58</y>
+         <y>88</y>
          <width>72</width>
          <height>34</height>
         </rect>
@@ -2206,11 +2668,11 @@ background:transparent;
         <string>Start</string>
        </property>
       </widget>
-      <widget class="QPushButton" name="btnPickPlaceStop">
+      <widget class="QPushButton" name="btnPickPlacePlan">
        <property name="geometry">
         <rect>
-         <x>249</x>
-         <y>58</y>
+         <x>132</x>
+         <y>88</y>
          <width>72</width>
          <height>34</height>
         </rect>
@@ -2225,6 +2687,28 @@ background:transparent;
         <string>QPushButton{background:qlineargradient(x1:0,y1:0,x2:0,y2:1, stop:0 #ffffff, stop:1 #e6f4f7); color:#102d3d; border:1px solid #b8cfd8; border-radius:4px;} QPushButton:pressed{background:#cdebf0;}</string>
        </property>
        <property name="text">
+        <string>Plan</string>
+       </property>
+      </widget>
+      <widget class="QPushButton" name="btnPickPlaceStop">
+       <property name="geometry">
+        <rect>
+         <x>249</x>
+         <y>88</y>
+         <width>72</width>
+         <height>34</height>
+        </rect>
+       </property>
+       <property name="font">
+        <font>
+         <family>Arial</family>
+         <pointsize>9</pointsize>
+        </font>
+       </property>
+       <property name="styleSheet">
+        <string>QPushButton{background-color:#E53935; border:1px solid #b71c1c; border-radius:6px; color:black;} QPushButton:hover{background-color:#FF5252;} QPushButton:pressed{background-color:#B71C1C;}</string>
+       </property>
+       <property name="text">
         <string>Stop</string>
        </property>
       </widget>
@@ -2232,7 +2716,7 @@ background:transparent;
        <property name="geometry">
         <rect>
          <x>0</x>
-         <y>112</y>
+         <y>132</y>
          <width>337</width>
          <height>96</height>
         </rect>
@@ -2443,7 +2927,7 @@ background:transparent;
        <property name="geometry">
         <rect>
          <x>0</x>
-         <y>224</y>
+         <y>244</y>
          <width>337</width>
          <height>96</height>
         </rect>
@@ -2654,7 +3138,7 @@ background:transparent;
        <property name="geometry">
         <rect>
          <x>0</x>
-         <y>326</y>
+         <y>346</y>
          <width>337</width>
          <height>36</height>
         </rect>
@@ -2736,7 +3220,7 @@ background:transparent;
        <property name="geometry">
         <rect>
          <x>0</x>
-         <y>370</y>
+         <y>390</y>
          <width>337</width>
          <height>86</height>
         </rect>
@@ -2782,9 +3266,9 @@ background:transparent;
        <property name="geometry">
         <rect>
          <x>0</x>
-         <y>6</y>
+         <y>2</y>
          <width>337</width>
-         <height>42</height>
+         <height>36</height>
         </rect>
        </property>
        <property name="font">
@@ -2803,11 +3287,36 @@ background:transparent;
         <set>Qt::AlignCenter</set>
        </property>
       </widget>
+      <widget class="QPushButton" name="chkPickPlaceVisionLog">
+       <property name="geometry">
+        <rect>
+         <x>6</x>
+         <y>42</y>
+         <width>108</width>
+         <height>30</height>
+        </rect>
+       </property>
+       <property name="font">
+        <font>
+         <family>Arial</family>
+         <pointsize>9</pointsize>
+        </font>
+       </property>
+       <property name="styleSheet">
+        <string>QPushButton{background:#eef2f4; color:#555555; border:1px solid #b8cfd8; border-radius:4px;} QPushButton:checked{background:#01BABE; color:white; font-weight:600; border:1px solid #01BABE;}</string>
+       </property>
+       <property name="text">
+        <string>Log: OFF</string>
+       </property>
+       <property name="checkable">
+        <bool>true</bool>
+       </property>
+      </widget>
       <widget class="QPushButton" name="btnPickPlaceVisionStart">
        <property name="geometry">
         <rect>
          <x>15</x>
-         <y>58</y>
+         <y>78</y>
          <width>72</width>
          <height>34</height>
         </rect>
@@ -2825,11 +3334,11 @@ background:transparent;
         <string>Start</string>
        </property>
       </widget>
-      <widget class="QPushButton" name="btnPickPlaceVisionStop">
+      <widget class="QPushButton" name="btnPickPlaceVisionPlan">
        <property name="geometry">
         <rect>
-         <x>249</x>
-         <y>58</y>
+         <x>132</x>
+         <y>78</y>
          <width>72</width>
          <height>34</height>
         </rect>
@@ -2844,6 +3353,28 @@ background:transparent;
         <string>QPushButton{background:qlineargradient(x1:0,y1:0,x2:0,y2:1, stop:0 #ffffff, stop:1 #e6f4f7); color:#102d3d; border:1px solid #b8cfd8; border-radius:4px;} QPushButton:pressed{background:#cdebf0;}</string>
        </property>
        <property name="text">
+        <string>Plan</string>
+       </property>
+      </widget>
+      <widget class="QPushButton" name="btnPickPlaceVisionStop">
+       <property name="geometry">
+        <rect>
+         <x>249</x>
+         <y>78</y>
+         <width>72</width>
+         <height>34</height>
+        </rect>
+       </property>
+       <property name="font">
+        <font>
+         <family>Arial</family>
+         <pointsize>9</pointsize>
+        </font>
+       </property>
+       <property name="styleSheet">
+        <string>QPushButton{background-color:#E53935; border:1px solid #b71c1c; border-radius:6px; color:black;} QPushButton:hover{background-color:#FF5252;} QPushButton:pressed{background-color:#B71C1C;}</string>
+       </property>
+       <property name="text">
         <string>Stop</string>
        </property>
       </widget>
@@ -2851,9 +3382,9 @@ background:transparent;
        <property name="geometry">
         <rect>
          <x>0</x>
-         <y>112</y>
+         <y>120</y>
          <width>337</width>
-         <height>96</height>
+         <height>86</height>
         </rect>
        </property>
        <property name="styleSheet">
@@ -3062,9 +3593,9 @@ background:transparent;
        <property name="geometry">
         <rect>
          <x>0</x>
-         <y>218</y>
+         <y>212</y>
          <width>337</width>
-         <height>36</height>
+         <height>32</height>
         </rect>
        </property>
        <property name="styleSheet">
@@ -3144,9 +3675,9 @@ background:transparent;
        <property name="geometry">
         <rect>
          <x>0</x>
-         <y>262</y>
+         <y>248</y>
          <width>337</width>
-         <height>194</height>
+         <height>253</height>
         </rect>
        </property>
        <property name="styleSheet">
@@ -3158,7 +3689,7 @@ background:transparent;
          <x>0</x>
          <y>0</y>
          <width>337</width>
-         <height>194</height>
+         <height>253</height>
         </rect>
        </property>
        <property name="font">
@@ -3190,9 +3721,9 @@ background:transparent;
        <property name="geometry">
         <rect>
          <x>0</x>
-         <y>6</y>
+         <y>2</y>
          <width>337</width>
-         <height>42</height>
+         <height>36</height>
         </rect>
        </property>
        <property name="font">
@@ -3211,11 +3742,36 @@ background:transparent;
         <set>Qt::AlignCenter</set>
        </property>
       </widget>
+      <widget class="QPushButton" name="chkPickPlaceRlLog">
+       <property name="geometry">
+        <rect>
+         <x>6</x>
+         <y>42</y>
+         <width>108</width>
+         <height>30</height>
+        </rect>
+       </property>
+       <property name="font">
+        <font>
+         <family>Arial</family>
+         <pointsize>9</pointsize>
+        </font>
+       </property>
+       <property name="styleSheet">
+        <string>QPushButton{background:#eef2f4; color:#555555; border:1px solid #b8cfd8; border-radius:4px;} QPushButton:checked{background:#01BABE; color:white; font-weight:600; border:1px solid #01BABE;}</string>
+       </property>
+       <property name="text">
+        <string>Log: OFF</string>
+       </property>
+       <property name="checkable">
+        <bool>true</bool>
+       </property>
+      </widget>
       <widget class="QPushButton" name="btnPickPlaceRLStart">
        <property name="geometry">
         <rect>
          <x>15</x>
-         <y>58</y>
+         <y>78</y>
          <width>72</width>
          <height>34</height>
         </rect>
@@ -3233,11 +3789,11 @@ background:transparent;
         <string>Start</string>
        </property>
       </widget>
-      <widget class="QPushButton" name="btnPickPlaceRLStop">
+      <widget class="QPushButton" name="btnPickPlaceRLPlan">
        <property name="geometry">
         <rect>
-         <x>249</x>
-         <y>58</y>
+         <x>132</x>
+         <y>78</y>
          <width>72</width>
          <height>34</height>
         </rect>
@@ -3252,6 +3808,28 @@ background:transparent;
         <string>QPushButton{background:qlineargradient(x1:0,y1:0,x2:0,y2:1, stop:0 #ffffff, stop:1 #e6f4f7); color:#102d3d; border:1px solid #b8cfd8; border-radius:4px;} QPushButton:pressed{background:#cdebf0;}</string>
        </property>
        <property name="text">
+        <string>Plan</string>
+       </property>
+      </widget>
+      <widget class="QPushButton" name="btnPickPlaceRLStop">
+       <property name="geometry">
+        <rect>
+         <x>249</x>
+         <y>78</y>
+         <width>72</width>
+         <height>34</height>
+        </rect>
+       </property>
+       <property name="font">
+        <font>
+         <family>Arial</family>
+         <pointsize>9</pointsize>
+        </font>
+       </property>
+       <property name="styleSheet">
+        <string>QPushButton{background-color:#E53935; border:1px solid #b71c1c; border-radius:6px; color:black;} QPushButton:hover{background-color:#FF5252;} QPushButton:pressed{background-color:#B71C1C;}</string>
+       </property>
+       <property name="text">
         <string>Stop</string>
        </property>
       </widget>
@@ -3259,9 +3837,9 @@ background:transparent;
        <property name="geometry">
         <rect>
          <x>0</x>
-         <y>112</y>
+         <y>120</y>
          <width>337</width>
-         <height>96</height>
+         <height>86</height>
         </rect>
        </property>
        <property name="styleSheet">
@@ -3470,9 +4048,9 @@ background:transparent;
        <property name="geometry">
         <rect>
          <x>0</x>
-         <y>230</y>
+         <y>214</y>
          <width>337</width>
-         <height>226</height>
+         <height>253</height>
         </rect>
        </property>
        <property name="styleSheet">
@@ -3484,7 +4062,7 @@ background:transparent;
          <x>0</x>
          <y>0</y>
          <width>337</width>
-         <height>226</height>
+         <height>253</height>
         </rect>
        </property>
        <property name="font">
@@ -3537,11 +4115,36 @@ background:transparent;
         <set>Qt::AlignCenter</set>
        </property>
       </widget>
+      <widget class="QPushButton" name="chkCheckBoardLog">
+       <property name="geometry">
+        <rect>
+         <x>6</x>
+         <y>50</y>
+         <width>108</width>
+         <height>30</height>
+        </rect>
+       </property>
+       <property name="font">
+        <font>
+         <family>Arial</family>
+         <pointsize>9</pointsize>
+        </font>
+       </property>
+       <property name="styleSheet">
+        <string>QPushButton{background:#eef2f4; color:#555555; border:1px solid #b8cfd8; border-radius:4px;} QPushButton:checked{background:#01BABE; color:white; font-weight:600; border:1px solid #01BABE;}</string>
+       </property>
+       <property name="text">
+        <string>Log: OFF</string>
+       </property>
+       <property name="checkable">
+        <bool>true</bool>
+       </property>
+      </widget>
       <widget class="QPushButton" name="btnCheckBoardStart">
        <property name="geometry">
         <rect>
          <x>15</x>
-         <y>58</y>
+         <y>88</y>
          <width>72</width>
          <height>34</height>
         </rect>
@@ -3559,11 +4162,11 @@ background:transparent;
         <string>Start</string>
        </property>
       </widget>
-      <widget class="QPushButton" name="btnCheckBoardStop">
+      <widget class="QPushButton" name="btnCheckBoardPlan">
        <property name="geometry">
         <rect>
-         <x>249</x>
-         <y>58</y>
+         <x>132</x>
+         <y>88</y>
          <width>72</width>
          <height>34</height>
         </rect>
@@ -3578,6 +4181,28 @@ background:transparent;
         <string>QPushButton{background:qlineargradient(x1:0,y1:0,x2:0,y2:1, stop:0 #ffffff, stop:1 #e6f4f7); color:#102d3d; border:1px solid #b8cfd8; border-radius:4px;} QPushButton:pressed{background:#cdebf0;}</string>
        </property>
        <property name="text">
+        <string>Plan</string>
+       </property>
+      </widget>
+      <widget class="QPushButton" name="btnCheckBoardStop">
+       <property name="geometry">
+        <rect>
+         <x>249</x>
+         <y>88</y>
+         <width>72</width>
+         <height>34</height>
+        </rect>
+       </property>
+       <property name="font">
+        <font>
+         <family>Arial</family>
+         <pointsize>9</pointsize>
+        </font>
+       </property>
+       <property name="styleSheet">
+        <string>QPushButton{background-color:#E53935; border:1px solid #b71c1c; border-radius:6px; color:black;} QPushButton:hover{background-color:#FF5252;} QPushButton:pressed{background-color:#B71C1C;}</string>
+       </property>
+       <property name="text">
         <string>Stop</string>
        </property>
       </widget>
@@ -3585,7 +4210,7 @@ background:transparent;
        <property name="geometry">
         <rect>
          <x>0</x>
-         <y>112</y>
+         <y>132</y>
          <width>337</width>
          <height>96</height>
         </rect>
@@ -3612,130 +4237,7 @@ background:transparent;
         <string>background:transparent; color:#102d3d; border:0px;</string>
        </property>
        <property name="text">
-        <string>Point center</string>
-       </property>
-       <property name="alignment">
-        <set>Qt::AlignCenter</set>
-       </property>
-      </widget>
-      <widget class="QLabel" name="checkBoardX_label">
-       <property name="geometry">
-        <rect>
-         <x>10</x>
-         <y>35</y>
-         <width>72</width>
-         <height>16</height>
-        </rect>
-       </property>
-       <property name="font">
-        <font>
-         <family>Arial</family>
-         <pointsize>8</pointsize>
-        </font>
-       </property>
-       <property name="styleSheet">
-        <string>background:transparent; color:#102d3d; border:0px;</string>
-       </property>
-       <property name="text">
-        <string>X</string>
-       </property>
-       <property name="alignment">
-        <set>Qt::AlignCenter</set>
-       </property>
-      </widget>
-      <widget class="QLineEdit" name="txtCheckBoardX">
-       <property name="geometry">
-        <rect>
-         <x>10</x>
-         <y>53</y>
-         <width>72</width>
-         <height>30</height>
-        </rect>
-       </property>
-       <property name="styleSheet">
-        <string>QLineEdit{background:white; color:black; border-radius:3px; border:1px solid #b8cfd8; padding-left:3px; padding-right:3px; selection-background-color:#00a6c7;}</string>
-       </property>
-       <property name="alignment">
-        <set>Qt::AlignCenter</set>
-       </property>
-      </widget>
-      <widget class="QLabel" name="checkBoardY_label">
-       <property name="geometry">
-        <rect>
-         <x>92</x>
-         <y>35</y>
-         <width>72</width>
-         <height>16</height>
-        </rect>
-       </property>
-       <property name="font">
-        <font>
-         <family>Arial</family>
-         <pointsize>8</pointsize>
-        </font>
-       </property>
-       <property name="styleSheet">
-        <string>background:transparent; color:#102d3d; border:0px;</string>
-       </property>
-       <property name="text">
-        <string>Y</string>
-       </property>
-       <property name="alignment">
-        <set>Qt::AlignCenter</set>
-       </property>
-      </widget>
-      <widget class="QLineEdit" name="txtCheckBoardY">
-       <property name="geometry">
-        <rect>
-         <x>92</x>
-         <y>53</y>
-         <width>72</width>
-         <height>30</height>
-        </rect>
-       </property>
-       <property name="styleSheet">
-        <string>QLineEdit{background:white; color:black; border-radius:3px; border:1px solid #b8cfd8; padding-left:3px; padding-right:3px; selection-background-color:#00a6c7;}</string>
-       </property>
-       <property name="alignment">
-        <set>Qt::AlignCenter</set>
-       </property>
-      </widget>
-      <widget class="QLabel" name="checkBoardZ_label">
-       <property name="geometry">
-        <rect>
-         <x>174</x>
-         <y>35</y>
-         <width>72</width>
-         <height>16</height>
-        </rect>
-       </property>
-       <property name="font">
-        <font>
-         <family>Arial</family>
-         <pointsize>8</pointsize>
-        </font>
-       </property>
-       <property name="styleSheet">
-        <string>background:transparent; color:#102d3d; border:0px;</string>
-       </property>
-       <property name="text">
-        <string>Z</string>
-       </property>
-       <property name="alignment">
-        <set>Qt::AlignCenter</set>
-       </property>
-      </widget>
-      <widget class="QLineEdit" name="txtCheckBoardZ">
-       <property name="geometry">
-        <rect>
-         <x>174</x>
-         <y>53</y>
-         <width>72</width>
-         <height>30</height>
-        </rect>
-       </property>
-       <property name="styleSheet">
-        <string>QLineEdit{background:white; color:black; border-radius:3px; border:1px solid #b8cfd8; padding-left:3px; padding-right:3px; selection-background-color:#00a6c7;}</string>
+        <string>Step size</string>
        </property>
        <property name="alignment">
         <set>Qt::AlignCenter</set>
@@ -3744,9 +4246,9 @@ background:transparent;
       <widget class="QLabel" name="checkBoardStep_label">
        <property name="geometry">
         <rect>
-         <x>256</x>
+         <x>10</x>
          <y>35</y>
-         <width>72</width>
+         <width>100</width>
          <height>16</height>
         </rect>
        </property>
@@ -3769,9 +4271,9 @@ background:transparent;
       <widget class="QLineEdit" name="txtCheckBoardStep">
        <property name="geometry">
         <rect>
-         <x>256</x>
+         <x>10</x>
          <y>53</y>
-         <width>72</width>
+         <width>100</width>
          <height>30</height>
         </rect>
        </property>
@@ -3790,7 +4292,7 @@ background:transparent;
        <property name="geometry">
         <rect>
          <x>0</x>
-         <y>218</y>
+         <y>238</y>
          <width>337</width>
          <height>36</height>
         </rect>
@@ -3868,44 +4370,6 @@ background:transparent;
        </property>
       </widget>
       </widget>
-      <widget class="QFrame" name="checkBoardPreviewGroup">
-       <property name="geometry">
-        <rect>
-         <x>0</x>
-         <y>262</y>
-         <width>337</width>
-         <height>194</height>
-        </rect>
-       </property>
-       <property name="styleSheet">
-        <string>QFrame{background:rgba(255,255,255,235); border:1px solid #c1d7df; border-radius:10px;}</string>
-       </property>
-      <widget class="QLabel" name="checkBoardPreviewGroupLabel">
-       <property name="geometry">
-        <rect>
-         <x>0</x>
-         <y>0</y>
-         <width>337</width>
-         <height>194</height>
-        </rect>
-       </property>
-       <property name="font">
-        <font>
-         <family>Arial</family>
-         <pointsize>13</pointsize>
-        </font>
-       </property>
-       <property name="styleSheet">
-        <string>background:transparent; color:black; border:0px;</string>
-       </property>
-       <property name="text">
-        <string>chèn ảnh mô tả</string>
-       </property>
-       <property name="alignment">
-        <set>Qt::AlignCenter</set>
-       </property>
-      </widget>
-      </widget>
       </widget>
       <widget class="QWidget" name="tabRepeatability">
        <property name="styleSheet">
@@ -3939,11 +4403,36 @@ background:transparent;
         <set>Qt::AlignCenter</set>
        </property>
       </widget>
+      <widget class="QPushButton" name="chkRepeatabilityLog">
+       <property name="geometry">
+        <rect>
+         <x>6</x>
+         <y>50</y>
+         <width>108</width>
+         <height>30</height>
+        </rect>
+       </property>
+       <property name="font">
+        <font>
+         <family>Arial</family>
+         <pointsize>9</pointsize>
+        </font>
+       </property>
+       <property name="styleSheet">
+        <string>QPushButton{background:#eef2f4; color:#555555; border:1px solid #b8cfd8; border-radius:4px;} QPushButton:checked{background:#01BABE; color:white; font-weight:600; border:1px solid #01BABE;}</string>
+       </property>
+       <property name="text">
+        <string>Log: OFF</string>
+       </property>
+       <property name="checkable">
+        <bool>true</bool>
+       </property>
+      </widget>
       <widget class="QPushButton" name="btnRepeatStart">
        <property name="geometry">
         <rect>
          <x>15</x>
-         <y>58</y>
+         <y>88</y>
          <width>72</width>
          <height>34</height>
         </rect>
@@ -3965,7 +4454,7 @@ background:transparent;
        <property name="geometry">
         <rect>
          <x>132</x>
-         <y>58</y>
+         <y>88</y>
          <width>72</width>
          <height>34</height>
         </rect>
@@ -3987,7 +4476,7 @@ background:transparent;
        <property name="geometry">
         <rect>
          <x>249</x>
-         <y>58</y>
+         <y>88</y>
          <width>72</width>
          <height>34</height>
         </rect>
@@ -3999,7 +4488,7 @@ background:transparent;
         </font>
        </property>
        <property name="styleSheet">
-        <string>QPushButton{background:qlineargradient(x1:0,y1:0,x2:0,y2:1, stop:0 #ffffff, stop:1 #e6f4f7); color:#102d3d; border:1px solid #b8cfd8; border-radius:4px;} QPushButton:pressed{background:#cdebf0;}</string>
+        <string>QPushButton{background-color:#E53935; border:1px solid #b71c1c; border-radius:6px; color:black;} QPushButton:hover{background-color:#FF5252;} QPushButton:pressed{background-color:#B71C1C;}</string>
        </property>
        <property name="text">
         <string>Stop</string>
@@ -4009,7 +4498,7 @@ background:transparent;
        <property name="geometry">
         <rect>
          <x>0</x>
-         <y>105</y>
+         <y>132</y>
          <width>337</width>
          <height>58</height>
         </rect>
@@ -4179,7 +4668,7 @@ background:transparent;
        <property name="geometry">
         <rect>
          <x>0</x>
-         <y>170</y>
+         <y>197</y>
          <width>337</width>
          <height>58</height>
         </rect>
@@ -4349,7 +4838,7 @@ background:transparent;
        <property name="geometry">
         <rect>
          <x>0</x>
-         <y>235</y>
+         <y>262</y>
          <width>337</width>
          <height>54</height>
         </rect>
@@ -4447,7 +4936,7 @@ background:transparent;
        <property name="geometry">
         <rect>
          <x>0</x>
-         <y>297</y>
+         <y>324</y>
          <width>337</width>
          <height>36</height>
         </rect>
@@ -4525,11 +5014,11 @@ background:transparent;
        </property>
       </widget>
       </widget>
-      <widget class="QFrame" name="repeatPreviewGroup">
+      <widget class="QFrame" name="repeatAxisGroup">
        <property name="geometry">
         <rect>
          <x>0</x>
-         <y>341</y>
+         <y>368</y>
          <width>337</width>
          <height>44</height>
         </rect>
@@ -4537,29 +5026,73 @@ background:transparent;
        <property name="styleSheet">
         <string>QFrame{background:rgba(255,255,255,235); border:1px solid #c1d7df; border-radius:10px;}</string>
        </property>
-      <widget class="QLabel" name="repeatPreviewGroupLabel">
+      <widget class="QRadioButton" name="radioRepeatAxisX">
        <property name="geometry">
         <rect>
-         <x>0</x>
-         <y>0</y>
-         <width>337</width>
-         <height>44</height>
+         <x>10</x>
+         <y>8</y>
+         <width>100</width>
+         <height>28</height>
         </rect>
        </property>
        <property name="font">
         <font>
          <family>Arial</family>
-         <pointsize>11</pointsize>
+         <pointsize>10</pointsize>
         </font>
        </property>
        <property name="styleSheet">
-        <string>background:transparent; color:black; border:0px;</string>
+        <string>QRadioButton{background:transparent; color:#102d3d;} QRadioButton::indicator{width:16px; height:16px;}</string>
        </property>
        <property name="text">
-        <string>chèn ảnh mô tả</string>
+        <string>X axis</string>
        </property>
-       <property name="alignment">
-        <set>Qt::AlignCenter</set>
+       <property name="checked">
+        <bool>true</bool>
+       </property>
+      </widget>
+      <widget class="QRadioButton" name="radioRepeatAxisY">
+       <property name="geometry">
+        <rect>
+         <x>119</x>
+         <y>8</y>
+         <width>100</width>
+         <height>28</height>
+        </rect>
+       </property>
+       <property name="font">
+        <font>
+         <family>Arial</family>
+         <pointsize>10</pointsize>
+        </font>
+       </property>
+       <property name="styleSheet">
+        <string>QRadioButton{background:transparent; color:#102d3d;} QRadioButton::indicator{width:16px; height:16px;}</string>
+       </property>
+       <property name="text">
+        <string>Y axis</string>
+       </property>
+      </widget>
+      <widget class="QRadioButton" name="radioRepeatAxisZ">
+       <property name="geometry">
+        <rect>
+         <x>228</x>
+         <y>8</y>
+         <width>100</width>
+         <height>28</height>
+        </rect>
+       </property>
+       <property name="font">
+        <font>
+         <family>Arial</family>
+         <pointsize>10</pointsize>
+        </font>
+       </property>
+       <property name="styleSheet">
+        <string>QRadioButton{background:transparent; color:#102d3d;} QRadioButton::indicator{width:16px; height:16px;}</string>
+       </property>
+       <property name="text">
+        <string>Z axis</string>
        </property>
       </widget>
       </widget>
@@ -10929,9 +11462,9 @@ QPushButton:pressed {
       <property name="geometry">
        <rect>
         <x>30</x>
-        <y>135</y>
+        <y>125</y>
         <width>640</width>
-        <height>430</height>
+        <height>480</height>
        </rect>
       </property>
       <property name="styleSheet">
@@ -10943,7 +11476,7 @@ QPushButton:pressed {
          <x>0</x>
          <y>0</y>
          <width>640</width>
-         <height>430</height>
+         <height>480</height>
         </rect>
        </property>
        <property name="font">
@@ -10967,9 +11500,9 @@ QPushButton:pressed {
       <property name="geometry">
        <rect>
         <x>720</x>
-        <y>135</y>
+        <y>125</y>
         <width>640</width>
-        <height>430</height>
+        <height>480</height>
        </rect>
       </property>
       <property name="styleSheet">
@@ -10981,7 +11514,7 @@ QPushButton:pressed {
          <x>0</x>
          <y>0</y>
          <width>640</width>
-         <height>430</height>
+         <height>480</height>
         </rect>
        </property>
        <property name="font">
@@ -11005,9 +11538,9 @@ QPushButton:pressed {
       <property name="geometry">
        <rect>
         <x>30</x>
-        <y>590</y>
+        <y>625</y>
         <width>640</width>
-        <height>220</height>
+        <height>190</height>
        </rect>
       </property>
       <property name="styleSheet">

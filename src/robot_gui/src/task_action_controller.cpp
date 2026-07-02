@@ -1,5 +1,6 @@
 #include "robot_gui/task_action_controller.hpp"
 
+#include <algorithm>
 #include <cmath>
 #include <chrono>
 #include <limits>
@@ -8,6 +9,7 @@
 #include <thread>
 #include <vector>
 
+#include <QAbstractButton>
 #include <QCheckBox>
 #include <QComboBox>
 #include <QDateTime>
@@ -18,19 +20,27 @@
 #include <QMetaObject>
 #include <QPointer>
 #include <QPlainTextEdit>
+#include <QSignalBlocker>
+#include <QDoubleSpinBox>
 #include <QPushButton>
+#include <QRadioButton>
+#include <QTabWidget>
 #include <QTextEdit>
+#include <QTimer>
 #include <QWidget>
 
+#include "action_msgs/srv/cancel_goal.hpp"
 #include "geometry_msgs/msg/pose.hpp"
 #include "geometry_msgs/msg/pose_stamped.hpp"
 #include "rclcpp_action/rclcpp_action.hpp"
 #include "robot_task_manager/action/checker_board.hpp"
 #include "robot_task_manager/action/drl_pick_place.hpp"
+#include "robot_task_manager/action/go_home.hpp"
 #include "robot_task_manager/action/move_gripper.hpp"
 #include "robot_task_manager/action/move_pose_rl.hpp"
 #include "robot_task_manager/action/move_to_pose.hpp"
 #include "robot_task_manager/action/move_to_pose_cartesian.hpp"
+#include "robot_task_manager/action/move_to_pose_obstacle.hpp"
 #include "robot_task_manager/action/pick_place.hpp"
 #include "robot_task_manager/action/repeatability_test.hpp"
 
@@ -40,10 +50,12 @@ namespace
 {
 using CheckerBoard = robot_task_manager::action::CheckerBoard;
 using DrlPickPlace = robot_task_manager::action::DrlPickPlace;
+using GoHome = robot_task_manager::action::GoHome;
 using MoveGripper = robot_task_manager::action::MoveGripper;
 using MovePoseRl = robot_task_manager::action::MovePoseRl;
 using MoveToPose = robot_task_manager::action::MoveToPose;
 using MoveToPoseCartesian = robot_task_manager::action::MoveToPoseCartesian;
+using MoveToPoseObstacle = robot_task_manager::action::MoveToPoseObstacle;
 using PickPlace = robot_task_manager::action::PickPlace;
 using RepeatabilityTest = robot_task_manager::action::RepeatabilityTest;
 using LogFn = std::function<void(const QString &)>;
@@ -60,6 +72,24 @@ constexpr double kDrlRepeatOriW = 0.0;
 constexpr double kDefaultMoveXMm = 400.0;
 constexpr double kDefaultMoveYMm = 100.0;
 constexpr double kDefaultMoveZMm = 350.0;
+
+// codex.md "Auto Planning cho tab Move Pose RL":
+// Default RPY orientation when the GUI orientation fields are empty — must be
+// R=180, P=0, Y=90 deg (the config used to keep RL planning stable), NOT an
+// identity quaternion.
+constexpr double kMovePoseRlDefaultRollDeg = 180.0;
+constexpr double kMovePoseRlDefaultPitchDeg = 0.0;
+constexpr double kMovePoseRlDefaultYawDeg = 90.0;
+// Auto Plan timer interval fallback when the spinbox is absent (range 1.0-2.0s).
+constexpr int kMovePoseRlAutoPlanIntervalMs = 1500;
+// Trained DRL workspace limits (metres) the GUI enforces before sending a goal
+// (codex.md section 6: X 250-500, Y -150-150, Z 20-300 mm).
+constexpr double kRlWorkspaceMinXm = 0.250;
+constexpr double kRlWorkspaceMaxXm = 0.500;
+constexpr double kRlWorkspaceMinYm = -0.150;
+constexpr double kRlWorkspaceMaxYm = 0.150;
+constexpr double kRlWorkspaceMinZm = 0.020;
+constexpr double kRlWorkspaceMaxZm = 0.300;
 constexpr double kDefaultPickXMm = 400.0;
 constexpr double kDefaultPickYMm = 100.0;
 constexpr double kDefaultPickZMm = 250.0;
@@ -358,6 +388,20 @@ QString feedbackString(const CheckerBoard::Feedback & feedback)
     .arg(feedback.progress, 0, 'f', 2);
 }
 
+QString feedbackString(const MoveToPoseObstacle::Feedback & feedback)
+{
+  return QString("feedback stage=%1 progress=%2")
+    .arg(QString::fromStdString(feedback.current_stage))
+    .arg(feedback.progress, 0, 'f', 2);
+}
+
+QString feedbackString(const GoHome::Feedback & feedback)
+{
+  return QString("feedback step=%1 progress=%2")
+    .arg(QString::fromStdString(feedback.current_step))
+    .arg(feedback.progress, 0, 'f', 2);
+}
+
 QString feedbackString(const DrlPickPlace::Feedback & feedback)
 {
   return QString("feedback stage=%1 progress=%2")
@@ -402,6 +446,20 @@ QString resultString<RepeatabilityTest>(
     .arg(resultCodeToString(result.code))
     .arg(result.result->success ? "true" : "false")
     .arg(result.result->completed_count)
+    .arg(QString::fromStdString(result.result->message));
+}
+
+template<>
+QString resultString<MoveToPoseObstacle>(
+  const rclcpp_action::ClientGoalHandle<MoveToPoseObstacle>::WrappedResult & result)
+{
+  if (!result.result) {
+    return QString("result code=%1 empty result").arg(resultCodeToString(result.code));
+  }
+  return QString("result code=%1 success=%2 failed_stage=%3 message=%4")
+    .arg(resultCodeToString(result.code))
+    .arg(result.result->success ? "true" : "false")
+    .arg(QString::fromStdString(result.result->failed_stage))
     .arg(QString::fromStdString(result.result->message));
 }
 
@@ -453,13 +511,20 @@ bool serviceAvailable(
   return services.find(service_name) != services.end();
 }
 
+// slot_key identifies which Stop button can cancel this goal (e.g. "MovePose",
+// "PickPlaceRL"). When non-empty, a cancel handler is registered on
+// `controller` as soon as the goal is accepted, and cleared once the goal
+// reaches a terminal state (result_callback) — so Stop always reflects
+// whether there is actually something to cancel right now.
 template<typename ActionT>
 void sendGoal(
   const rclcpp::Node::SharedPtr & node,
   const std::string & action_name,
   const QString & label,
   const typename ActionT::Goal & goal,
-  const LogFn & log)
+  const LogFn & log,
+  TaskActionController * controller = nullptr,
+  const QString & slot_key = QString())
 {
   using GoalHandle = rclcpp_action::ClientGoalHandle<ActionT>;
   using Client = rclcpp_action::Client<ActionT>;
@@ -477,9 +542,24 @@ void sendGoal(
 
   typename Client::SendGoalOptions options;
   options.goal_response_callback =
-    [label, log](const typename GoalHandle::SharedPtr & goal_handle) {
-      log(goal_handle ? QString("%1: goal accepted.").arg(label) :
-        QString("%1: goal rejected.").arg(label));
+    [label, log, controller, slot_key, client](const typename GoalHandle::SharedPtr & goal_handle) {
+      if (!goal_handle) {
+        log(QString("%1: goal rejected.").arg(label));
+        return;
+      }
+      log(QString("%1: goal accepted.").arg(label));
+      if (controller != nullptr && !slot_key.isEmpty()) {
+        controller->registerCancelHandle(slot_key, [client, goal_handle, label, log]() {
+          client->async_cancel_goal(
+            goal_handle,
+            [label, log](const typename Client::CancelResponse::SharedPtr & response) {
+              const bool accepted = response &&
+                response->return_code == action_msgs::srv::CancelGoal::Response::ERROR_NONE;
+              log(accepted ? QString("%1: cancel accepted.").arg(label) :
+                QString("%1: cancel rejected hoặc goal đã kết thúc.").arg(label));
+            });
+        });
+      }
     };
   options.feedback_callback =
     [label, log](
@@ -490,8 +570,11 @@ void sendGoal(
       }
     };
   options.result_callback =
-    [label, log](const typename GoalHandle::WrappedResult & result) {
+    [label, log, controller, slot_key](const typename GoalHandle::WrappedResult & result) {
       log(QString("%1: %2").arg(label, resultString<ActionT>(result)));
+      if (controller != nullptr && !slot_key.isEmpty()) {
+        controller->clearCancelHandle(slot_key);
+      }
     };
 
   client->async_send_goal(goal, options);
@@ -500,7 +583,7 @@ void sendGoal(
 }  // namespace
 
 TaskActionController::TaskActionController(
-  rclcpp::Node::SharedPtr node,
+  std::shared_ptr<RobotGuiNode> node,
   QWidget * root,
   QObject * parent)
 : QObject(parent), node_(std::move(node)), root_(root)
@@ -513,11 +596,27 @@ void TaskActionController::connectUiSignals()
 
   connectButton("btnStartTask", [this]() {sendMovePose(false);});
   connectButton("btnResetTask", [this]() {sendMovePose(true);});
-  connectButton("btnStopTask", [this]() {logCancelUnavailable("Move Pose");});
+  connectButton("btnStopTask", [this]() {requestCancel("MovePose", "Move Pose");});
+  connectButton("btnGoHome", [this]() {sendGoHome();});
 
   connectButton("btnRLPlan", [this]() {sendMovePoseRl(false);});
-  connectButton("btnRLExecute", [this]() {sendMovePoseRl(true);});
-  connectButton("btnRLStop", [this]() {logCancelUnavailable("Move Pose RL");});
+  connectButton("btnRLExecute", [this]() {
+    // Execute must not race with Auto Plan (codex.md section 13): turn Auto Plan
+    // off first, then run the execute goal.
+    if (auto_plan_timer_ != nullptr && auto_plan_timer_->isActive()) {
+      setAutoPlanEnabled(false, "disabled before Execute");
+    }
+    sendMovePoseRl(true);
+  });
+  connectButton("btnRLStop", [this]() {
+    if (auto_plan_timer_ != nullptr && auto_plan_timer_->isActive()) {
+      setAutoPlanEnabled(false, "stopped by Stop button");
+      appendActionLog("[MovePoseRL AutoPlan] stopped by Stop button");
+    }
+    requestCancel("MovePoseRL", "Move Pose RL");
+  });
+  setupAutoPlan();
+  setupWoodTarget();
 
   connectButton("btnTaskGripperOpen", [this]() {
     sendGripper(kDefaultGripperOpenMm, true, "Gripper Open");
@@ -533,23 +632,23 @@ void TaskActionController::connectUiSignals()
 
   connectButton("btnPickPlacePlan", [this]() {sendPickPlace(false);});
   connectButton("btnPickPlaceStart", [this]() {sendPickPlace(true);});
-  connectButton("btnPickPlaceStop", [this]() {logCancelUnavailable("Pick Place");});
+  connectButton("btnPickPlaceStop", [this]() {requestCancel("PickPlace", "Pick Place");});
 
   connectButton("btnPickPlaceVisionPlan", [this]() {sendPickPlaceVision(false);});
   connectButton("btnPickPlaceVisionStart", [this]() {sendPickPlaceVision(true);});
-  connectButton("btnPickPlaceVisionStop", [this]() {logCancelUnavailable("Pick Place Vision");});
+  connectButton("btnPickPlaceVisionStop", [this]() {requestCancel("PickPlaceVision", "Pick Place Vision");});
 
   connectButton("btnPickPlaceRLPlan", [this]() {sendDrlPickPlace(false);});
   connectButton("btnPickPlaceRLStart", [this]() {sendDrlPickPlace(true);});
-  connectButton("btnPickPlaceRLStop", [this]() {logCancelUnavailable("Pick Place RL");});
+  connectButton("btnPickPlaceRLStop", [this]() {requestCancel("PickPlaceRL", "Pick Place RL");});
 
   connectButton("btnCheckBoardPlan", [this]() {sendCheckerBoard(false);});
   connectButton("btnCheckBoardStart", [this]() {sendCheckerBoard(true);});
-  connectButton("btnCheckBoardStop", [this]() {logCancelUnavailable("Check Board");});
+  connectButton("btnCheckBoardStop", [this]() {requestCancel("CheckBoard", "Check Board");});
 
   connectButton("btnRepeatPlan", [this]() {sendRepeatabilityTest(false);});
   connectButton("btnRepeatStart", [this]() {sendRepeatabilityTest(true);});
-  connectButton("btnRepeatStop", [this]() {logCancelUnavailable("Repeatability Test");});
+  connectButton("btnRepeatStop", [this]() {requestCancel("Repeatability", "Repeatability Test");});
 }
 
 void TaskActionController::configureUi()
@@ -602,66 +701,72 @@ void TaskActionController::configureUi()
   if (auto * label = root_->findChild<QLabel *>("lblMovePoseCartesian")) {
     label->hide();
   }
+  // Superseded by cbMovePoseMode (codex2.md 11.1: a list/combo replaces the
+  // old Joint/Cartesian toggle) — hidden rather than deleted so nothing
+  // that still queries it by objectName breaks.
   if (auto * checkbox = root_->findChild<QCheckBox *>("chkMovePoseCartesian")) {
-    checkbox->setText("Move Pose Cartesian");
-    checkbox->setGeometry(0, 54, 337, 30);
-    updateMovePoseCartesianStyle(checkbox->isChecked());
-    connect(checkbox, &QCheckBox::toggled, this, [this](bool checked) {
-      updateMovePoseCartesianStyle(checked);
-    });
+    checkbox->hide();
   }
 
   addPlanButtonIfMissing("btnPickPlacePlan", "tabPickPlace");
   addPlanButtonIfMissing("btnPickPlaceVisionPlan", "tabPickPlaceVision");
   addPlanButtonIfMissing("btnPickPlaceRLPlan", "tabPickPlaceRL");
   addPlanButtonIfMissing("btnCheckBoardPlan", "tabCheckBoard");
-  addRepeatAxisSelectorIfMissing();
+
+  // Log toggles are now static widgets in robot_gui.ui (codex.md section 2/9:
+  // layout must live in the .ui, not be created in code). Here we only wire
+  // their ON/OFF text so the state is unmistakable.
+  setupLogToggle("chkMovePoseLog");
+  setupVisionObstacleToggle("chkMoveObstacleUseVision");
+  setupLogToggle("chkMovePoseRlLog");
+  setupLogToggle("chkPickPlaceLog");
+  setupLogToggle("chkPickPlaceVisionLog");
+  setupLogToggle("chkPickPlaceRlLog");
+  setupLogToggle("chkCheckBoardLog");
+  setupLogToggle("chkRepeatabilityLog");
 }
 
-void TaskActionController::updateMovePoseCartesianStyle(bool checked)
+void TaskActionController::setupLogToggle(const QString & object_name)
 {
-  auto * checkbox = root_->findChild<QCheckBox *>("chkMovePoseCartesian");
-  if (checkbox == nullptr) {
+  auto * toggle = root_->findChild<QAbstractButton *>(object_name);
+  if (toggle == nullptr) {
+    appendActionLog(QString("Không tìm thấy log toggle %1 trong .ui.").arg(object_name));
     return;
   }
+  toggle->setChecked(false);
+  toggle->setText("Log: OFF");
+  connect(toggle, &QAbstractButton::toggled, this, [toggle](bool checked) {
+    toggle->setText(checked ? "Log: ON" : "Log: OFF");
+  });
+}
 
-  if (checked) {
-    checkbox->setStyleSheet(
-      "QCheckBox {"
-      "color: #005A70;"
-      "font-weight: 600;"
-      "background-color: #D9F4F7;"
-      "border: 1px solid #01BABE;"
-      "border-radius: 4px;"
-      "padding: 3px 6px;"
-      "spacing: 8px;"
-      "}"
-      "QCheckBox::indicator {"
-      "width: 18px;"
-      "height: 18px;"
-      "border: 1px solid #01BABE;"
-      "border-radius: 3px;"
-      "background-color: #01BABE;"
-      "}");
+bool TaskActionController::isLogEnabled(const QString & toggle_object_name) const
+{
+  auto * toggle = root_->findChild<QAbstractButton *>(toggle_object_name);
+  return toggle != nullptr && toggle->isChecked();
+}
+
+// codex2.md section 10: MoveToPoseObstacle needs a minimal way for the GUI
+// user to opt into /vision/box_objects instead of always sending
+// use_vision_obstacle=false. Same ON/OFF toggle pattern as setupLogToggle.
+void TaskActionController::setupVisionObstacleToggle(const QString & object_name)
+{
+  auto * toggle = root_->findChild<QAbstractButton *>(object_name);
+  if (toggle == nullptr) {
+    appendActionLog(QString("Không tìm thấy toggle %1 trong .ui.").arg(object_name));
     return;
   }
+  toggle->setChecked(false);
+  toggle->setText("Vision Obstacle: OFF");
+  connect(toggle, &QAbstractButton::toggled, this, [toggle](bool checked) {
+    toggle->setText(checked ? "Vision Obstacle: ON" : "Vision Obstacle: OFF");
+  });
+}
 
-  checkbox->setStyleSheet(
-    "QCheckBox {"
-    "color: #333333;"
-    "background-color: transparent;"
-    "border: 1px solid transparent;"
-    "border-radius: 4px;"
-    "padding: 3px 6px;"
-    "spacing: 8px;"
-    "}"
-    "QCheckBox::indicator {"
-    "width: 18px;"
-    "height: 18px;"
-    "border: 1px solid #b8cfd8;"
-    "border-radius: 3px;"
-    "background-color: white;"
-    "}");
+bool TaskActionController::isVisionObstacleEnabled() const
+{
+  auto * toggle = root_->findChild<QAbstractButton *>("chkMoveObstacleUseVision");
+  return toggle != nullptr && toggle->isChecked();
 }
 
 void TaskActionController::addPlanButtonIfMissing(const QString & object_name, const QString & tab_name)
@@ -687,29 +792,6 @@ void TaskActionController::addPlanButtonIfMissing(const QString & object_name, c
   button->show();
 }
 
-void TaskActionController::addRepeatAxisSelectorIfMissing()
-{
-  if (root_->findChild<QComboBox *>("cbRepeatAxis")) {
-    return;
-  }
-  auto * tab = root_->findChild<QWidget *>("tabRepeatability");
-  if (tab == nullptr) {
-    return;
-  }
-  auto * label = new QLabel("axis", tab);
-  label->setObjectName("lblRepeatAxis");
-  label->setGeometry(8, 408, 50, 22);
-  label->setAlignment(Qt::AlignCenter);
-  label->setStyleSheet("background:transparent; color:#102d3d; border:0px;");
-
-  auto * combo = new QComboBox(tab);
-  combo->setObjectName("cbRepeatAxis");
-  combo->setGeometry(58, 406, 80, 28);
-  combo->addItems({"X", "Y", "Z"});
-  combo->show();
-  label->show();
-}
-
 void TaskActionController::connectButton(const QString & object_name, const std::function<void()> & callback)
 {
   auto * button = root_->findChild<QPushButton *>(object_name);
@@ -722,6 +804,9 @@ void TaskActionController::connectButton(const QString & object_name, const std:
 
 void TaskActionController::appendActionLog(const QString & msg)
 {
+  if (node_) {
+    RCLCPP_INFO(node_->get_logger(), "%s", msg.toStdString().c_str());
+  }
   QMetaObject::invokeMethod(
     root_,
     [this, msg]() {
@@ -790,6 +875,10 @@ std::optional<double> TaskActionController::readVelocityScale(
 
 void TaskActionController::setMovePoseRlBusy(bool busy)
 {
+  // Atomic flag drives Auto Plan anti-overlap (read from the timer tick, which
+  // runs on the GUI thread; written here from either the GUI thread or a ROS
+  // executor thread in the result callback).
+  move_pose_rl_busy_.store(busy);
   QMetaObject::invokeMethod(
     root_,
     [this, busy]() {
@@ -803,13 +892,311 @@ void TaskActionController::setMovePoseRlBusy(bool busy)
     Qt::QueuedConnection);
 }
 
-void TaskActionController::logCancelUnavailable(const QString & label)
+// Reads the Move Pose RL X/Y/Z line edits (mm -> m) exactly like sendMovePoseRl
+// (same field names, same defaults, no sign inversion on Y), but without the
+// per-axis Action-Log spam that would flood the log every Auto Plan tick.
+bool TaskActionController::readMovePoseRlTargetMeters(double & x, double & y, double & z) const
 {
-  appendActionLog(QString("%1: cancel chưa implement.").arg(label));
+  auto parse = [](QWidget * root, const QString & name, double default_mm, double & out_m) -> bool {
+    double mm = default_mm;
+    if (auto * edit = root ? root->findChild<QLineEdit *>(name) : nullptr) {
+      const QString text = edit->text().trimmed();
+      if (!text.isEmpty()) {
+        bool ok = false;
+        mm = text.toDouble(&ok);
+        if (!ok || !std::isfinite(mm)) {
+          return false;
+        }
+      }
+    }
+    out_m = mm / 1000.0;
+    return true;
+  };
+  return parse(root_, "rlPosePositionX", kDefaultMoveXMm, x) &&
+         parse(root_, "rlPosePositionY", kDefaultMoveYMm, y) &&
+         parse(root_, "rlPosePositionZ", kDefaultMoveZMm, z);
+}
+
+void TaskActionController::setupAutoPlan()
+{
+  auto * toggle = root_->findChild<QAbstractButton *>("btnMovePoseRlAutoPlan");
+  if (toggle == nullptr) {
+    appendActionLog("Không tìm thấy nút Auto Plan (btnMovePoseRlAutoPlan) trong .ui.");
+    return;
+  }
+  toggle->setChecked(false);
+  toggle->setText("Auto Plan: OFF");
+
+  auto_plan_timer_ = new QTimer(this);
+  auto_plan_timer_->setSingleShot(false);
+  connect(auto_plan_timer_, &QTimer::timeout, this, &TaskActionController::onAutoPlanTick);
+
+  connect(toggle, &QAbstractButton::toggled, this, [this](bool checked) {
+    setAutoPlanEnabled(checked, checked ? "button ON" : "button OFF");
+  });
+
+  // Auto-off when the user leaves the Move Pose RL tab so we never keep
+  // planning in the background for a tab the user is no longer looking at.
+  if (auto * tabs = root_->findChild<QTabWidget *>("taskModeTabs")) {
+    connect(tabs, &QTabWidget::currentChanged, this, [this, tabs](int index) {
+      QWidget * page = tabs->widget(index);
+      const bool on_rl_tab = page != nullptr && page->objectName() == "tabMovePoseRL";
+      if (!on_rl_tab && auto_plan_timer_ != nullptr && auto_plan_timer_->isActive()) {
+        setAutoPlanEnabled(false, "left Move Pose RL tab");
+      }
+    });
+  }
+}
+
+void TaskActionController::setAutoPlanEnabled(bool on, const QString & reason)
+{
+  if (auto * toggle = root_->findChild<QAbstractButton *>("btnMovePoseRlAutoPlan")) {
+    // Block signals so a programmatic toggle (Stop/Execute/tab-change) does not
+    // re-enter setAutoPlanEnabled through the toggled() connection.
+    const QSignalBlocker blocker(toggle);
+    toggle->setChecked(on);
+    toggle->setText(on ? "Auto Plan: ON" : "Auto Plan: OFF");
+  }
+  if (auto_plan_timer_ == nullptr) {
+    return;
+  }
+  if (on) {
+    int interval_ms = kMovePoseRlAutoPlanIntervalMs;
+    if (auto * spin = root_->findChild<QDoubleSpinBox *>("spinMovePoseRlAutoPlanIntervalSec")) {
+      interval_ms = static_cast<int>(std::clamp(spin->value(), 1.0, 2.0) * 1000.0);
+    }
+    auto_plan_cycle_ = 0;
+    auto_plan_timer_->start(interval_ms);
+    appendActionLog(QString("[MovePoseRL AutoPlan] ON (interval=%1 ms) — %2")
+      .arg(interval_ms).arg(reason));
+    onAutoPlanTick();  // fire first plan immediately, don't wait a full interval
+  } else {
+    if (auto_plan_timer_->isActive()) {
+      auto_plan_timer_->stop();
+    }
+    appendActionLog(QString("[MovePoseRL AutoPlan] OFF — %1").arg(reason));
+  }
+}
+
+void TaskActionController::onAutoPlanTick()
+{
+  // Anti-overlap: never send a second /move_pose_rl goal while one is running.
+  if (move_pose_rl_busy_.load()) {
+    appendActionLog("[MovePoseRL AutoPlan] previous plan still running, skip this cycle");
+    return;
+  }
+
+  double roll = 0.0;
+  double pitch = 0.0;
+  double yaw = 0.0;
+  if (!movePoseRlOrientationDeg(roll, pitch, yaw)) {
+    appendActionLog("[MovePoseRL AutoPlan] invalid orientation input, disabling Auto Plan");
+    setAutoPlanEnabled(false, "invalid orientation input");
+    return;
+  }
+  const auto orientation = rpyDegToQuaternion(roll, pitch, yaw);
+
+  // Target: wood detection (Wood Target ON) or manual X/Y/Z. Returns false
+  // (skip this cycle, no goal) if no valid wood / outside workspace / invalid.
+  double x = 0.0;
+  double y = 0.0;
+  double z = 0.0;
+  QString source;
+  if (!movePoseRlTargetPosition(true, x, y, z, source)) {
+    return;  // keep timer running; the helper already logged the reason
+  }
+
+  double velocity = DEFAULT_GUI_VELOCITY_SCALE;
+  if (const auto v = readVelocityScale(
+      lineEdit(root_, "txtVelocityScale"), DEFAULT_GUI_VELOCITY_SCALE,
+      "[MovePoseRL AutoPlan] velocity_scale"))
+  {
+    velocity = *v;
+  }
+
+  MovePoseRl::Goal goal;
+  goal.target_pose = makePose(x, y, z, orientation);
+  goal.velocity_scale = velocity;
+  goal.execute = false;  // Auto Plan NEVER executes the robot.
+  goal.enable_metrics_log = isLogEnabled("chkMovePoseRlLog");
+
+  ++auto_plan_cycle_;
+  appendActionLog(QString("[MovePoseRL AutoPlan] cycle #%1").arg(auto_plan_cycle_));
+  appendActionLog(QString("[MovePoseRL AutoPlan] target_source=%1").arg(source));
+  appendActionLog(QString("[MovePoseRL AutoPlan] target_base=(%1, %2, %3), execute=false")
+    .arg(x, 0, 'f', 3).arg(y, 0, 'f', 3).arg(z, 0, 'f', 3));
+  appendActionLog(QString("[MovePoseRL AutoPlan] rpy_deg=(%1, %2, %3)")
+    .arg(roll, 0, 'f', 1).arg(pitch, 0, 'f', 1).arg(yaw, 0, 'f', 1));
+  appendActionLog("[MovePoseRL AutoPlan] goal sent");
+
+  dispatchMovePoseRlGoal(goal, false);
+}
+
+bool TaskActionController::movePoseRlOrientationDeg(
+  double & roll_deg, double & pitch_deg, double & yaw_deg)
+{
+  // Default fixed RL orientation R=180/P=0/Y=90 when the RPY fields are empty
+  // (never identity — codex.md section 9). If any field has text, use the user
+  // values (blank individual fields fall back to the default for that axis).
+  roll_deg = kMovePoseRlDefaultRollDeg;
+  pitch_deg = kMovePoseRlDefaultPitchDeg;
+  yaw_deg = kMovePoseRlDefaultYawDeg;
+  const bool has_orientation =
+    editHasText(root_, "rlPoseOrientationRoll") ||
+    editHasText(root_, "rlPoseOrientationPitch") ||
+    editHasText(root_, "rlPoseOrientationYaw");
+  if (!has_orientation) {
+    return true;
+  }
+  const LogFn log = [this](const QString & msg) {appendActionLog(msg);};
+  return
+    readDouble(root_, "rlPoseOrientationRoll", kMovePoseRlDefaultRollDeg, "Roll (deg)", log, &roll_deg) &&
+    readDouble(root_, "rlPoseOrientationPitch", kMovePoseRlDefaultPitchDeg, "Pitch (deg)", log, &pitch_deg) &&
+    readDouble(root_, "rlPoseOrientationYaw", kMovePoseRlDefaultYawDeg, "Yaw (deg)", log, &yaw_deg);
+}
+
+bool TaskActionController::movePoseRlTargetPosition(
+  bool for_auto_plan, double & x, double & y, double & z, QString & source)
+{
+  const QString prefix = for_auto_plan ? "[MovePoseRL AutoPlan]" : "[MovePoseRL]";
+
+  if (wood_target_enabled_) {
+    source = "vision_wood";
+    RobotGuiNode::WoodTarget wt;
+    std::string err;
+    if (!node_->move_pose_rl_wood_target(wt, err)) {
+      // No silent fallback to manual target (codex.md section 4/20).
+      appendActionLog(for_auto_plan ?
+        QString("[MovePoseRL AutoPlan] no valid wood target; skip (%1)")
+          .arg(QString::fromStdString(err)) :
+        QString("[MovePoseRL] Wood Target ON but no valid /vision/wood_objects; "
+          "skip planning (%1)").arg(QString::fromStdString(err)));
+      return false;
+    }
+    const QString frame_in = QString::fromStdString(wt.frame_in.empty() ? "(none)" : wt.frame_in);
+    appendActionLog(QString(
+        "%1 selected wood target: source=/vision/wood_objects wood_id=%2 "
+        "confidence=%3 frame_in=%4 selected_rule=highest_confidence")
+      .arg(prefix).arg(wt.wood_id).arg(wt.confidence, 0, 'f', 3).arg(frame_in));
+    appendActionLog(QString(
+        "%1 transform wood target: frame_in=%2 frame_out=base_link "
+        "target_base=(%3, %4, %5) offset=(%6, %7, %8)")
+      .arg(prefix).arg(frame_in)
+      .arg(wt.x_m, 0, 'f', 3).arg(wt.y_m, 0, 'f', 3).arg(wt.z_m, 0, 'f', 3)
+      .arg(wt.x_offset_m, 0, 'f', 3).arg(wt.y_offset_m, 0, 'f', 3).arg(wt.z_offset_m, 0, 'f', 3));
+    x = wt.x_m;
+    y = wt.y_m;
+    z = wt.z_m;
+  } else {
+    source = "manual_gui";
+    if (!readMovePoseRlTargetMeters(x, y, z)) {
+      appendActionLog(QString("%1 invalid X/Y/Z input").arg(prefix));
+      if (for_auto_plan) {
+        setAutoPlanEnabled(false, "invalid target input");
+      }
+      return false;
+    }
+  }
+
+  // Workspace guard — reject (never silently clamp) when using wood target or in
+  // Auto Plan. Manual single Plan keeps its prior behaviour (server validates).
+  const bool enforce_workspace = wood_target_enabled_ || for_auto_plan;
+  if (enforce_workspace &&
+    (x < kRlWorkspaceMinXm || x > kRlWorkspaceMaxXm ||
+    y < kRlWorkspaceMinYm || y > kRlWorkspaceMaxYm ||
+    z < kRlWorkspaceMinZm || z > kRlWorkspaceMaxZm))
+  {
+    appendActionLog(QString(
+        "%1 %2 target outside trained workspace: target=(%3, %4, %5); "
+        "workspace x=[0.250,0.500], y=[-0.150,0.150], z=[0.020,0.300]")
+      .arg(prefix).arg(wood_target_enabled_ ? "wood" : "manual")
+      .arg(x, 0, 'f', 3).arg(y, 0, 'f', 3).arg(z, 0, 'f', 3));
+    return false;
+  }
+  return true;
+}
+
+void TaskActionController::setupWoodTarget()
+{
+  auto * toggle = root_->findChild<QAbstractButton *>("btnMovePoseRlVisionTarget");
+  if (toggle == nullptr) {
+    appendActionLog("Không tìm thấy nút Wood Target (btnMovePoseRlVisionTarget) trong .ui.");
+    return;
+  }
+  toggle->setChecked(false);
+  toggle->setText("Wood Target: OFF");
+  wood_target_enabled_ = false;
+  connect(toggle, &QAbstractButton::toggled, this, [this, toggle](bool checked) {
+    wood_target_enabled_ = checked;
+    toggle->setText(checked ? "Wood Target: ON" : "Wood Target: OFF");
+    // Grey out the manual X/Y/Z fields so it is obvious they are unused.
+    for (const char * name : {"rlPosePositionX", "rlPosePositionY", "rlPosePositionZ"}) {
+      if (auto * edit = root_->findChild<QLineEdit *>(name)) {
+        edit->setEnabled(!checked);
+      }
+    }
+    appendActionLog(checked ?
+      "[MovePoseRL] Wood Target: ON — target from /vision/wood_objects "
+      "(manual X/Y/Z ignored)" :
+      "[MovePoseRL] Wood Target: OFF — target from manual X/Y/Z");
+  });
+}
+
+void TaskActionController::registerCancelHandle(const QString & slot_key, std::function<void()> canceller)
+{
+  std::lock_guard<std::mutex> lock(cancel_mutex_);
+  cancel_handlers_[slot_key] = std::move(canceller);
+}
+
+void TaskActionController::clearCancelHandle(const QString & slot_key)
+{
+  std::lock_guard<std::mutex> lock(cancel_mutex_);
+  cancel_handlers_.erase(slot_key);
+}
+
+// Stop button handler for every action-calling tab: cancels the goal
+// currently registered for slot_key via a real action-client cancel call
+// (codex2.md section 7 — must not just disable UI). If no goal is in
+// flight (already completed, or never started), this is a harmless no-op
+// with a status message, never an error.
+void TaskActionController::requestCancel(const QString & slot_key, const QString & label)
+{
+  std::function<void()> canceller;
+  {
+    std::lock_guard<std::mutex> lock(cancel_mutex_);
+    auto it = cancel_handlers_.find(slot_key);
+    if (it != cancel_handlers_.end()) {
+      canceller = it->second;
+    }
+  }
+  if (!canceller) {
+    appendActionLog(QString("%1: không có goal đang chạy để cancel.").arg(label));
+    return;
+  }
+  appendActionLog(QString("%1: gửi yêu cầu cancel...").arg(label));
+  canceller();
 }
 
 void TaskActionController::sendMovePose(bool execute)
 {
+  // Planning mode selector (codex2.md 11.1): prefer the new combo box
+  // (Joint / Cartesian / MoveToPoseObstacle); fall back to the legacy
+  // checkbox if the combo somehow isn't present, so this still degrades
+  // gracefully rather than crashing.
+  QString mode = "MoveToPose (Joint)";
+  if (auto * combo = root_->findChild<QComboBox *>("cbMovePoseMode")) {
+    mode = combo->currentText();
+  } else if (auto * checkbox = root_->findChild<QCheckBox *>("chkMovePoseCartesian");
+    checkbox != nullptr && checkbox->isChecked())
+  {
+    mode = "MoveToPoseCartesian";
+  }
+
+  if (mode == "MoveToPoseObstacle") {
+    sendMoveToPoseObstacle(execute);
+    return;
+  }
+
   const LogFn log = [this](const QString & msg) {appendActionLog(msg);};
   const auto velocity = readVelocityScale(
     lineEdit(root_, "txtMovePoseVelocity"),
@@ -830,26 +1217,93 @@ void TaskActionController::sendMovePose(bool execute)
     return;
   }
 
-  const bool cartesian =
-    root_->findChild<QCheckBox *>("chkMovePoseCartesian") != nullptr &&
-    root_->findChild<QCheckBox *>("chkMovePoseCartesian")->isChecked();
-
-  if (cartesian) {
+  if (mode == "MoveToPoseCartesian") {
     MoveToPoseCartesian::Goal goal;
     goal.target_pose = makePose(*x, *y, *z, orientation);
     goal.velocity_scale = *velocity;
     goal.execute = execute;
+    goal.enable_tcp_log = isLogEnabled("chkMovePoseLog");
+    appendActionLog(QString("[MoveToPoseCartesian GUI] enable_tcp_log=%1")
+      .arg(goal.enable_tcp_log ? "true" : "false"));
     sendGoal<MoveToPoseCartesian>(
       node_, "/move_to_pose_cartesian",
-      execute ? "Move Pose Cartesian Start" : "Move Pose Cartesian Plan", goal, log);
+      execute ? "Move Pose Cartesian Start" : "Move Pose Cartesian Plan", goal, log,
+      this, "MovePose");
   } else {
     MoveToPose::Goal goal;
     goal.target_pose = makePose(*x, *y, *z, orientation);
     goal.velocity_scale = *velocity;
     goal.execute = execute;
+    goal.enable_tcp_log = isLogEnabled("chkMovePoseLog");
+    appendActionLog(QString("[MoveToPose GUI] enable_tcp_log=%1")
+      .arg(goal.enable_tcp_log ? "true" : "false"));
     sendGoal<MoveToPose>(
-      node_, "/move_to_pose", execute ? "Move Pose Start" : "Move Pose Plan", goal, log);
+      node_, "/move_to_pose", execute ? "Move Pose Start" : "Move Pose Plan", goal, log,
+      this, "MovePose");
   }
+}
+
+// codex2.md 11.2: MoveToPoseObstacle uses the same target pose fields as
+// Move Pose. The "Vision Obstacle" toggle (chkMoveObstacleUseVision) is the
+// minimal addition from codex2.md section 10: OFF keeps the original
+// behavior (use_vision_obstacle=false/require_obstacle=false, no obstacle
+// required — this is what existing fallback tests exercise), ON opts into
+// reading /vision/box_objects and requires the server to resolve a real
+// obstacle (require_obstacle=true) rather than silently planning without one.
+void TaskActionController::sendMoveToPoseObstacle(bool execute)
+{
+  const LogFn log = [this](const QString & msg) {appendActionLog(msg);};
+  const auto velocity = readVelocityScale(
+    lineEdit(root_, "txtMovePoseVelocity"),
+    DEFAULT_GUI_VELOCITY_SCALE,
+    "[MoveToPoseObstacle] velocity_scale");
+  const auto x = readMmAsMeter(lineEdit(root_, "txtTargetX"), kDefaultMoveXMm, "[MoveToPoseObstacle] X");
+  const auto y = readMmAsMeter(lineEdit(root_, "txtTargetY"), kDefaultMoveYMm, "[MoveToPoseObstacle] Y");
+  const auto z = readMmAsMeter(lineEdit(root_, "txtTargetZ"), kDefaultMoveZMm, "[MoveToPoseObstacle] Z");
+  if (!velocity || !x || !y || !z) {
+    return;
+  }
+  appendActionLog(QString("[MoveToPoseObstacle] velocity_scale=%1").arg(*velocity, 0, 'f', 3));
+
+  bool ok = true;
+  const auto orientation =
+    orientationFromRpyFields(root_, "txtTargetRoll", "txtTargetPitch", "txtTargetYaw", log, &ok);
+  if (!ok) {
+    return;
+  }
+
+  const bool use_vision_obstacle = isVisionObstacleEnabled();
+  appendActionLog(
+    use_vision_obstacle ?
+    "[MoveToPoseObstacle] Vision Obstacle ON: use_vision_obstacle=true, "
+    "require_obstacle=true, obstacle_class=box." :
+    "[MoveToPoseObstacle] Vision Obstacle OFF: sending without a required "
+    "obstacle (use_vision_obstacle=false, require_obstacle=false).");
+
+  MoveToPoseObstacle::Goal goal;
+  goal.target_pose = makePose(*x, *y, *z, orientation);
+  goal.velocity_scale = *velocity;
+  goal.execute = execute;
+  goal.use_vision_obstacle = use_vision_obstacle;
+  goal.obstacle_class = "box";
+  goal.require_obstacle = use_vision_obstacle;
+  goal.use_fallback_obstacle = false;
+  goal.enable_metrics_log = isLogEnabled("chkMovePoseLog");
+  appendActionLog(QString("[MoveToPoseObstacle GUI] enable_metrics_log=%1")
+    .arg(goal.enable_metrics_log ? "true" : "false"));
+  sendGoal<MoveToPoseObstacle>(
+    node_, "/move_to_pose_obstacle",
+    execute ? "MoveToPoseObstacle Start" : "MoveToPoseObstacle Plan", goal, log,
+    this, "MovePose");
+}
+
+void TaskActionController::sendGoHome()
+{
+  const LogFn log = [this](const QString & msg) {appendActionLog(msg);};
+  GoHome::Goal goal;
+  goal.start = true;
+  goal.execute = true;
+  sendGoal<GoHome>(node_, "/gohome", "GoHome", goal, log, this, "MovePose");
 }
 
 void TaskActionController::sendGripper(double position, bool execute, const QString & label)
@@ -919,26 +1373,60 @@ void TaskActionController::sendPickPlace(bool execute)
   goal.gripper = gripper;
   goal.velocity_scale = *velocity;
   goal.execute = execute;
-  sendGoal<PickPlace>(node_, "/pickplace", execute ? "Pick Place Start" : "Pick Place Plan", goal, log);
+  goal.enable_tcp_log = isLogEnabled("chkPickPlaceLog");
+  appendActionLog(QString("[PickPlace GUI] enable_tcp_log=%1")
+    .arg(goal.enable_tcp_log ? "true" : "false"));
+  sendGoal<PickPlace>(
+    node_, "/pickplace", execute ? "Pick Place Start" : "Pick Place Plan", goal, log,
+    this, "PickPlace");
 }
 
+// codex2.md section 5: pick pose must come from the highest-confidence
+// `wood` detection (never from `box`). If no fresh wood detection is
+// available, no goal is sent — the manual X/Y/Z fields are only a
+// last-resort fallback for testing without a camera.
 void TaskActionController::sendPickPlaceVision(bool execute)
 {
   const LogFn log = [this](const QString & msg) {appendActionLog(msg);};
-  if (!editHasText(root_, "txtObjectX") && !editHasText(root_, "txtObjectY") &&
-    !editHasText(root_, "txtObjectZ"))
+
+  geometry_msgs::msg::Pose wood_pose;
+  float wood_confidence = 0.0f;
+  std::string wood_error;
+  const bool have_wood = node_->best_wood_pose("base_link", wood_pose, wood_confidence, wood_error);
+
+  std::optional<double> pick_x;
+  std::optional<double> pick_y;
+  std::optional<double> pick_z;
+  if (have_wood) {
+    pick_x = wood_pose.position.x;
+    pick_y = wood_pose.position.y;
+    pick_z = wood_pose.position.z;
+    appendActionLog(QString(
+      "[Pick Place Vision] wood detected (base_link): x=%1 y=%2 z=%3 confidence=%4")
+      .arg(*pick_x, 0, 'f', 4).arg(*pick_y, 0, 'f', 4).arg(*pick_z, 0, 'f', 4)
+      .arg(wood_confidence, 0, 'f', 3));
+    if (auto * edit = lineEdit(root_, "txtObjectX")) {edit->setText(QString::number(*pick_x * 1000.0, 'f', 1));}
+    if (auto * edit = lineEdit(root_, "txtObjectY")) {edit->setText(QString::number(*pick_y * 1000.0, 'f', 1));}
+    if (auto * edit = lineEdit(root_, "txtObjectZ")) {edit->setText(QString::number(*pick_z * 1000.0, 'f', 1));}
+  } else if (editHasText(root_, "txtObjectX") || editHasText(root_, "txtObjectY") ||
+    editHasText(root_, "txtObjectZ"))
   {
-    appendActionLog(QString::fromUtf8(
-      u8"Vision pose chưa có dữ liệu, dùng pose nhập tay hoặc không gửi goal."));
+    appendActionLog(QString::fromStdString(
+      "[Pick Place Vision] Không có wood detection (" + wood_error +
+      "); dùng pose nhập tay."));
+    pick_x = readMmAsMeter(lineEdit(root_, "txtObjectX"), kDefaultPickXMm, "[Pick Place Vision] pick X");
+    pick_y = readMmAsMeter(lineEdit(root_, "txtObjectY"), kDefaultPickYMm, "[Pick Place Vision] pick Y");
+    pick_z = readMmAsMeter(lineEdit(root_, "txtObjectZ"), kDefaultPickZMm, "[Pick Place Vision] pick Z");
+  } else {
+    appendActionLog(QString::fromStdString(
+      "[Pick Place Vision] Không tìm thấy wood (" + wood_error + "); không gửi goal."));
+    return;
   }
 
   const auto velocity = readVelocityScale(
     lineEdit(root_, "txtPickPlaceVisionVelocity"),
     DEFAULT_GUI_VELOCITY_SCALE,
     "[Pick Place Vision] velocity_scale");
-  const auto pick_x = readMmAsMeter(lineEdit(root_, "txtObjectX"), kDefaultPickXMm, "[Pick Place Vision] pick X");
-  const auto pick_y = readMmAsMeter(lineEdit(root_, "txtObjectY"), kDefaultPickYMm, "[Pick Place Vision] pick Y");
-  const auto pick_z = readMmAsMeter(lineEdit(root_, "txtObjectZ"), kDefaultPickZMm, "[Pick Place Vision] pick Z");
   const auto place_x = readMmAsMeter(lineEdit(root_, "visionPlacePoseX"), kDefaultPlaceXMm, "[Pick Place Vision] place X");
   const auto place_y = readMmAsMeter(lineEdit(root_, "visionPlacePoseY"), kDefaultPlaceYMm, "[Pick Place Vision] place Y");
   const auto place_z = readMmAsMeter(lineEdit(root_, "visionPlacePoseZ"), kDefaultPlaceZMm, "[Pick Place Vision] place Z");
@@ -959,8 +1447,12 @@ void TaskActionController::sendPickPlaceVision(bool execute)
   goal.gripper = kDefaultPickGripperMm / 1000.0;
   goal.velocity_scale = *velocity;
   goal.execute = execute;
+  goal.enable_tcp_log = isLogEnabled("chkPickPlaceVisionLog");
+  appendActionLog(QString("[PickPlaceVision GUI] enable_tcp_log=%1")
+    .arg(goal.enable_tcp_log ? "true" : "false"));
   sendGoal<PickPlace>(
-    node_, "/pickplace", execute ? "Pick Place Vision Start" : "Pick Place Vision Plan", goal, log);
+    node_, "/pickplace", execute ? "Pick Place Vision Start" : "Pick Place Vision Plan", goal, log,
+    this, "PickPlaceVision");
 }
 
 void TaskActionController::sendDrlPickPlace(bool execute)
@@ -986,55 +1478,99 @@ void TaskActionController::sendDrlPickPlace(bool execute)
     place_q = drlRepeatQuaternion();
   }
 
+  // codex2.md section 6: pick target also comes from the highest-confidence
+  // `wood` detection when available (same selection rule as Pick Place
+  // Vision). DrlPickPlace has no built-in fallback pick pose input in this
+  // tab, so — unlike Pick Place Vision — falling back to the pre-existing
+  // fixed default keeps this tab usable without a camera rather than
+  // blocking every call.
+  geometry_msgs::msg::Pose pick_pose = makePose(
+    kDefaultDrlPickXMm / 1000.0,
+    kDefaultDrlPickYMm / 1000.0,
+    kDefaultDrlPickZMm / 1000.0,
+    drlRepeatQuaternion());
+  float wood_confidence = 0.0f;
+  std::string wood_error;
+  if (node_->best_wood_pose("base_link", pick_pose, wood_confidence, wood_error)) {
+    appendActionLog(QString(
+      "[Pick Place RL] wood detected (base_link): x=%1 y=%2 z=%3 confidence=%4")
+      .arg(pick_pose.position.x, 0, 'f', 4).arg(pick_pose.position.y, 0, 'f', 4)
+      .arg(pick_pose.position.z, 0, 'f', 4).arg(wood_confidence, 0, 'f', 3));
+    pick_pose.orientation = drlRepeatQuaternion();
+  } else {
+    appendActionLog(QString::fromStdString(
+      "[Pick Place RL] Không có wood detection (" + wood_error + "); dùng pick pose mặc định."));
+  }
+
   DrlPickPlace::Goal goal;
-  goal.target_pick = makeStampedPose(
-    "base_link",
-    makePose(
-      kDefaultDrlPickXMm / 1000.0,
-      kDefaultDrlPickYMm / 1000.0,
-      kDefaultDrlPickZMm / 1000.0,
-      drlRepeatQuaternion()));
+  goal.target_pick = makeStampedPose("base_link", pick_pose);
   goal.target_place = makeStampedPose("base_link", makePose(*place_x, *place_y, *place_z, place_q));
   goal.gripper_close_width_m = gripper;
   goal.execute = execute;
+  goal.enable_metrics_log = isLogEnabled("chkPickPlaceRlLog");
+  appendActionLog(QString("[DrlPickPlace GUI] enable_metrics_log=%1")
+    .arg(goal.enable_metrics_log ? "true" : "false"));
   sendGoal<DrlPickPlace>(
-    node_, "/drl_pickplace", execute ? "Pick Place RL Start" : "Pick Place RL Plan", goal, log);
+    node_, "/drl_pickplace", execute ? "Pick Place RL Start" : "Pick Place RL Plan", goal, log,
+    this, "PickPlaceRL");
 }
 
 void TaskActionController::sendMovePoseRl(bool execute)
 {
   const LogFn log = [this](const QString & msg) {appendActionLog(msg);};
   double velocity = DEFAULT_GUI_VELOCITY_SCALE;
-  const auto x = readMmAsMeter(lineEdit(root_, "rlPosePositionX"), kDefaultMoveXMm, "[MovePoseRL] X");
-  const auto y = readMmAsMeter(lineEdit(root_, "rlPosePositionY"), kDefaultMoveYMm, "[MovePoseRL] Y");
-  const auto z = readMmAsMeter(lineEdit(root_, "rlPosePositionZ"), kDefaultMoveZMm, "[MovePoseRL] Z");
-  if (!x || !y || !z ||
-    !readVelocity(root_, "txtVelocityScale", velocity, "MovePoseRL velocity_scale", log, &velocity))
-  {
+  if (!readVelocity(root_, "txtVelocityScale", velocity, "MovePoseRL velocity_scale", log, &velocity)) {
     return;
   }
+
+  double roll = 0.0;
+  double pitch = 0.0;
+  double yaw = 0.0;
+  if (!movePoseRlOrientationDeg(roll, pitch, yaw)) {
+    return;
+  }
+  const auto orientation = rpyDegToQuaternion(roll, pitch, yaw);
+
+  // Target comes from wood detection when Wood Target is ON, else manual X/Y/Z.
+  double x = 0.0;
+  double y = 0.0;
+  double z = 0.0;
+  QString source;
+  if (!movePoseRlTargetPosition(false, x, y, z, source)) {
+    return;
+  }
+
+  appendActionLog(QString("[MovePoseRL] target_source=%1").arg(source));
+  appendActionLog(QString("[MovePoseRL] target=(%1, %2, %3)")
+    .arg(x, 0, 'f', 3).arg(y, 0, 'f', 3).arg(z, 0, 'f', 3));
+  appendActionLog(QString("[MovePoseRL] target_rpy_deg=(%1, %2, %3)")
+    .arg(roll, 0, 'f', 1).arg(pitch, 0, 'f', 1).arg(yaw, 0, 'f', 1));
+  appendActionLog(QString("[MovePoseRL] target_quat=(%1, %2, %3, %4)")
+    .arg(orientation.x, 0, 'f', 4).arg(orientation.y, 0, 'f', 4)
+    .arg(orientation.z, 0, 'f', 4).arg(orientation.w, 0, 'f', 4));
   appendActionLog(QString("[MovePoseRL] velocity_scale=%1").arg(velocity, 0, 'f', 3));
 
-  bool ok = true;
-  const auto orientation = orientationFromRpyFields(
-    root_,
-    "rlPoseOrientationRoll",
-    "rlPoseOrientationPitch",
-    "rlPoseOrientationYaw",
-    log,
-    &ok);
-  if (!ok) {
-    return;
-  }
-
   MovePoseRl::Goal goal;
-  goal.target_pose = makePose(*x, *y, *z, orientation);
+  goal.target_pose = makePose(x, y, z, orientation);
   goal.velocity_scale = velocity;
   goal.execute = execute;
+  goal.enable_metrics_log = isLogEnabled("chkMovePoseRlLog");
+  appendActionLog(QString("[MovePoseRL GUI] enable_metrics_log=%1")
+    .arg(goal.enable_metrics_log ? "true" : "false"));
 
   appendActionLog(execute ?
     "[MovePoseRL] Sending execute goal..." :
     "[MovePoseRL] Sending plan-only goal...");
+  dispatchMovePoseRlGoal(goal, execute);
+}
+
+// Shared async dispatch for both the manual Plan/Execute buttons and Auto Plan:
+// runs the DRL preflight service checks off the GUI thread, sends the goal, and
+// wires feedback/result/cancel. Anti-overlap for Auto Plan relies on
+// setMovePoseRlBusy() flipping move_pose_rl_busy_.
+void TaskActionController::dispatchMovePoseRlGoal(
+  const MovePoseRl::Goal & goal, bool execute)
+{
   setMovePoseRlBusy(true);
 
   auto node = node_;
@@ -1096,12 +1632,26 @@ void TaskActionController::sendMovePoseRl(bool execute)
 
     typename Client::SendGoalOptions options;
     options.goal_response_callback =
-      [self](const GoalHandle::SharedPtr & goal_handle) {
+      [self, client](const GoalHandle::SharedPtr & goal_handle) {
         if (!self) {
           return;
         }
         if (goal_handle) {
           self->appendActionLog("[MovePoseRL] goal accepted.");
+          self->registerCancelHandle("MovePoseRL", [self, client, goal_handle]() {
+            client->async_cancel_goal(
+              goal_handle,
+              [self](const typename Client::CancelResponse::SharedPtr & response) {
+                if (!self) {
+                  return;
+                }
+                const bool accepted = response &&
+                  response->return_code == action_msgs::srv::CancelGoal::Response::ERROR_NONE;
+                self->appendActionLog(accepted ?
+                  "[MovePoseRL] cancel accepted." :
+                  "[MovePoseRL] cancel rejected hoặc goal đã kết thúc.");
+              });
+          });
           return;
         }
         self->appendActionLog("[MovePoseRL] FAILED at goal_response: goal rejected");
@@ -1124,6 +1674,7 @@ void TaskActionController::sendMovePoseRl(bool execute)
           return;
         }
         self->appendActionLog(resultString<MovePoseRl>(result));
+        self->clearCancelHandle("MovePoseRL");
         self->setMovePoseRlBusy(false);
       };
 
@@ -1151,8 +1702,12 @@ void TaskActionController::sendCheckerBoard(bool execute)
   goal.step = *step;
   goal.velocity_scale = *velocity;
   goal.execute = execute;
+  goal.enable_tcp_log = isLogEnabled("chkCheckBoardLog");
+  appendActionLog(QString("[CheckBoard GUI] enable_tcp_log=%1")
+    .arg(goal.enable_tcp_log ? "true" : "false"));
   sendGoal<CheckerBoard>(
-    node_, "/move_checker_board", execute ? "Check Board Start" : "Check Board Plan", goal, log);
+    node_, "/move_checker_board", execute ? "Check Board Start" : "Check Board Plan", goal, log,
+    this, "CheckBoard");
 }
 
 void TaskActionController::sendRepeatabilityTest(bool execute)
@@ -1184,13 +1739,10 @@ void TaskActionController::sendRepeatabilityTest(bool execute)
   }
 
   uint8_t axis = RepeatabilityTest::Goal::AXIS_X;
-  if (auto * combo = root_->findChild<QComboBox *>("cbRepeatAxis")) {
-    const QString axis_text = combo->currentText().trimmed().toUpper();
-    if (axis_text == "Y") {
-      axis = RepeatabilityTest::Goal::AXIS_Y;
-    } else if (axis_text == "Z") {
-      axis = RepeatabilityTest::Goal::AXIS_Z;
-    }
+  if (auto * radio_y = root_->findChild<QRadioButton *>("radioRepeatAxisY"); radio_y && radio_y->isChecked()) {
+    axis = RepeatabilityTest::Goal::AXIS_Y;
+  } else if (auto * radio_z = root_->findChild<QRadioButton *>("radioRepeatAxisZ"); radio_z && radio_z->isChecked()) {
+    axis = RepeatabilityTest::Goal::AXIS_Z;
   }
 
   const auto q = drlRepeatQuaternion();
@@ -1202,9 +1754,13 @@ void TaskActionController::sendRepeatabilityTest(bool execute)
   goal.repeat_count = repeat_count;
   goal.velocity_scale = *velocity;
   goal.execute = execute;
+  goal.enable_tcp_log = isLogEnabled("chkRepeatabilityLog");
+  appendActionLog(QString("[Repeatability GUI] enable_tcp_log=%1")
+    .arg(goal.enable_tcp_log ? "true" : "false"));
   sendGoal<RepeatabilityTest>(
     node_, "/repeatability_test",
-    execute ? "Repeatability Test Start" : "Repeatability Test Plan", goal, log);
+    execute ? "Repeatability Test Start" : "Repeatability Test Plan", goal, log,
+    this, "Repeatability");
 }
 
 }  // namespace robot_gui

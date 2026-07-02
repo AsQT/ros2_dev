@@ -35,7 +35,7 @@ import sys
 import threading
 import time
 from dataclasses import dataclass
-from typing import Optional
+from typing import Optional, Tuple
 
 import numpy as np
 import rclpy
@@ -190,6 +190,7 @@ class DrlUnifiedPlannerNode(DrlPlannerNodeBase):
         vn_stats,
         env_cfg: dict,
         calibrated_start_tcp_base: np.ndarray,
+        model_path: str = "",
     ) -> None:
         # 1. super().__init__ FIRST — required before any declare_parameter/get_parameter
         super().__init__("drl_unified_planner_node")
@@ -404,7 +405,9 @@ class DrlUnifiedPlannerNode(DrlPlannerNodeBase):
             vn_stats=vn_stats,
             env_cfg=env_cfg,
             calibrated_start_tcp_base=calibrated_start_tcp_base,
+            model_path=model_path,
         )
+        self._experiment_model_path = model_path
 
         # 5. Init base ROS infrastructure
         self._declare_base_parameters()
@@ -437,6 +440,13 @@ class DrlUnifiedPlannerNode(DrlPlannerNodeBase):
         self._planning_active = False
         self._planning_thread: Optional[threading.Thread] = None
         self._auto_plan_timer = None
+        # Status of the most recently finished plan_worker run, exposed via
+        # /drl/get_planning_status so C++ action servers can detect a failed
+        # /drl/plan quickly instead of blocking on /drl/forward_trajectory_poses
+        # (which is only ever published on success) until their own timeout.
+        self._planning_seq = 0
+        self._last_plan_success = False
+        self._last_plan_message = "No plan requested yet."
         self._init_unified_services()
 
         # 8. Startup banner
@@ -587,6 +597,30 @@ class DrlUnifiedPlannerNode(DrlPlannerNodeBase):
         self._replan_srv = self.create_service(
             Trigger, "/drl/replan", self._on_plan
         )
+        self._get_planning_status_srv = self.create_service(
+            Trigger, "/drl/get_planning_status", self._on_get_planning_status
+        )
+
+    def _on_get_planning_status(
+        self, request: Trigger.Request, response: Trigger.Response
+    ) -> Trigger.Response:
+        """Handle /drl/get_planning_status.
+
+        Lets clients detect a failed /drl/plan quickly (RUNNING/SUCCEEDED/FAILED)
+        instead of only finding out via the absence of a
+        /drl/forward_trajectory_poses message after their own long timeout.
+        """
+        with self._planning_lock:
+            active = self._planning_active
+            seq = self._planning_seq
+            success = self._last_plan_success
+            message = self._last_plan_message
+        response.success = not active
+        if active:
+            response.message = f"RUNNING (seq={seq})"
+        else:
+            response.message = f"{'SUCCEEDED' if success else 'FAILED'} (seq={seq}): {message}"
+        return response
 
     def _on_plan(
         self, request: Trigger.Request, response: Trigger.Response
@@ -649,11 +683,18 @@ class DrlUnifiedPlannerNode(DrlPlannerNodeBase):
                 self.get_logger().info(f"[plan_worker] success: {resp.message}")
             else:
                 self.get_logger().warn(f"[plan_worker] failed: {resp.message}")
+            with self._planning_lock:
+                self._last_plan_success = resp.success
+                self._last_plan_message = resp.message
         except Exception as exc:
             self.get_logger().error(f"[plan_worker] exception: {exc}")
+            with self._planning_lock:
+                self._last_plan_success = False
+                self._last_plan_message = f"plan_worker exception: {exc}"
         finally:
             with self._planning_lock:
                 self._planning_active = False
+                self._planning_seq += 1
             self.get_logger().info("[plan_worker] finished")
 
     def _handle_manual_plan(self) -> Trigger.Response:
@@ -678,7 +719,7 @@ class DrlUnifiedPlannerNode(DrlPlannerNodeBase):
             source="manual",
             stamp_sec=self.get_clock().now().seconds_nanoseconds()[0],
         )
-        success = self._plan_from_scene_input(scene)
+        success, detail = self._plan_from_scene_input(scene)
         response = Trigger.Response()
         response.success = success
         if success:
@@ -687,7 +728,7 @@ class DrlUnifiedPlannerNode(DrlPlannerNodeBase):
                 f"{target[1]:.4f}, {target[2]:.4f})"
             )
         else:
-            response.message = "Planning failed — check node logs."
+            response.message = detail or "Planning failed — check node logs."
         return response
 
     def _handle_vision_plan(self) -> Trigger.Response:
@@ -742,7 +783,7 @@ class DrlUnifiedPlannerNode(DrlPlannerNodeBase):
             source="vision",
             stamp_sec=self.get_clock().now().seconds_nanoseconds()[0],
         )
-        success = self._plan_from_scene_input(scene)
+        success, detail = self._plan_from_scene_input(scene)
         response = Trigger.Response()
         response.success = success
         if success:
@@ -751,7 +792,7 @@ class DrlUnifiedPlannerNode(DrlPlannerNodeBase):
                 f"{target_base[1]:.4f}, {target_base[2]:.4f})"
             )
         else:
-            response.message = "Planning failed — check node logs."
+            response.message = detail or "Planning failed — check node logs."
         return response
 
     # -------------------------------------------------------------------------
@@ -995,22 +1036,26 @@ class DrlUnifiedPlannerNode(DrlPlannerNodeBase):
             return False, "MoveIt IK/collision validation failed: " + failures[0]
         return True, f"MoveIt IK/collision validation OK for {len(samples)} sample(s)."
 
-    def _plan_from_scene_input(self, scene: DrlSceneInput) -> bool:
+    def _plan_from_scene_input(self, scene: DrlSceneInput) -> Tuple[bool, str]:
         """Shared planning entry point for both manual and vision modes.
 
         Packages scene input, calls DrlTrajectoryPlannerCore, and publishes results.
 
         Returns:
-            True if planning succeeded (converged or not), False on exception.
+            ``(success, detail)``. ``detail`` is a specific, human-readable
+            reason on failure (workspace / start-collision / target-collision /
+            non-convergence / obstacle-validation / MoveIt-validation) so that
+            callers can put it in the /drl/plan response instead of a generic
+            "check node logs" string. Empty on success.
         """
         if not self._prepare_tcp_for_plan_blocking(scene.source):
-            return False
+            return False, "Failed to prepare current TCP start pose (TF/joint state unavailable)"
 
         try:
             scene, validation_obstacles = self._resolve_obstacle_for_policy(scene)
         except Exception as e:
             self.get_logger().error(f"[/drl/plan] PlanningScene obstacle error: {e}")
-            return False
+            return False, f"PlanningScene obstacle error: {e}"
 
         start_collision = self._point_inside_any_obstacle(
             self._planner.start_tcp_base,
@@ -1021,7 +1066,9 @@ class DrlUnifiedPlannerNode(DrlPlannerNodeBase):
                 "[/drl/plan] start TCP lies inside PlanningScene obstacle "
                 f"'{start_collision.object_id}'; refusing to plan."
             )
-            return False
+            return False, (
+                f"Start TCP lies inside obstacle '{start_collision.object_id}'; refusing to plan"
+            )
         target_collision = self._point_inside_any_obstacle(
             scene.target_base,
             validation_obstacles,
@@ -1031,7 +1078,9 @@ class DrlUnifiedPlannerNode(DrlPlannerNodeBase):
                 "[/drl/plan] target lies inside PlanningScene obstacle "
                 f"'{target_collision.object_id}'; refusing to plan."
             )
-            return False
+            return False, (
+                f"Target lies inside obstacle '{target_collision.object_id}'; refusing to plan"
+            )
 
         self.get_logger().info(
             f"[/drl/plan] source={scene.source} | "
@@ -1064,11 +1113,17 @@ class DrlUnifiedPlannerNode(DrlPlannerNodeBase):
             )
         except Exception as e:
             self.get_logger().error(f"[/drl/plan] Planning exception: {e}")
-            return False
+            return False, f"Planning exception: {e}"
 
-        accept_near_convergence = (
-            result.convergence_dist <= self._accept_near_convergence_dist_m
-            and bool(result.trajectory_forward_base)
+        # `converged` == rollout reached target within the tight success
+        # threshold distance_thresh (default 0.02 m). If not, we still accept a
+        # "near" rollout ONLY when the final gap is inside
+        # accept_near_convergence_dist_m (0.20 m) AND the exact target was
+        # appended as the last waypoint (core appends it unless the obstacle
+        # safety filter blocked the final approach segment).
+        rollout_success_thresh_m = float(self._planner.distance_thresh)
+        exact_target_appended = (
+            bool(result.trajectory_forward_base)
             and np.allclose(
                 result.trajectory_forward_base[-1],
                 scene.target_base,
@@ -1076,15 +1131,51 @@ class DrlUnifiedPlannerNode(DrlPlannerNodeBase):
                 atol=1e-6,
             )
         )
+        accept_near_convergence = (
+            result.convergence_dist <= self._accept_near_convergence_dist_m
+            and exact_target_appended
+        )
         if not result.converged and not accept_near_convergence:
+            final_point = (
+                result.trajectory_forward_base[-1]
+                if result.trajectory_forward_base else None
+            )
+            # Which condition actually fired — never print "0.08 > 0.20".
+            if result.convergence_dist > self._accept_near_convergence_dist_m:
+                fail_condition = "final_dist_exceeds_accept_radius"
+                detail = (
+                    f"DRL rollout did not reach target: final_dist="
+                    f"{result.convergence_dist:.4f} m exceeds near-target accept radius="
+                    f"{self._accept_near_convergence_dist_m:.4f} m "
+                    f"(rollout success threshold distance_thresh="
+                    f"{rollout_success_thresh_m:.4f} m); policy could not get close to "
+                    "this target from the current TCP start"
+                )
+            else:
+                fail_condition = "near_target_but_exact_append_blocked"
+                detail = (
+                    f"DRL rollout stopped near target (final_dist="
+                    f"{result.convergence_dist:.4f} m is within near-target accept radius="
+                    f"{self._accept_near_convergence_dist_m:.4f} m but above rollout "
+                    f"success threshold distance_thresh={rollout_success_thresh_m:.4f} m), "
+                    "and the exact-target final approach was blocked (obstacle safety "
+                    "filter rejected appending the target waypoint); refusing partial "
+                    "trajectory"
+                )
             self.get_logger().error(
-                "[/drl/plan] DRL rollout did not converge; refusing to publish "
-                f"or execute partial trajectory (dist={result.convergence_dist:.4f} m)."
+                "[/drl/plan] DRL rollout did not converge; refusing partial trajectory | "
+                f"fail_condition={fail_condition} | "
+                f"final_dist_to_target={result.convergence_dist:.4f} m | "
+                f"rollout_success_threshold_m={rollout_success_thresh_m:.4f} | "
+                f"near_target_accept_radius_m={self._accept_near_convergence_dist_m:.4f} | "
+                f"exact_target_appended={exact_target_appended} | "
+                f"final_point={np.array2string(final_point, precision=4) if final_point is not None else 'none'} | "
+                f"target={np.array2string(scene.target_base, precision=4)}"
             )
             if self._publish_failed_collision_path:
                 self.log_planning_result(result, source=scene.source)
                 self.publish_planning_result(result)
-            return False
+            return False, detail
         if accept_near_convergence:
             self.get_logger().warn(
                 "[/drl/plan] DRL rollout stopped near target "
@@ -1114,7 +1205,7 @@ class DrlUnifiedPlannerNode(DrlPlannerNodeBase):
             if self._publish_failed_collision_path:
                 self.log_planning_result(result, source=scene.source)
                 self.publish_planning_result(result)
-            return False
+            return False, f"Cartesian obstacle validation failed: {validation.message}"
 
         ok_moveit, moveit_msg = self._validate_path_with_moveit(
             result.trajectory_forward_base
@@ -1124,7 +1215,7 @@ class DrlUnifiedPlannerNode(DrlPlannerNodeBase):
             if self._publish_failed_collision_path:
                 self.log_planning_result(result, source=scene.source)
                 self.publish_planning_result(result)
-            return False
+            return False, f"MoveIt validation failed: {moveit_msg}"
         self.get_logger().info(f"[/drl/plan] {moveit_msg}")
 
         self.log_planning_result(result, source=scene.source)
@@ -1154,7 +1245,7 @@ class DrlUnifiedPlannerNode(DrlPlannerNodeBase):
                 self.get_logger().warn(
                     f"[/drl/plan] Auto execution not started: {resp.message}"
                 )
-        return True
+        return True, ""
 
     # -------------------------------------------------------------------------
     # Manual auto-plan helper (called on startup when enabled)
@@ -1185,7 +1276,9 @@ class DrlUnifiedPlannerNode(DrlPlannerNodeBase):
             source="manual",
             stamp_sec=self.get_clock().now().seconds_nanoseconds()[0],
         )
-        self._plan_from_scene_input(scene)
+        success, detail = self._plan_from_scene_input(scene)
+        if not success:
+            self.get_logger().warn(f"[auto_plan] Planning failed: {detail}")
 
     def _get_manual_default_input(self) -> tuple[np.ndarray, bool, np.ndarray, np.ndarray]:
         """Return non-interactive manual defaults from ROS parameters."""
@@ -1276,12 +1369,14 @@ def main(argv=None):
             sys.exit(1)
 
     rclpy.init(args=sys.argv)
+    node = None
     try:
         node = DrlUnifiedPlannerNode(
             model=planner._model,
             vn_stats=planner.vn_stats,
             env_cfg=env_cfg,
             calibrated_start_tcp_base=planner.calibrated_start_tcp_base,
+            model_path=planner.model_path,
         )
 
         # Override start TCP if CLI override was used
@@ -1293,5 +1388,7 @@ def main(argv=None):
     except KeyboardInterrupt:
         pass
     finally:
+        if node is not None:
+            node.destroy_node()
         if rclpy.ok():
             rclpy.shutdown()

@@ -1,4 +1,5 @@
 #include <algorithm>
+#include <atomic>
 #include <chrono>
 #include <cmath>
 #include <future>
@@ -25,6 +26,9 @@
 #include "robot_task_manager/action/drl_pick_place.hpp"
 #include "robot_task_manager/action/move_gripper.hpp"
 #include "robot_task_manager/action/move_to_pose_cartesian.hpp"
+#include "robot_task_manager/action_metrics_logger.hpp"
+#include "robot_task_manager/log_paths.hpp"
+#include "robot_task_executor/executor_experiment_logger.hpp"
 
 using namespace std::chrono_literals;
 
@@ -103,6 +107,14 @@ public:
     planner_node_name_ = declare_parameter<std::string>(
       "planner_node_name", "/drl_unified_planner_node");
 
+    enable_executor_logging_ = declare_parameter<bool>("enable_executor_logging", false);
+    log_root_dir_            = declare_parameter<std::string>("log_root_dir", robot_task_manager::kDefaultLogRootDir);
+    executor_log_dir_        = declare_parameter<std::string>(
+      "executor_log_dir", robot_task_manager::executorLogBaseDir(log_root_dir_));
+    executor_sample_rate_hz_ = declare_parameter<double>("executor_sample_rate_hz", 50.0);
+    executor_base_frame_     = declare_parameter<std::string>("executor_base_frame", "base_link");
+    executor_tcp_frame_      = declare_parameter<std::string>("executor_tcp_frame", "tcp_link");
+
     move_gripper_client_ =
       rclcpp_action::create_client<MoveGripper>(this, "move_gripper");
     cartesian_client_ =
@@ -114,6 +126,8 @@ public:
     drl_clear_client_ = create_client<std_srvs::srv::Trigger>("/drl/clear_trajectory");
     drl_execute_client_ = create_client<std_srvs::srv::Trigger>("/drl/execute_forward");
     drl_status_client_ = create_client<std_srvs::srv::Trigger>("/drl/get_execution_status");
+    drl_planning_status_client_ = create_client<std_srvs::srv::Trigger>("/drl/get_planning_status");
+    cartesian_stop_client_ = create_client<std_srvs::srv::Trigger>("/move_cartesian_stop");
 
     auto qos = rclcpp::QoS(1).reliable().transient_local();
     trajectory_sub_ = create_subscription<geometry_msgs::msg::PoseArray>(
@@ -125,6 +139,9 @@ public:
         trajectory_seq_++;
       });
 
+    metrics_logger_ = std::make_shared<robot_task_manager::ActionMetricsLogger>(
+      robot_task_manager::actionMetricsLogDir(log_root_dir_, "DrlPickPlace"), get_logger());
+
     action_server_ = rclcpp_action::create_server<DrlPickPlace>(
       this,
       "drl_pickplace",
@@ -133,6 +150,25 @@ public:
       std::bind(&DrlPickPlaceActionServer::handle_accepted, this, std::placeholders::_1));
 
     RCLCPP_INFO(get_logger(), "DrlPickPlace action server ready: /drl_pickplace");
+  }
+
+  void initialize_logging()
+  {
+    if (!enable_executor_logging_) {
+      return;
+    }
+    try {
+      log_tf_buffer_ = std::make_shared<tf2_ros::Buffer>(get_clock());
+      log_tf_listener_ = std::make_shared<tf2_ros::TransformListener>(*log_tf_buffer_);
+      logger_ = std::make_shared<robot_task_executor::ExecutorExperimentLogger>(
+        shared_from_this(), log_tf_buffer_,
+        robot_task_manager::executorActionLogDir(log_root_dir_, executor_log_dir_, "DrlPickPlace"),
+        executor_sample_rate_hz_,
+        executor_base_frame_, executor_tcp_frame_);
+    } catch (const std::exception & e) {
+      logger_.reset();
+      RCLCPP_WARN(get_logger(), "DrlPickPlace CSV logger unavailable: %s", e.what());
+    }
   }
 
 private:
@@ -153,6 +189,20 @@ private:
   double cartesian_velocity_scale_{0.1};
   double tf_timeout_sec_{2.0};
 
+  bool enable_executor_logging_{false};
+  std::string log_root_dir_;
+  std::string executor_log_dir_;
+  double executor_sample_rate_hz_{50.0};
+  std::string executor_base_frame_;
+  std::string executor_tcp_frame_;
+  std::shared_ptr<tf2_ros::Buffer> log_tf_buffer_;
+  std::shared_ptr<tf2_ros::TransformListener> log_tf_listener_;
+  std::shared_ptr<robot_task_executor::ExecutorExperimentLogger> logger_;
+  uint64_t action_call_id_{0};
+  std::shared_ptr<robot_task_manager::ActionMetricsLogger> metrics_logger_;
+  std::shared_ptr<robot_task_manager::ActionMetricsRow> metrics_row_;
+  rclcpp::Time goal_start_time_;
+
   tf2_ros::Buffer tf_buffer_;
   tf2_ros::TransformListener tf_listener_;
 
@@ -164,11 +214,15 @@ private:
   rclcpp::Client<std_srvs::srv::Trigger>::SharedPtr drl_clear_client_;
   rclcpp::Client<std_srvs::srv::Trigger>::SharedPtr drl_execute_client_;
   rclcpp::Client<std_srvs::srv::Trigger>::SharedPtr drl_status_client_;
+  rclcpp::Client<std_srvs::srv::Trigger>::SharedPtr drl_planning_status_client_;
+  rclcpp::Client<std_srvs::srv::Trigger>::SharedPtr cartesian_stop_client_;
   rclcpp::Subscription<geometry_msgs::msg::PoseArray>::SharedPtr trajectory_sub_;
 
   std::mutex active_goal_mutex_;
   MoveGripperGoalHandle::SharedPtr active_gripper_goal_;
   CartesianGoalHandle::SharedPtr active_cartesian_goal_;
+  bool goal_active_{false};
+  std::atomic<bool> cancel_requested_{false};
 
   std::mutex trajectory_mutex_;
   geometry_msgs::msg::PoseArray latest_trajectory_;
@@ -178,16 +232,54 @@ private:
     const rclcpp_action::GoalUUID &,
     std::shared_ptr<const DrlPickPlace::Goal> goal)
   {
+    const bool log_enabled = goal->enable_metrics_log;
+    RCLCPP_INFO(
+      get_logger(), "[drl_pickplace server] enable_metrics_log=%s",
+      log_enabled ? "true" : "false");
+
+    if (logger_ && log_enabled) {
+      action_call_id_ = logger_->log_lifecycle_event(
+        "/drl_pickplace", "action_goal_received", "handle_goal", "received", "");
+    } else {
+      action_call_id_ = 0;
+    }
     if (!finite_pose(goal->target_pick.pose) || !finite_pose(goal->target_place.pose)) {
       RCLCPP_WARN(get_logger(), "Reject DrlPickPlace goal: non-finite pose");
+      if (logger_ && log_enabled) {
+        logger_->log_lifecycle_event(
+          "/drl_pickplace", "action_goal_rejected", "handle_goal", "rejected",
+          "non-finite pose", "", action_call_id_);
+      }
       return rclcpp_action::GoalResponse::REJECT;
     }
+    // Reject overlapping goals: a second goal accepted while the first is
+    // still mid-sequence would race on the shared DRL planner state
+    // (/drl/clear_trajectory, /drl/execute_forward), which is what produced
+    // "Cannot clear trajectory while execution is running" in testing.
+    std::lock_guard<std::mutex> lock(active_goal_mutex_);
+    if (goal_active_) {
+      RCLCPP_WARN(get_logger(), "Reject DrlPickPlace goal: another goal is already active");
+      if (logger_ && log_enabled) {
+        logger_->log_lifecycle_event(
+          "/drl_pickplace", "action_goal_rejected", "handle_goal", "rejected",
+          "another goal is already active", "", action_call_id_);
+      }
+      return rclcpp_action::GoalResponse::REJECT;
+    }
+    if (logger_ && log_enabled) {
+      logger_->log_lifecycle_event(
+        "/drl_pickplace", "action_goal_accepted", "handle_goal", "accepted", "",
+        "", action_call_id_);
+    }
+    cancel_requested_.store(false);
+    goal_active_ = true;
     return rclcpp_action::GoalResponse::ACCEPT_AND_EXECUTE;
   }
 
   rclcpp_action::CancelResponse handle_cancel(const std::shared_ptr<GoalHandle>)
   {
     RCLCPP_WARN(get_logger(), "DrlPickPlace cancel requested");
+    cancel_requested_.store(true);
     std::lock_guard<std::mutex> lock(active_goal_mutex_);
     if (active_gripper_goal_) {
       move_gripper_client_->async_cancel_goal(active_gripper_goal_);
@@ -195,7 +287,28 @@ private:
     if (active_cartesian_goal_) {
       cartesian_client_->async_cancel_goal(active_cartesian_goal_);
     }
+    if (cartesian_stop_client_->service_is_ready() ||
+      cartesian_stop_client_->wait_for_service(100ms))
+    {
+      RCLCPP_WARN(get_logger(), "DrlPickPlace: calling /move_cartesian_stop to halt robot motion");
+      cartesian_stop_client_->async_send_request(std::make_shared<std_srvs::srv::Trigger::Request>());
+    } else {
+      RCLCPP_WARN(get_logger(), "DrlPickPlace: /move_cartesian_stop not available; canceling action only");
+    }
     return rclcpp_action::CancelResponse::ACCEPT;
+  }
+
+  void request_cartesian_stop()
+  {
+    if (cartesian_stop_client_->service_is_ready() ||
+      cartesian_stop_client_->wait_for_service(100ms))
+    {
+      RCLCPP_WARN(get_logger(), "DrlPickPlace: calling /move_cartesian_stop to halt robot motion");
+      cartesian_stop_client_->async_send_request(
+        std::make_shared<std_srvs::srv::Trigger::Request>());
+    } else {
+      RCLCPP_WARN(get_logger(), "DrlPickPlace: /move_cartesian_stop not available; canceling action only");
+    }
   }
 
   void handle_accepted(const std::shared_ptr<GoalHandle> goal_handle)
@@ -241,18 +354,44 @@ private:
     RCLCPP_INFO(get_logger(), "[DrlPickPlace] %s | %.1f%%", stage.c_str(), progress);
   }
 
+  void finish_metrics(bool success, const std::string & stage, const std::string & message)
+  {
+    if (!metrics_row_) {
+      return;
+    }
+    metrics_row_->success = success;
+    metrics_row_->action_result_success = success;
+    metrics_row_->planning_success = success;
+    metrics_row_->execution_success = success;
+    metrics_row_->failed_stage = success ? "" : stage;
+    metrics_row_->message = message;
+    metrics_row_->total_action_time_s = (now() - goal_start_time_).seconds();
+    metrics_logger_->finish(metrics_row_);
+    metrics_row_.reset();
+  }
+
   bool check_cancel(
     const std::shared_ptr<GoalHandle> & goal_handle,
     const std::shared_ptr<DrlPickPlace::Result> & result,
     const std::string & stage)
   {
-    if (!goal_handle->is_canceling()) {
+    if (!goal_handle->is_canceling() && !cancel_requested_.load()) {
       return false;
     }
     result->success = false;
     result->message = "DrlPickPlace canceled";
     result->failed_stage = stage;
+    if (logger_ && action_call_id_ != 0) {
+      logger_->log_lifecycle_event(
+        "/drl_pickplace", "action_canceled", stage, "canceled", result->message,
+        "", action_call_id_);
+      logger_->log_lifecycle_event(
+        "/drl_pickplace", "action_result", stage, "canceled", result->message,
+        "", action_call_id_);
+    }
     clear_active_goals();
+    release_goal_slot();
+    finish_metrics(false, "canceled", result->message);
     goal_handle->canceled(result);
     return true;
   }
@@ -264,6 +403,12 @@ private:
     active_cartesian_goal_.reset();
   }
 
+  void release_goal_slot()
+  {
+    std::lock_guard<std::mutex> lock(active_goal_mutex_);
+    goal_active_ = false;
+  }
+
   void abort_goal(
     const std::shared_ptr<GoalHandle> & goal_handle,
     const std::shared_ptr<DrlPickPlace::Result> & result,
@@ -271,10 +416,35 @@ private:
     const std::string & message)
   {
     clear_active_goals();
+    release_goal_slot();
     result->success = false;
+    if (goal_handle->is_canceling() || cancel_requested_.load()) {
+      result->message = "DrlPickPlace canceled during " + stage + ": " + message;
+      result->failed_stage = "canceled";
+      RCLCPP_WARN(get_logger(), "%s", result->message.c_str());
+      if (logger_ && action_call_id_ != 0) {
+        logger_->log_lifecycle_event(
+          "/drl_pickplace", "action_canceled", stage, "canceled", result->message,
+          "", action_call_id_);
+        logger_->log_lifecycle_event(
+          "/drl_pickplace", "action_result", stage, "canceled", result->message,
+          "", action_call_id_);
+      }
+      finish_metrics(false, "canceled", result->message);
+      goal_handle->canceled(result);
+      return;
+    }
+
     result->message = message;
     result->failed_stage = stage;
     RCLCPP_ERROR(get_logger(), "DrlPickPlace failed at %s: %s", stage.c_str(), message.c_str());
+    if (logger_ && action_call_id_ != 0) {
+      logger_->log_lifecycle_event(
+        "/drl_pickplace", "action_stage_failed", stage, "failed", message, "", action_call_id_);
+      logger_->log_lifecycle_event(
+        "/drl_pickplace", "action_result", stage, "aborted", message, "", action_call_id_);
+    }
+    finish_metrics(false, stage, message);
     goal_handle->abort(result);
   }
 
@@ -319,6 +489,7 @@ private:
         {"/drl/clear_trajectory", drl_clear_client_},
         {"/drl/execute_forward", drl_execute_client_},
         {"/drl/get_execution_status", drl_status_client_},
+        {"/drl/get_planning_status", drl_planning_status_client_},
       })
     {
       if (!item.second->wait_for_service(std::chrono::seconds(5))) {
@@ -505,6 +676,11 @@ private:
     const auto deadline = std::chrono::steady_clock::now() +
       std::chrono::duration<double>(drl_timeout_sec_);
     while (rclcpp::ok() && std::chrono::steady_clock::now() < deadline) {
+      if (cancel_requested_.load()) {
+        request_cartesian_stop();
+        error_msg = "DrlPickPlace canceled by user Stop";
+        return false;
+      }
       {
         std::lock_guard<std::mutex> lock(trajectory_mutex_);
         if (trajectory_seq_ > seq_before && !latest_trajectory_.poses.empty()) {
@@ -527,6 +703,21 @@ private:
           return false;
         }
       }
+
+      // Poll /drl/get_planning_status so a failed /drl/plan is detected
+      // within ~1s instead of only after drl_timeout_sec_, since a failed
+      // plan never publishes /drl/forward_trajectory_poses.
+      std::string status_msg;
+      const bool idle = call_trigger(
+        drl_planning_status_client_,
+        "/drl/get_planning_status",
+        status_msg,
+        2.0);
+      if (idle && status_msg.rfind("FAILED", 0) == 0) {
+        error_msg = "DRL planning failed: " + status_msg;
+        return false;
+      }
+
       std::this_thread::sleep_for(100ms);
     }
     error_msg = "Timed out waiting for DRL trajectory";
@@ -538,6 +729,11 @@ private:
     const auto deadline = std::chrono::steady_clock::now() +
       std::chrono::duration<double>(drl_timeout_sec_);
     while (rclcpp::ok() && std::chrono::steady_clock::now() < deadline) {
+      if (cancel_requested_.load()) {
+        request_cartesian_stop();
+        error_msg = "DrlPickPlace canceled by user Stop";
+        return false;
+      }
       std::string status_msg;
       const bool idle = call_trigger(
         drl_status_client_,
@@ -569,6 +765,11 @@ private:
     const int attempts = std::max(1, drl_plan_attempts_);
     std::string last_error;
     for (int attempt = 1; attempt <= attempts; ++attempt) {
+      if (cancel_requested_.load()) {
+        request_cartesian_stop();
+        error_msg = "DrlPickPlace canceled by user Stop";
+        return false;
+      }
       RCLCPP_INFO(
         get_logger(),
         "DRL plan attempt %d/%d mode=%s target=(%.4f %.4f %.4f) preposition=%s",
@@ -582,6 +783,11 @@ private:
 
       if (!set_drl_target(target, preposition_before_plan, last_error)) {
         error_msg = last_error;
+        return false;
+      }
+      if (cancel_requested_.load()) {
+        request_cartesian_stop();
+        error_msg = "DrlPickPlace canceled by user Stop";
         return false;
       }
 
@@ -598,8 +804,14 @@ private:
         last_error = "Start DRL planning failed: " + msg;
       } else if (!wait_for_planned_trajectory(seq_before, target, last_error)) {
         // last_error is already populated.
+      } else if (cancel_requested_.load()) {
+        request_cartesian_stop();
+        last_error = "DrlPickPlace canceled by user Stop";
       } else if (!execute) {
         return true;
+      } else if (cancel_requested_.load()) {
+        request_cartesian_stop();
+        last_error = "DrlPickPlace canceled before DRL execute_forward by user Stop";
       } else if (!call_trigger(drl_execute_client_, "/drl/execute_forward", msg, 5.0)) {
         last_error = "Start DRL execution failed: " + msg;
       } else if (!wait_for_drl_execution(last_error)) {
@@ -614,6 +826,11 @@ private:
         attempt,
         attempts,
         last_error.c_str());
+      if (cancel_requested_.load()) {
+        request_cartesian_stop();
+        error_msg = last_error.empty() ? "DrlPickPlace canceled by user Stop" : last_error;
+        return false;
+      }
       if (attempt < attempts) {
         std::this_thread::sleep_for(500ms);
       }
@@ -622,10 +839,18 @@ private:
     return false;
   }
 
+  // check_orientation must be false for poses reached via call_drl_plan_and_execute():
+  // the DRL/cartesian-pose-sequence executor always executes with its own fixed
+  // tool orientation (see task_executor_node's "Cartesian orientation FIXED" quat),
+  // not the caller-provided target.orientation, so comparing against the goal
+  // orientation there would always fail by a constant offset. Poses reached via
+  // call_cartesian() (the /move_to_pose_cartesian action, MoveItExecutor-backed)
+  // do honor the requested orientation and should keep checking it.
   bool verify_pose(
     const std::string & label,
     const geometry_msgs::msg::Pose & target,
-    std::string & error_msg)
+    std::string & error_msg,
+    bool check_orientation = true)
   {
     const int attempts = std::max(1, pose_verify_attempts_);
     const auto retry_delay = std::chrono::duration<double>(
@@ -647,7 +872,7 @@ private:
 
       RCLCPP_INFO(
         get_logger(),
-        "%s pose check %d/%d | requested=(%.4f %.4f %.4f) actual=(%.4f %.4f %.4f) pos_err=%.5f ori_err=%.5f",
+        "%s pose check %d/%d | requested=(%.4f %.4f %.4f) actual=(%.4f %.4f %.4f) pos_err=%.5f ori_err=%.5f%s",
         label.c_str(),
         attempt,
         attempts,
@@ -658,9 +883,12 @@ private:
         actual.pose.position.y,
         actual.pose.position.z,
         pos_err,
-        ori_err);
+        ori_err,
+        check_orientation ? "" : " (orientation not enforced for DRL-executed pose)");
 
-      if (pos_err <= position_tolerance_m_ && ori_err <= orientation_tolerance_rad_) {
+      if (pos_err <= position_tolerance_m_ &&
+        (!check_orientation || ori_err <= orientation_tolerance_rad_))
+      {
         return true;
       }
 
@@ -700,6 +928,26 @@ private:
     const auto goal = goal_handle->get_goal();
     std::string error_msg;
     const bool execute_motion = goal->execute;
+    goal_start_time_ = now();
+    metrics_row_.reset();
+    if (goal->enable_metrics_log) {
+      metrics_row_ = metrics_logger_->startCall(
+        "DrlPickPlace", "rl_pickplace", robot_task_manager::goalUuidHex(goal_handle->get_goal_id()));
+      if (metrics_row_) {
+        metrics_row_->execute_requested = execute_motion;
+        metrics_row_->start_x = goal->target_pick.pose.position.x;
+        metrics_row_->start_y = goal->target_pick.pose.position.y;
+        metrics_row_->start_z = goal->target_pick.pose.position.z;
+        metrics_row_->target_x = goal->target_place.pose.position.x;
+        metrics_row_->target_y = goal->target_place.pose.position.y;
+        metrics_row_->target_z = goal->target_place.pose.position.z;
+      }
+    }
+
+    if (logger_ && action_call_id_ != 0) {
+      logger_->log_lifecycle_event(
+        "/drl_pickplace", "action_start", "execute", "started", "", "", action_call_id_);
+    }
 
     publish_feedback(goal_handle, execute_motion ? "VALIDATE_GOAL" : "VALIDATE_GOAL_PLAN_ONLY", 1.0f);
     geometry_msgs::msg::PoseStamped target_pick;
@@ -760,7 +1008,7 @@ private:
 
     publish_feedback(goal_handle, execute_motion ? "PLAN_TO_PRE_PICK" : "PLAN_TO_PRE_PICK_EXECUTION_SKIPPED", 22.0f);
     if (!call_drl_plan_and_execute(pre_pick, true, execute_motion, error_msg) ||
-        (execute_motion && !verify_pose("PLAN_TO_PRE_PICK", pre_pick, error_msg)))
+        (execute_motion && !verify_pose("PLAN_TO_PRE_PICK", pre_pick, error_msg, false)))
     {
       abort_goal(goal_handle, result, "PLAN_TO_PRE_PICK", error_msg);
       return;
@@ -802,7 +1050,7 @@ private:
 
     publish_feedback(goal_handle, execute_motion ? "PLAN_TO_PLACE" : "PLAN_TO_PLACE_EXECUTION_SKIPPED", 82.0f);
     if (!call_drl_plan_and_execute(target_place.pose, false, execute_motion, error_msg) ||
-        (execute_motion && !verify_pose("PLAN_TO_PLACE", target_place.pose, error_msg)))
+        (execute_motion && !verify_pose("PLAN_TO_PLACE", target_place.pose, error_msg, false)))
     {
       abort_goal(goal_handle, result, "PLAN_TO_PLACE", error_msg);
       return;
@@ -826,7 +1074,17 @@ private:
       "DrlPickPlace completed successfully" :
       "DrlPickPlace planning success; execution skipped";
     result->failed_stage = "";
+    if (logger_ && action_call_id_ != 0) {
+      logger_->log_lifecycle_event(
+        "/drl_pickplace", "action_succeeded", "DONE", "succeeded", result->message,
+        "", action_call_id_);
+      logger_->log_lifecycle_event(
+        "/drl_pickplace", "action_result", "DONE", "succeeded", result->message,
+        "", action_call_id_);
+    }
     clear_active_goals();
+    release_goal_slot();
+    finish_metrics(true, "DONE", result->message);
     goal_handle->succeed(result);
     RCLCPP_INFO(get_logger(), "DrlPickPlace completed successfully");
   }
@@ -836,6 +1094,7 @@ int main(int argc, char ** argv)
 {
   rclcpp::init(argc, argv);
   auto node = std::make_shared<DrlPickPlaceActionServer>();
+  node->initialize_logging();
   rclcpp::spin(node);
   rclcpp::shutdown();
   return 0;

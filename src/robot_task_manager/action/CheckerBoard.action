@@ -1,6 +1,7 @@
 float64 step
 float64 velocity_scale
 bool execute
+bool enable_tcp_log
 
 ---
 bool success

@@ -166,6 +166,7 @@ MainWindow::MainWindow(
   setup_robot_controls();
   setup_axis_controls();
   setup_logs();
+  setup_tcp_pose_monitor();
   task_action_controller_ = std::make_unique<TaskActionController>(node_, this, this);
   task_action_controller_->connectUiSignals();
   log_robot_tab_widget_mapping();
@@ -286,20 +287,42 @@ void MainWindow::setup_image_display()
 
   set_image_placeholder(label("rawImageView"), "Raw Image", node_->raw_image_topic());
   set_image_placeholder(label("detectionImageView"), "Detection Image", node_->detection_image_topic());
-  set_image_placeholder(label("yoloPreviewWidget"), "YOLO Image", node_->yolo_image_topic());
+  // codex.md section 8: PickPlace Vision (yoloPreviewWidget) and PickPlace RL
+  // (yoloRLPreviewWidget) must default to the SAME processed image topic. Both —
+  // plus the MovePoseRL preview — are fed from the shared "detection"
+  // (annotated) cache/subscriber, so no per-tab subscriber is duplicated.
+  set_image_placeholder(label("yoloPreviewWidget"), "Detection Image", node_->detection_image_topic());
+  set_image_placeholder(label("yoloRLPreviewWidget"), "Detection Image", node_->detection_image_topic());
+  set_image_placeholder(label("rlPosePreviewGroupLabel"), "Detection Image", node_->detection_image_topic());
 
+  // cbImageTopic lets the user pick which processed feed fills the Vision
+  // tab's second cell (detectionImageView): the "detection" topic or the
+  // "yolo" topic. Both are already subscribed — switching only changes
+  // which cached frame gets painted, no new subscriber is created.
   if (auto * combo = findChild<QComboBox *>("cbImageTopic")) {
     combo->clear();
-    const std::array<std::string, 3> topics = {
-      node_->raw_image_topic(), node_->detection_image_topic(), node_->yolo_image_topic()};
-    for (const auto & topic : topics) {
-      if (!topic.empty()) {
-        combo->addItem(QString::fromStdString(topic));
-      }
+    if (!node_->detection_image_topic().empty()) {
+      combo->addItem(QString::fromStdString(node_->detection_image_topic()));
+    }
+    if (!node_->yolo_image_topic().empty()) {
+      combo->addItem(QString::fromStdString(node_->yolo_image_topic()));
     }
     if (combo->count() == 0) {
       combo->addItem("No topic configured");
     }
+    connect(
+      combo, QOverload<int>::of(&QComboBox::currentIndexChanged), this,
+      [this](int) {
+        auto * combo2 = findChild<QComboBox *>("cbImageTopic");
+        const QString selected = combo2 != nullptr ? combo2->currentText() : QString();
+        if (selected == QString::fromStdString(node_->yolo_image_topic()) &&
+          !latest_yolo_image_.isNull())
+        {
+          set_image_pixmap(label("detectionImageView"), latest_yolo_image_);
+        } else if (!latest_detection_image_.isNull()) {
+          set_image_pixmap(label("detectionImageView"), latest_detection_image_);
+        }
+      });
   }
 
   append_ros_log(
@@ -656,7 +679,19 @@ void MainWindow::update_raw_image(QImage image)
 
 void MainWindow::update_detection_image(QImage image)
 {
-  set_image_pixmap(label("detectionImageView"), image);
+  latest_detection_image_ = image;
+  auto * combo = findChild<QComboBox *>("cbImageTopic");
+  const bool showing_yolo = combo != nullptr &&
+    combo->currentText() == QString::fromStdString(node_->yolo_image_topic()) &&
+    !node_->yolo_image_topic().empty();
+  if (!showing_yolo) {
+    set_image_pixmap(label("detectionImageView"), image);
+  }
+  // PickPlace Vision + PickPlace RL + MovePoseRL previews all show the same
+  // annotated ("detection") feed (codex.md section 8).
+  set_image_pixmap(label("yoloPreviewWidget"), image);
+  set_image_pixmap(label("yoloRLPreviewWidget"), image);
+  set_image_pixmap(label("rlPosePreviewGroupLabel"), image);
   set_status_led(label("ledCameraStatus"), true);
   if (!detection_image_seen_) {
     detection_image_seen_ = true;
@@ -671,7 +706,16 @@ void MainWindow::update_detection_image(QImage image)
 
 void MainWindow::update_yolo_image(QImage image)
 {
-  set_image_pixmap(label("yoloPreviewWidget"), image);
+  latest_yolo_image_ = image;
+  // The "yolo" (roi_debug) feed is only an alternate selection for the Vision
+  // tab's second cell; the PickPlace previews stay on the shared "detection"
+  // feed (codex.md section 8), so it is not painted onto yoloPreviewWidget.
+  auto * combo = findChild<QComboBox *>("cbImageTopic");
+  const bool showing_yolo = combo != nullptr &&
+    combo->currentText() == QString::fromStdString(node_->yolo_image_topic());
+  if (showing_yolo) {
+    set_image_pixmap(label("detectionImageView"), image);
+  }
   set_status_led(label("ledCameraStatus"), true);
   if (!yolo_image_seen_) {
     yolo_image_seen_ = true;
@@ -694,6 +738,55 @@ void MainWindow::set_axis_leds(int axis, uint32_t status)
   set_led(label(QString("ledAxis%1Alarm").arg(axis)), status & ALARM, kFaultInactive, kFaultActive);
   set_led(label(QString("ledAxis%1EMG").arg(axis)), status & EMG, kFaultInactive, kFaultActive);
   set_led(label(QString("ledAxis%1ErrorAll").arg(axis)), status & ERROR_ALL, kFaultInactive, kFaultActive);
+}
+
+namespace
+{
+const char * const kTcpValueLabels[] = {
+  "lblTcpXValue", "lblTcpYValue", "lblTcpZValue",
+  "lblTcpRollValue", "lblTcpPitchValue", "lblTcpYawValue"};
+}  // namespace
+
+void MainWindow::setup_tcp_pose_monitor()
+{
+  for (const char * name : kTcpValueLabels) {
+    set_label_text(name, "--");
+  }
+  set_label_text("lblTcpPoseStatus", "Waiting for TF...");
+
+  tcp_pose_timer_ = new QTimer(this);
+  tcp_pose_timer_->setInterval(100);  // 10 Hz update of the TCP pose display.
+  connect(tcp_pose_timer_, &QTimer::timeout, this, &MainWindow::update_tcp_pose);
+  tcp_pose_timer_->start();
+}
+
+void MainWindow::update_tcp_pose()
+{
+  RobotGuiNode::TcpPose pose;
+  std::string error;
+  if (!node_->tcp_pose(pose, error)) {
+    for (const char * name : kTcpValueLabels) {
+      set_label_text(name, "--");
+    }
+    set_label_text("lblTcpPoseStatus", "TF unavailable");
+    RCLCPP_WARN_THROTTLE(
+      node_->get_logger(), *node_->get_clock(), 5000,
+      "[robot_gui] TCP pose TF unavailable: %s", error.c_str());
+    tcp_pose_tf_warned_ = true;
+    return;
+  }
+
+  if (tcp_pose_tf_warned_) {
+    RCLCPP_INFO(node_->get_logger(), "[robot_gui] TCP pose TF recovered");
+    tcp_pose_tf_warned_ = false;
+  }
+  set_label_text("lblTcpXValue", QString::number(pose.x_mm, 'f', 1));
+  set_label_text("lblTcpYValue", QString::number(pose.y_mm, 'f', 1));
+  set_label_text("lblTcpZValue", QString::number(pose.z_mm, 'f', 1));
+  set_label_text("lblTcpRollValue", QString::number(pose.roll_deg, 'f', 1));
+  set_label_text("lblTcpPitchValue", QString::number(pose.pitch_deg, 'f', 1));
+  set_label_text("lblTcpYawValue", QString::number(pose.yaw_deg, 'f', 1));
+  set_label_text("lblTcpPoseStatus", "OK");
 }
 
 void MainWindow::set_label_text(const QString & object_name, const QString & text)

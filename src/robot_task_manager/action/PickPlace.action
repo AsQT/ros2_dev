@@ -3,6 +3,7 @@ geometry_msgs/Pose pose_place
 float64 gripper
 float64 velocity_scale
 bool execute
+bool enable_tcp_log
 ---
 bool success
 string message

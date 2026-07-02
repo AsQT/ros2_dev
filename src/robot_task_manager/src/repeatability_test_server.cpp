@@ -20,6 +20,11 @@
 
 #include "tf2/LinearMath/Quaternion.h"
 #include "tf2_geometry_msgs/tf2_geometry_msgs.hpp"
+#include "tf2_ros/buffer.h"
+#include "tf2_ros/transform_listener.h"
+#include "robot_task_executor/executor_experiment_logger.hpp"
+#include "robot_task_manager/log_paths.hpp"
+#include "robot_task_manager/per_call_tcp_logger.hpp"
 
 using namespace std::chrono_literals;
 
@@ -63,6 +68,14 @@ public:
       axis_y_tool_yaw_offset_rad_ = kDefaultAxisYToolYawOffsetRad;
     }
 
+    enable_executor_logging_ = declare_parameter<bool>("enable_executor_logging", false);
+    log_root_dir_            = declare_parameter<std::string>("log_root_dir", robot_task_manager::kDefaultLogRootDir);
+    executor_log_dir_        = declare_parameter<std::string>(
+      "executor_log_dir", robot_task_manager::executorLogBaseDir(log_root_dir_));
+    executor_sample_rate_hz_ = declare_parameter<double>("executor_sample_rate_hz", 50.0);
+    executor_base_frame_     = declare_parameter<std::string>("executor_base_frame", "base_link");
+    executor_tcp_frame_      = declare_parameter<std::string>("executor_tcp_frame", "tcp_link");
+
     move_to_pose_client_ =
       rclcpp_action::create_client<MoveToPose>(this, "move_to_pose");
 
@@ -79,6 +92,39 @@ public:
     RCLCPP_INFO(get_logger(), "RepeatabilityTest action server ready: /repeatability_test");
   }
 
+  void initialize_logging()
+  {
+    if (enable_executor_logging_) {
+      try {
+        log_tf_buffer_ = std::make_shared<tf2_ros::Buffer>(get_clock());
+        log_tf_listener_ = std::make_shared<tf2_ros::TransformListener>(*log_tf_buffer_);
+        logger_ = std::make_shared<robot_task_executor::ExecutorExperimentLogger>(
+          shared_from_this(), log_tf_buffer_,
+          robot_task_manager::executorActionLogDir(log_root_dir_, executor_log_dir_, "RepeatabilityTest"),
+          executor_sample_rate_hz_,
+          executor_base_frame_, executor_tcp_frame_);
+      } catch (const std::exception & e) {
+        logger_.reset();
+        RCLCPP_WARN(get_logger(), "RepeatabilityTest CSV logger unavailable: %s", e.what());
+      }
+    }
+
+    try {
+      if (!log_tf_buffer_) {
+        log_tf_buffer_ = std::make_shared<tf2_ros::Buffer>(get_clock());
+        log_tf_listener_ = std::make_shared<tf2_ros::TransformListener>(*log_tf_buffer_);
+      }
+      tcp_logger_ = std::make_shared<robot_task_manager::PerCallTcpLogger>(
+        shared_from_this(), log_tf_buffer_,
+        robot_task_manager::executorActionLogDir(log_root_dir_, executor_log_dir_, "RepeatabilityTest"),
+        executor_sample_rate_hz_,
+        executor_base_frame_, executor_tcp_frame_, "repeatability_test", "/repeatability_test");
+    } catch (const std::exception & e) {
+      tcp_logger_.reset();
+      RCLCPP_WARN(get_logger(), "RepeatabilityTest per-call TCP logger unavailable: %s", e.what());
+    }
+  }
+
 private:
   static constexpr double kDefaultAxisYToolYawOffsetRad = -1.5707963267948966;
 
@@ -87,6 +133,18 @@ private:
   double measurement_settle_time_s_ = 2.0;
   double fast_velocity_scale_ = 0.1;
   double axis_y_tool_yaw_offset_rad_ = kDefaultAxisYToolYawOffsetRad;
+
+  bool enable_executor_logging_{false};
+  std::string log_root_dir_;
+  std::string executor_log_dir_;
+  double executor_sample_rate_hz_{50.0};
+  std::string executor_base_frame_;
+  std::string executor_tcp_frame_;
+  std::shared_ptr<tf2_ros::Buffer> log_tf_buffer_;
+  std::shared_ptr<tf2_ros::TransformListener> log_tf_listener_;
+  std::shared_ptr<robot_task_executor::ExecutorExperimentLogger> logger_;
+  std::shared_ptr<robot_task_manager::PerCallTcpLogger> tcp_logger_;
+  uint64_t action_call_id_{0};
 
   rclcpp_action::Server<RepeatabilityTest>::SharedPtr action_server_;
   rclcpp_action::Client<MoveToPose>::SharedPtr move_to_pose_client_;
@@ -128,12 +186,28 @@ private:
     const rclcpp_action::GoalUUID &,
     std::shared_ptr<const RepeatabilityTest::Goal> goal)
   {
+    const bool log_enabled = goal->enable_tcp_log;
+    if (logger_ && log_enabled) {
+      action_call_id_ = logger_->log_lifecycle_event(
+        "/repeatability_test", "action_goal_received", "handle_goal", "received", "");
+    } else {
+      action_call_id_ = 0;
+    }
     std::string error_msg;
     if (!validate_goal(goal, error_msg)) {
       RCLCPP_WARN(get_logger(), "Reject RepeatabilityTest goal: %s", error_msg.c_str());
+      if (logger_ && log_enabled) {
+        logger_->log_lifecycle_event(
+          "/repeatability_test", "action_goal_rejected", "handle_goal", "rejected",
+          error_msg, "", action_call_id_);
+      }
       return rclcpp_action::GoalResponse::REJECT;
     }
-
+    if (logger_ && log_enabled) {
+      logger_->log_lifecycle_event(
+        "/repeatability_test", "action_goal_accepted", "handle_goal", "accepted", "",
+        "", action_call_id_);
+    }
     return rclcpp_action::GoalResponse::ACCEPT_AND_EXECUTE;
   }
 
@@ -232,7 +306,8 @@ private:
   bool check_cancel(
     const std::shared_ptr<GoalHandle> & goal_handle,
     const std::shared_ptr<RepeatabilityTest::Result> & result,
-    int32_t completed_count)
+    int32_t completed_count,
+    const std::shared_ptr<robot_task_manager::PerCallTcpLogger::Call> & tcp_call = nullptr)
   {
     if (!goal_handle->is_canceling()) {
       return false;
@@ -242,6 +317,17 @@ private:
     result->success = false;
     result->message = "RepeatabilityTest canceled";
     result->completed_count = completed_count;
+    if (logger_ && action_call_id_ != 0) {
+      logger_->log_lifecycle_event(
+        "/repeatability_test", "action_canceled", "execute", "canceled", result->message,
+        "", action_call_id_);
+      logger_->log_lifecycle_event(
+        "/repeatability_test", "action_result", "execute", "canceled", result->message,
+        "", action_call_id_);
+    }
+    if (tcp_logger_ && tcp_call) {
+      tcp_logger_->finishCall(tcp_call, "canceled", false, result->message);
+    }
     goal_handle->canceled(result);
 
     RCLCPP_WARN(get_logger(), "RepeatabilityTest canceled");
@@ -251,7 +337,8 @@ private:
   bool sleep_with_cancel(
     const std::shared_ptr<GoalHandle> & goal_handle,
     const std::shared_ptr<RepeatabilityTest::Result> & result,
-    int32_t completed_count)
+    int32_t completed_count,
+    const std::shared_ptr<robot_task_manager::PerCallTcpLogger::Call> & tcp_call = nullptr)
   {
     const auto sleep_step = 100ms;
     auto remaining =
@@ -259,7 +346,7 @@ private:
         std::chrono::duration<double>(measurement_settle_time_s_));
 
     while (remaining > 0ns) {
-      if (check_cancel(goal_handle, result, completed_count)) {
+      if (check_cancel(goal_handle, result, completed_count, tcp_call)) {
         return false;
       }
       const auto chunk = std::min(remaining, std::chrono::duration_cast<std::chrono::nanoseconds>(sleep_step));
@@ -273,6 +360,7 @@ private:
   void abort_goal(
     const std::shared_ptr<GoalHandle> & goal_handle,
     const std::shared_ptr<RepeatabilityTest::Result> & result,
+    const std::shared_ptr<robot_task_manager::PerCallTcpLogger::Call> & tcp_call,
     const std::string & message,
     int32_t completed_count)
   {
@@ -283,6 +371,17 @@ private:
     result->completed_count = completed_count;
 
     RCLCPP_ERROR(get_logger(), "RepeatabilityTest failed: %s", message.c_str());
+    if (logger_ && action_call_id_ != 0) {
+      logger_->log_lifecycle_event(
+        "/repeatability_test", "action_stage_failed", "execute", "failed", message,
+        "", action_call_id_);
+      logger_->log_lifecycle_event(
+        "/repeatability_test", "action_result", "execute", "aborted", message,
+        "", action_call_id_);
+    }
+    if (tcp_logger_ && tcp_call) {
+      tcp_logger_->finishCall(tcp_call, "aborted", false, message);
+    }
     goal_handle->abort(result);
   }
 
@@ -446,20 +545,49 @@ private:
     }
 
     const auto goal = goal_handle->get_goal();
+    RCLCPP_INFO(
+      get_logger(), "[repeatability_test server] enable_tcp_log=%s",
+      goal->enable_tcp_log ? "true" : "false");
     std::string error_msg;
     int32_t completed_count = 0;
     const bool execute_motion = goal->execute;
+
+    if (logger_ && action_call_id_ != 0) {
+      logger_->log_lifecycle_event(
+        "/repeatability_test", "action_start", "execute", "started", "", "", action_call_id_);
+    }
+
+    std::shared_ptr<robot_task_manager::PerCallTcpLogger::Call> tcp_call;
+    if (tcp_logger_ && goal->enable_tcp_log) {
+      std::ostringstream meta;
+      meta << "{\"axis\":" << static_cast<int>(goal->axis)
+           << ",\"repeat_count\":" << goal->repeat_count
+           << ",\"meas_offset\":" << goal->meas_offset
+           << ",\"velocity_scale\":" << goal->velocity_scale
+           << ",\"retract_x\":" << goal->retract_pose.pose.position.x
+           << ",\"retract_y\":" << goal->retract_pose.pose.position.y
+           << ",\"retract_z\":" << goal->retract_pose.pose.position.z
+           << ",\"disturb1_x\":" << goal->disturb_pose_1.pose.position.x
+           << ",\"disturb1_y\":" << goal->disturb_pose_1.pose.position.y
+           << ",\"disturb1_z\":" << goal->disturb_pose_1.pose.position.z
+           << "}";
+      tcp_call = tcp_logger_->startCall(meta.str());
+      if (tcp_call) {
+        tcp_logger_->logEvent(tcp_call, "repeatability_start", "received", "RepeatabilityTest goal accepted");
+        tcp_logger_->startSampling(tcp_call);
+      }
+    }
 
     publish_feedback(
       goal_handle,
       0,
       execute_motion ? "Waiting for sub action servers" : "Waiting for sub action servers (plan-only)");
     if (!wait_for_sub_action_servers(error_msg)) {
-      abort_goal(goal_handle, result, error_msg, completed_count);
+      abort_goal(goal_handle, result, tcp_call,error_msg, completed_count);
       return;
     }
 
-    if (check_cancel(goal_handle, result, completed_count)) {
+    if (check_cancel(goal_handle, result, completed_count, tcp_call)) {
       return;
     }
 
@@ -526,85 +654,151 @@ private:
       working_disturb_pose_1.orientation.z,
       working_disturb_pose_1.orientation.w);
 
+    if (tcp_logger_ && tcp_call) {
+      tcp_logger_->updateStage(tcp_call, "move_to_retract", working_retract_pose);
+      tcp_logger_->logEvent(tcp_call, "move_to_retract", "stage_start", "moving to retract pose", &working_retract_pose);
+    }
     publish_feedback(
       goal_handle,
       0,
       execute_motion ? "MoveToPose to working_retract_pose" : "Plan MoveToPose to working_retract_pose (execution skipped)");
     if (!call_move_to_pose(working_retract_pose, fast_velocity_scale_, execute_motion, error_msg)) {
-      abort_goal(goal_handle, result, "Initial MoveToPose to working_retract_pose failed: " + error_msg, completed_count);
+      if (tcp_logger_ && tcp_call) {
+        tcp_logger_->logEvent(tcp_call, "move_to_retract", "stage_failed", error_msg, &working_retract_pose);
+      }
+      abort_goal(goal_handle, result, tcp_call,"Initial MoveToPose to working_retract_pose failed: " + error_msg, completed_count);
       return;
+    }
+    if (tcp_logger_ && tcp_call) {
+      tcp_logger_->logEvent(tcp_call, "move_to_retract", "stage_end", "reached retract pose", &working_retract_pose);
     }
 
     for (int32_t i = 1; i <= goal->repeat_count; ++i) {
-      if (check_cancel(goal_handle, result, completed_count)) {
+      if (check_cancel(goal_handle, result, completed_count, tcp_call)) {
         return;
       }
 
+      const std::string stage_meas_1 = "loop_" + std::to_string(i) + "_move_to_meas_1";
+      if (tcp_logger_ && tcp_call) {
+        tcp_logger_->updateStage(tcp_call, stage_meas_1, meas_pose);
+        tcp_logger_->logEvent(tcp_call, stage_meas_1, "stage_start", "cartesian to meas_pose", &meas_pose);
+      }
       publish_feedback(
         goal_handle,
         i,
         execute_motion ? "Cartesian to meas_pose" : "Plan Cartesian to meas_pose (execution skipped)");
       if (!call_move_to_pose_cartesian(meas_pose, goal->velocity_scale, execute_motion, error_msg)) {
-        abort_goal(goal_handle, result, fail_message("Cartesian to meas_pose", i, error_msg), completed_count);
+        if (tcp_logger_ && tcp_call) {
+          tcp_logger_->logEvent(tcp_call, stage_meas_1, "stage_failed", error_msg, &meas_pose);
+        }
+        abort_goal(goal_handle, result, tcp_call,fail_message("Cartesian to meas_pose", i, error_msg), completed_count);
         return;
+      }
+      if (tcp_logger_ && tcp_call) {
+        tcp_logger_->logEvent(tcp_call, stage_meas_1, "stage_end", "reached meas_pose", &meas_pose);
+        tcp_logger_->setStage(tcp_call, "loop_" + std::to_string(i) + "_wait_meas_1");
       }
 
       publish_feedback(goal_handle, i, execute_motion ? "Wait at meas_pose" : "Skip measurement settle wait (plan-only)");
       if (execute_motion) {
-        if (!sleep_with_cancel(goal_handle, result, completed_count)) {
+        if (!sleep_with_cancel(goal_handle, result, completed_count, tcp_call)) {
           return;
         }
       }
 
+      const std::string stage_retract_1 = "loop_" + std::to_string(i) + "_move_to_retract_1";
+      if (tcp_logger_ && tcp_call) {
+        tcp_logger_->updateStage(tcp_call, stage_retract_1, working_retract_pose);
+      }
       publish_feedback(
         goal_handle,
         i,
         execute_motion ? "Cartesian back to working_retract_pose" : "Plan Cartesian back to working_retract_pose (execution skipped)");
       if (!call_move_to_pose_cartesian(working_retract_pose, fast_velocity_scale_, execute_motion, error_msg)) {
-        abort_goal(goal_handle, result, fail_message("Cartesian back to working_retract_pose", i, error_msg), completed_count);
+        if (tcp_logger_ && tcp_call) {
+          tcp_logger_->logEvent(tcp_call, stage_retract_1, "stage_failed", error_msg, &working_retract_pose);
+        }
+        abort_goal(goal_handle, result, tcp_call,fail_message("Cartesian back to working_retract_pose", i, error_msg), completed_count);
         return;
       }
 
+      const std::string stage_disturb = "loop_" + std::to_string(i) + "_move_to_disturb";
+      if (tcp_logger_ && tcp_call) {
+        tcp_logger_->updateStage(tcp_call, stage_disturb, working_disturb_pose_1);
+        tcp_logger_->logEvent(tcp_call, stage_disturb, "stage_start", "moving to disturb pose", &working_disturb_pose_1);
+      }
       publish_feedback(
         goal_handle,
         i,
         execute_motion ? "MoveToPose to working_disturb_pose_1" : "Plan MoveToPose to working_disturb_pose_1 (execution skipped)");
       if (!call_move_to_pose(working_disturb_pose_1, fast_velocity_scale_, execute_motion, error_msg)) {
-        abort_goal(goal_handle, result, fail_message("MoveToPose to working_disturb_pose_1", i, error_msg), completed_count);
+        if (tcp_logger_ && tcp_call) {
+          tcp_logger_->logEvent(tcp_call, stage_disturb, "stage_failed", error_msg, &working_disturb_pose_1);
+        }
+        abort_goal(goal_handle, result, tcp_call,fail_message("MoveToPose to working_disturb_pose_1", i, error_msg), completed_count);
         return;
       }
+      if (tcp_logger_ && tcp_call) {
+        tcp_logger_->logEvent(tcp_call, stage_disturb, "stage_end", "reached disturb pose", &working_disturb_pose_1);
+      }
 
+      const std::string stage_retract_2 = "loop_" + std::to_string(i) + "_move_to_retract_2";
+      if (tcp_logger_ && tcp_call) {
+        tcp_logger_->updateStage(tcp_call, stage_retract_2, working_retract_pose);
+      }
       publish_feedback(
         goal_handle,
         i,
         execute_motion ? "MoveToPose back to working_retract_pose" : "Plan MoveToPose back to working_retract_pose (execution skipped)");
       if (!call_move_to_pose(working_retract_pose, fast_velocity_scale_, execute_motion, error_msg)) {
-        abort_goal(goal_handle, result, fail_message("MoveToPose back to working_retract_pose", i, error_msg), completed_count);
+        if (tcp_logger_ && tcp_call) {
+          tcp_logger_->logEvent(tcp_call, stage_retract_2, "stage_failed", error_msg, &working_retract_pose);
+        }
+        abort_goal(goal_handle, result, tcp_call,fail_message("MoveToPose back to working_retract_pose", i, error_msg), completed_count);
         return;
       }
 
+      const std::string stage_meas_2 = "loop_" + std::to_string(i) + "_move_to_meas_2";
+      if (tcp_logger_ && tcp_call) {
+        tcp_logger_->updateStage(tcp_call, stage_meas_2, meas_pose);
+        tcp_logger_->logEvent(tcp_call, stage_meas_2, "stage_start", "cartesian to meas_pose", &meas_pose);
+      }
       publish_feedback(
         goal_handle,
         i,
         execute_motion ? "Cartesian to meas_pose" : "Plan Cartesian to meas_pose (execution skipped)");
       if (!call_move_to_pose_cartesian(meas_pose, goal->velocity_scale, execute_motion, error_msg)) {
-        abort_goal(goal_handle, result, fail_message("Cartesian to meas_pose", i, error_msg), completed_count);
+        if (tcp_logger_ && tcp_call) {
+          tcp_logger_->logEvent(tcp_call, stage_meas_2, "stage_failed", error_msg, &meas_pose);
+        }
+        abort_goal(goal_handle, result, tcp_call,fail_message("Cartesian to meas_pose", i, error_msg), completed_count);
         return;
+      }
+      if (tcp_logger_ && tcp_call) {
+        tcp_logger_->logEvent(tcp_call, stage_meas_2, "stage_end", "reached meas_pose", &meas_pose);
+        tcp_logger_->setStage(tcp_call, "loop_" + std::to_string(i) + "_wait_meas_2");
       }
 
       publish_feedback(goal_handle, i, execute_motion ? "Wait at meas_pose" : "Skip measurement settle wait (plan-only)");
       if (execute_motion) {
-        if (!sleep_with_cancel(goal_handle, result, completed_count)) {
+        if (!sleep_with_cancel(goal_handle, result, completed_count, tcp_call)) {
           return;
         }
       }
 
+      const std::string stage_retract_3 = "loop_" + std::to_string(i) + "_move_to_retract_3";
+      if (tcp_logger_ && tcp_call) {
+        tcp_logger_->updateStage(tcp_call, stage_retract_3, working_retract_pose);
+      }
       publish_feedback(
         goal_handle,
         i,
         execute_motion ? "Cartesian back to working_retract_pose" : "Plan Cartesian back to working_retract_pose (execution skipped)");
       if (!call_move_to_pose_cartesian(working_retract_pose, fast_velocity_scale_, execute_motion, error_msg)) {
-        abort_goal(goal_handle, result, fail_message("Cartesian back to working_retract_pose", i, error_msg), completed_count);
+        if (tcp_logger_ && tcp_call) {
+          tcp_logger_->logEvent(tcp_call, stage_retract_3, "stage_failed", error_msg, &working_retract_pose);
+        }
+        abort_goal(goal_handle, result, tcp_call,fail_message("Cartesian back to working_retract_pose", i, error_msg), completed_count);
         return;
       }
 
@@ -622,6 +816,18 @@ private:
       "RepeatabilityTest completed successfully" :
       "RepeatabilityTest planning success; execution skipped";
     result->completed_count = completed_count;
+    if (logger_ && action_call_id_ != 0) {
+      logger_->log_lifecycle_event(
+        "/repeatability_test", "action_succeeded", "execute", "succeeded", result->message,
+        "", action_call_id_);
+      logger_->log_lifecycle_event(
+        "/repeatability_test", "action_result", "execute", "succeeded", result->message,
+        "", action_call_id_);
+    }
+    if (tcp_logger_ && tcp_call) {
+      tcp_logger_->logEvent(tcp_call, "repeatability_end", "repeatability_end", result->message);
+      tcp_logger_->finishCall(tcp_call, "completed", true, result->message);
+    }
     goal_handle->succeed(result);
 
     RCLCPP_INFO(get_logger(), "RepeatabilityTest completed successfully");
@@ -640,6 +846,7 @@ int main(int argc, char ** argv)
 {
   rclcpp::init(argc, argv);
   auto node = std::make_shared<RepeatabilityTestActionServer>();
+  node->initialize_logging();
   rclcpp::spin(node);
   rclcpp::shutdown();
   return 0;

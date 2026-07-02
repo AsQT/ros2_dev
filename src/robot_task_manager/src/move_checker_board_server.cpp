@@ -1,4 +1,5 @@
 #include <memory>
+#include <sstream>
 #include <thread>
 #include <cmath>
 
@@ -6,7 +7,11 @@
 #include "rclcpp_action/rclcpp_action.hpp"
 
 #include "robot_task_manager/action/checker_board.hpp"
+#include "robot_task_manager/log_paths.hpp"
 #include "robot_task_manager/moveit_executor.hpp"
+#include "robot_task_manager/per_call_tcp_logger.hpp"
+#include "tf2_ros/buffer.h"
+#include "tf2_ros/transform_listener.h"
 
 class CheckerBoardActionServer : public rclcpp::Node
 {
@@ -20,6 +25,14 @@ public:
     planning_group_ = declare_parameter<std::string>("planning_group", "arm");
     base_frame_ = declare_parameter<std::string>("base_frame", "world");
     measurement_settle_time_s_ = declare_parameter<double>("measurement_settle_time_s", 2.0);
+
+    enable_executor_logging_ = declare_parameter<bool>("enable_executor_logging", false);
+    log_root_dir_            = declare_parameter<std::string>("log_root_dir", robot_task_manager::kDefaultLogRootDir);
+    executor_log_dir_        = declare_parameter<std::string>(
+      "executor_log_dir", robot_task_manager::executorLogBaseDir(log_root_dir_));
+    executor_sample_rate_hz_ = declare_parameter<double>("executor_sample_rate_hz", 50.0);
+    executor_base_frame_     = declare_parameter<std::string>("executor_base_frame", "base_link");
+    executor_tcp_frame_      = declare_parameter<std::string>("executor_tcp_frame", "tcp_link");
 
     action_server_ = rclcpp_action::create_server<CheckerBoard>(
       this,
@@ -35,12 +48,35 @@ public:
   {
     executor_ = std::make_shared<robot_task_manager::MoveItExecutor>();
     executor_->initialize(shared_from_this(), planning_group_, base_frame_);
+
+    try {
+      tcp_log_tf_buffer_ = std::make_shared<tf2_ros::Buffer>(get_clock());
+      tcp_log_tf_listener_ = std::make_shared<tf2_ros::TransformListener>(*tcp_log_tf_buffer_);
+      tcp_logger_ = std::make_shared<robot_task_manager::PerCallTcpLogger>(
+        shared_from_this(), tcp_log_tf_buffer_,
+        robot_task_manager::executorActionLogDir(log_root_dir_, executor_log_dir_, "CheckerBoard"),
+        executor_sample_rate_hz_,
+        executor_base_frame_, executor_tcp_frame_, "checker_board", "/move_checker_board");
+    } catch (const std::exception & e) {
+      tcp_logger_.reset();
+      RCLCPP_WARN(get_logger(), "CheckerBoard per-call TCP logger unavailable: %s", e.what());
+    }
   }
 
 private:
   std::string planning_group_;
   std::string base_frame_;
   double measurement_settle_time_s_{2.0};
+
+  bool enable_executor_logging_{false};
+  std::string log_root_dir_;
+  std::string executor_log_dir_;
+  double executor_sample_rate_hz_{50.0};
+  std::string executor_base_frame_;
+  std::string executor_tcp_frame_;
+  std::shared_ptr<tf2_ros::Buffer> tcp_log_tf_buffer_;
+  std::shared_ptr<tf2_ros::TransformListener> tcp_log_tf_listener_;
+  std::shared_ptr<robot_task_manager::PerCallTcpLogger> tcp_logger_;
 
   std::shared_ptr<robot_task_manager::MoveItExecutor> executor_;
   rclcpp_action::Server<CheckerBoard>::SharedPtr action_server_;
@@ -124,12 +160,37 @@ private:
       goal_handle->abort(result);
       return;
     }
+    RCLCPP_INFO(
+      get_logger(), "[move_checker_board server] enable_tcp_log=%s",
+      goal->enable_tcp_log ? "true" : "false");
 
     feedback->stage = goal->execute ?
       "CheckerBoard segmented motion starting" :
       "CheckerBoard segmented planning starting (plan-only)";
     feedback->progress = 0.0f;
     goal_handle->publish_feedback(feedback);
+
+    // Per-call TCP CSV logging is opt-in (goal->enable_tcp_log). CheckerBoard
+    // drives the arm through a grid of poses computed inside
+    // MoveItExecutor::checkerBoard() — the server itself never sees the
+    // individual target poses, only progress strings via feedback_cb. So
+    // unlike the other loggers here, there is no per-stage "set pose": we
+    // just tag the stage from the feedback text and keep sampling actual TCP
+    // pose (set pose stays at whatever was seeded at call start — see
+    // codex.md section 9's explicit "để set pose rỗng nhưng không crash"
+    // allowance).
+    std::shared_ptr<robot_task_manager::PerCallTcpLogger::Call> tcp_call;
+    if (tcp_logger_ && goal->enable_tcp_log) {
+      std::ostringstream meta;
+      meta << "{\"step\":" << goal->step
+           << ",\"velocity_scale\":" << goal->velocity_scale
+           << ",\"execute\":" << (goal->execute ? "true" : "false") << "}";
+      tcp_call = tcp_logger_->startCall(meta.str());
+      if (tcp_call) {
+        tcp_logger_->logEvent(tcp_call, "checker_board_start", "received", "CheckerBoard goal accepted");
+        tcp_logger_->startSampling(tcp_call);
+      }
+    }
 
     std::string error_msg;
     bool ok = false;
@@ -144,7 +205,7 @@ private:
         5.0,
         goal->execute,
         measurement_settle_time_s_,
-        [this, goal_handle](const std::string & stage, float progress)
+        [this, goal_handle, tcp_call](const std::string & stage, float progress)
         {
           if (!goal_handle || goal_handle->is_canceling()) {
             return;
@@ -158,18 +219,28 @@ private:
             "[CheckerBoard feedback] %s | %.1f%%",
             stage.c_str(),
             progress);
+          if (tcp_logger_ && tcp_call) {
+            tcp_logger_->setStage(tcp_call, stage);
+            tcp_logger_->logEvent(tcp_call, stage, "progress", stage);
+          }
         });
       RCLCPP_INFO(this->get_logger(), "Returned from CheckerBoard(), ok=%s", ok ? "true" : "false");
     } catch (const std::exception &e) {
       RCLCPP_ERROR(this->get_logger(), "Exception in CheckerBoard: %s", e.what());
       result->success = false;
       result->message = std::string("Exception: ") + e.what();
+      if (tcp_logger_ && tcp_call) {
+        tcp_logger_->finishCall(tcp_call, "aborted", false, result->message);
+      }
       goal_handle->abort(result);
       return;
     } catch (...) {
       RCLCPP_ERROR(this->get_logger(), "Unknown exception in CheckerBoard");
       result->success = false;
       result->message = "Unknown exception in CheckerBoard";
+      if (tcp_logger_ && tcp_call) {
+        tcp_logger_->finishCall(tcp_call, "aborted", false, result->message);
+      }
       goal_handle->abort(result);
       return;
     }
@@ -178,6 +249,9 @@ private:
       RCLCPP_WARN(this->get_logger(), "Goal canceled during execution");
       result->success = false;
       result->message = "Goal canceled";
+      if (tcp_logger_ && tcp_call) {
+        tcp_logger_->finishCall(tcp_call, "canceled", false, result->message);
+      }
       goal_handle->canceled(result);
       return;
     }
@@ -186,6 +260,10 @@ private:
       result->success = false;
       result->message = error_msg.empty() ? "Cartesian motion failed" : error_msg;
       RCLCPP_ERROR(this->get_logger(), "Aborting goal: %s", result->message.c_str());
+      if (tcp_logger_ && tcp_call) {
+        tcp_logger_->logEvent(tcp_call, "checker_board_end", "stage_failed", result->message);
+        tcp_logger_->finishCall(tcp_call, "aborted", false, result->message);
+      }
       goal_handle->abort(result);
       return;
     }
@@ -200,6 +278,10 @@ private:
     result->message = goal->execute ?
       "CheckerBoard segmented motion completed successfully" :
       "CheckerBoard segmented planning success; execution skipped because execute=false";
+    if (tcp_logger_ && tcp_call) {
+      tcp_logger_->logEvent(tcp_call, "checker_board_end", "checker_board_end", result->message);
+      tcp_logger_->finishCall(tcp_call, "completed", true, result->message);
+    }
 
     RCLCPP_INFO(this->get_logger(), "Calling goal_handle->succeed()");
     goal_handle->succeed(result);

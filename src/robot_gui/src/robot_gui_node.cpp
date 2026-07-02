@@ -4,7 +4,14 @@
 #include <cmath>
 #include <sstream>
 
+#include "geometry_msgs/msg/pose_stamped.hpp"
+#include "geometry_msgs/msg/transform_stamped.hpp"
 #include "rclcpp/qos.hpp"
+#include "tf2/LinearMath/Matrix3x3.h"
+#include "tf2/LinearMath/Quaternion.h"
+#include "tf2/exceptions.h"
+#include "tf2/time.h"
+#include "tf2_geometry_msgs/tf2_geometry_msgs.hpp"
 #include "trajectory_msgs/msg/joint_trajectory_point.hpp"
 
 namespace robot_gui
@@ -45,6 +52,32 @@ RobotGuiNode::RobotGuiNode(const rclcpp::NodeOptions & options)
   raw_image_topic_ = get_string_parameter("image_topics.raw", "");
   detection_image_topic_ = get_string_parameter("image_topics.detection", "");
   yolo_image_topic_ = get_string_parameter("image_topics.yolo", "");
+  wood_objects_topic_ = get_string_parameter("vision_topics.wood_objects", wood_objects_topic_);
+  box_objects_topic_ = get_string_parameter("vision_topics.box_objects", box_objects_topic_);
+  vision_timeout_sec_ =
+    has_parameter("vision_timeout_sec") ? get_parameter("vision_timeout_sec").as_double() :
+    declare_parameter<double>("vision_timeout_sec", vision_timeout_sec_);
+  tcp_base_frame_ =
+    has_parameter("tcp_base_frame") ? get_parameter("tcp_base_frame").as_string() :
+    declare_parameter<std::string>("tcp_base_frame", tcp_base_frame_);
+  tcp_link_frame_ =
+    has_parameter("tcp_link_frame") ? get_parameter("tcp_link_frame").as_string() :
+    declare_parameter<std::string>("tcp_link_frame", tcp_link_frame_);
+  move_pose_rl_wood_target_x_offset_m_ =
+    has_parameter("move_pose_rl_wood_target_x_offset_m") ?
+    get_parameter("move_pose_rl_wood_target_x_offset_m").as_double() :
+    declare_parameter<double>("move_pose_rl_wood_target_x_offset_m", 0.0);
+  move_pose_rl_wood_target_y_offset_m_ =
+    has_parameter("move_pose_rl_wood_target_y_offset_m") ?
+    get_parameter("move_pose_rl_wood_target_y_offset_m").as_double() :
+    declare_parameter<double>("move_pose_rl_wood_target_y_offset_m", 0.0);
+  move_pose_rl_wood_target_z_offset_m_ =
+    has_parameter("move_pose_rl_wood_target_z_offset_m") ?
+    get_parameter("move_pose_rl_wood_target_z_offset_m").as_double() :
+    declare_parameter<double>("move_pose_rl_wood_target_z_offset_m", 0.0);
+
+  tf_buffer_ = std::make_shared<tf2_ros::Buffer>(get_clock());
+  tf_listener_ = std::make_shared<tf2_ros::TransformListener>(*tf_buffer_);
 
   flags_sub_ = create_subscription<robot_hardware_interface::msg::FlagStatus>(
     "/robot_hw/flags", rclcpp::SensorDataQoS(),
@@ -67,6 +100,7 @@ RobotGuiNode::RobotGuiNode(const rclcpp::NodeOptions & options)
       }
     });
   create_image_subscriptions();
+  create_vision_object_subscriptions();
 
   servo_all_client_ = create_client<std_srvs::srv::SetBool>("/robot_hw/servo_all");
   home_client_ = create_client<robot_hardware_interface::srv::Home>("/robot_hw/home");
@@ -326,6 +360,221 @@ void RobotGuiNode::create_image_subscriptions()
   } else {
     RCLCPP_WARN(get_logger(), "YOLO image topic is not configured");
   }
+}
+
+void RobotGuiNode::create_vision_object_subscriptions()
+{
+  // Vision detections are published BEST_EFFORT/VOLATILE by
+  // pixel_to_base_mapper_node (robot_vision_pipeline), matching the QoS
+  // used by robot_task_manager's own MoveTargetRl/MoveToPoseObstacle
+  // subscriptions to the same topics.
+  auto vision_qos = rclcpp::QoS(1).best_effort().durability_volatile();
+  wood_sub_ = create_subscription<robot_vision_pipeline_msgs::msg::WoodArray>(
+    wood_objects_topic_, vision_qos,
+    [this](const robot_vision_pipeline_msgs::msg::WoodArray::SharedPtr msg) {
+      std::lock_guard<std::mutex> lock(vision_mutex_);
+      latest_wood_ = *msg;
+      latest_wood_stamp_ = now();
+      have_wood_ = true;
+    });
+  box_sub_ = create_subscription<robot_vision_pipeline_msgs::msg::BoxArray>(
+    box_objects_topic_, vision_qos,
+    [this](const robot_vision_pipeline_msgs::msg::BoxArray::SharedPtr msg) {
+      std::lock_guard<std::mutex> lock(vision_mutex_);
+      latest_box_ = *msg;
+      latest_box_stamp_ = now();
+      have_box_ = true;
+    });
+}
+
+bool RobotGuiNode::best_wood_pose(
+  const std::string & target_frame,
+  geometry_msgs::msg::Pose & pose,
+  float & confidence,
+  std::string & error) const
+{
+  robot_vision_pipeline_msgs::msg::WoodArray snapshot;
+  {
+    std::lock_guard<std::mutex> lock(vision_mutex_);
+    if (!have_wood_) {
+      error = "No wood detection received yet on " + wood_objects_topic_;
+      return false;
+    }
+    if ((now() - latest_wood_stamp_).seconds() > vision_timeout_sec_) {
+      error = "Wood detection is stale (older than " +
+        std::to_string(vision_timeout_sec_) + "s)";
+      return false;
+    }
+    snapshot = latest_wood_;
+  }
+
+  const robot_vision_pipeline_msgs::msg::Wood * best = nullptr;
+  for (const auto & wood : snapshot.woods) {
+    if (best == nullptr || wood.confidence > best->confidence) {
+      best = &wood;
+    }
+  }
+  if (best == nullptr) {
+    error = "No Wood detection in latest " + wood_objects_topic_ + " message";
+    return false;
+  }
+
+  geometry_msgs::msg::PoseStamped in;
+  in.header = snapshot.header;
+  in.pose = best->pose;
+  if (in.header.frame_id.empty() || in.header.frame_id == target_frame) {
+    pose = in.pose;
+  } else {
+    try {
+      const auto out = tf_buffer_->transform(in, target_frame, tf2::durationFromSec(0.2));
+      pose = out.pose;
+    } catch (const tf2::TransformException & e) {
+      error = "TF transform " + in.header.frame_id + " -> " + target_frame +
+        " failed: " + e.what();
+      return false;
+    }
+  }
+  confidence = best->confidence;
+  return true;
+}
+
+bool RobotGuiNode::best_box_pose(
+  const std::string & target_frame,
+  geometry_msgs::msg::Pose & pose,
+  geometry_msgs::msg::Vector3 & size,
+  float & confidence,
+  std::string & error) const
+{
+  robot_vision_pipeline_msgs::msg::BoxArray snapshot;
+  {
+    std::lock_guard<std::mutex> lock(vision_mutex_);
+    if (!have_box_) {
+      error = "No box detection received yet on " + box_objects_topic_;
+      return false;
+    }
+    if ((now() - latest_box_stamp_).seconds() > vision_timeout_sec_) {
+      error = "Box detection is stale (older than " +
+        std::to_string(vision_timeout_sec_) + "s)";
+      return false;
+    }
+    snapshot = latest_box_;
+  }
+
+  const robot_vision_pipeline_msgs::msg::Box * best = nullptr;
+  for (const auto & box : snapshot.boxes) {
+    if (best == nullptr || box.confidence > best->confidence) {
+      best = &box;
+    }
+  }
+  if (best == nullptr) {
+    error = "No Box detection in latest " + box_objects_topic_ + " message";
+    return false;
+  }
+
+  geometry_msgs::msg::PoseStamped in;
+  in.header = snapshot.header;
+  in.pose = best->pose;
+  if (in.header.frame_id.empty() || in.header.frame_id == target_frame) {
+    pose = in.pose;
+  } else {
+    try {
+      const auto out = tf_buffer_->transform(in, target_frame, tf2::durationFromSec(0.2));
+      pose = out.pose;
+    } catch (const tf2::TransformException & e) {
+      error = "TF transform " + in.header.frame_id + " -> " + target_frame +
+        " failed: " + e.what();
+      return false;
+    }
+  }
+  size = best->size;
+  confidence = best->confidence;
+  return true;
+}
+
+bool RobotGuiNode::tcp_pose(TcpPose & out, std::string & error) const
+{
+  geometry_msgs::msg::TransformStamped tf;
+  try {
+    tf = tf_buffer_->lookupTransform(tcp_base_frame_, tcp_link_frame_, tf2::TimePointZero);
+  } catch (const tf2::TransformException & e) {
+    error = tcp_base_frame_ + " -> " + tcp_link_frame_ + ": " + e.what();
+    return false;
+  }
+
+  const auto & t = tf.transform.translation;
+  out.x_mm = t.x * 1000.0;
+  out.y_mm = t.y * 1000.0;
+  out.z_mm = t.z * 1000.0;
+
+  const auto & q = tf.transform.rotation;
+  double roll = 0.0;
+  double pitch = 0.0;
+  double yaw = 0.0;
+  tf2::Matrix3x3(tf2::Quaternion(q.x, q.y, q.z, q.w)).getRPY(roll, pitch, yaw);
+  constexpr double kRadToDeg = 180.0 / M_PI;
+  out.roll_deg = roll * kRadToDeg;
+  out.pitch_deg = pitch * kRadToDeg;
+  out.yaw_deg = yaw * kRadToDeg;
+  return true;
+}
+
+bool RobotGuiNode::move_pose_rl_wood_target(WoodTarget & out, std::string & error) const
+{
+  robot_vision_pipeline_msgs::msg::WoodArray snapshot;
+  {
+    std::lock_guard<std::mutex> lock(vision_mutex_);
+    if (!have_wood_) {
+      error = "No wood detection received yet on " + wood_objects_topic_;
+      return false;
+    }
+    if ((now() - latest_wood_stamp_).seconds() > vision_timeout_sec_) {
+      error = "Wood detection is stale (older than " +
+        std::to_string(vision_timeout_sec_) + "s)";
+      return false;
+    }
+    snapshot = latest_wood_;
+  }
+
+  // Selection rule: highest confidence (codex.md section 6, rule 1).
+  const robot_vision_pipeline_msgs::msg::Wood * best = nullptr;
+  for (const auto & wood : snapshot.woods) {
+    if (best == nullptr || wood.confidence > best->confidence) {
+      best = &wood;
+    }
+  }
+  if (best == nullptr) {
+    error = "No Wood detection in latest " + wood_objects_topic_ + " message";
+    return false;
+  }
+
+  geometry_msgs::msg::PoseStamped in;
+  in.header = snapshot.header;
+  in.pose = best->pose;
+  geometry_msgs::msg::Pose pose_base;
+  if (in.header.frame_id.empty() || in.header.frame_id == tcp_base_frame_) {
+    pose_base = in.pose;
+  } else {
+    try {
+      const auto transformed = tf_buffer_->transform(
+        in, tcp_base_frame_, tf2::durationFromSec(0.2));
+      pose_base = transformed.pose;
+    } catch (const tf2::TransformException & e) {
+      error = "TF transform " + in.header.frame_id + " -> " + tcp_base_frame_ +
+        " failed: " + e.what();
+      return false;
+    }
+  }
+
+  out.frame_in = in.header.frame_id;
+  out.wood_id = best->wood_id;
+  out.confidence = best->confidence;
+  out.x_offset_m = move_pose_rl_wood_target_x_offset_m_;
+  out.y_offset_m = move_pose_rl_wood_target_y_offset_m_;
+  out.z_offset_m = move_pose_rl_wood_target_z_offset_m_;
+  out.x_m = pose_base.position.x + move_pose_rl_wood_target_x_offset_m_;
+  out.y_m = pose_base.position.y + move_pose_rl_wood_target_y_offset_m_;
+  out.z_m = pose_base.position.z + move_pose_rl_wood_target_z_offset_m_;
+  return true;
 }
 
 void RobotGuiNode::log(const std::string & message) const

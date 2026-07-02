@@ -5,6 +5,7 @@
 #include "rclcpp_action/rclcpp_action.hpp"
 
 #include "robot_task_manager/action/go_home.hpp"
+#include "robot_task_manager/log_paths.hpp"
 #include "robot_task_manager/moveit_executor.hpp"
 
 class GoHomeActionServer : public rclcpp::Node
@@ -19,6 +20,14 @@ public:
     planning_group_ = declare_parameter<std::string>("planning_group",  "arm");
     home_target_    = declare_parameter<std::string>("home_target",     "home");
     base_frame_     = declare_parameter<std::string>("base_frame",      "world");
+
+    enable_executor_logging_ = declare_parameter<bool>("enable_executor_logging", false);
+    log_root_dir_            = declare_parameter<std::string>("log_root_dir", robot_task_manager::kDefaultLogRootDir);
+    executor_log_dir_        = declare_parameter<std::string>(
+      "executor_log_dir", robot_task_manager::executorLogBaseDir(log_root_dir_));
+    executor_sample_rate_hz_ = declare_parameter<double>("executor_sample_rate_hz", 50.0);
+    executor_base_frame_     = declare_parameter<std::string>("executor_base_frame", "base_link");
+    executor_tcp_frame_      = declare_parameter<std::string>("executor_tcp_frame", "tcp_link");
 
     action_server_ = rclcpp_action::create_server<GoHome>(
                                         this,
@@ -37,12 +46,26 @@ public:
   {
     executor_ = std::make_shared<robot_task_manager::MoveItExecutor>();
     executor_->initialize(shared_from_this(), planning_group_, base_frame_);
+    executor_->initializeLogging(
+      enable_executor_logging_,
+      robot_task_manager::executorActionLogDir(log_root_dir_, executor_log_dir_, "GoHome"),
+      executor_sample_rate_hz_,
+      executor_base_frame_,
+      executor_tcp_frame_,
+      "/gohome");
   }
 
 private:
   std::string planning_group_;
   std::string home_target_;
   std::string base_frame_;
+
+  bool enable_executor_logging_{false};
+  std::string log_root_dir_;
+  std::string executor_log_dir_;
+  double executor_sample_rate_hz_{50.0};
+  std::string executor_base_frame_;
+  std::string executor_tcp_frame_;
 
   std::shared_ptr<robot_task_manager::MoveItExecutor> executor_;
   rclcpp_action::Server<GoHome>::SharedPtr action_server_;
@@ -51,6 +74,10 @@ private:
                                 const rclcpp_action::GoalUUID &,
                                 std::shared_ptr<const GoHome::Goal>)
                     {
+                      if (executor_ && executor_->getLogger()) {
+                        executor_->getLogger()->log_lifecycle_event(
+                          "/gohome", "action_goal_received", "handle_goal", "received", "");
+                      }
                       return rclcpp_action::GoalResponse::ACCEPT_AND_EXECUTE;
                     }
 
@@ -80,6 +107,10 @@ private:
       if (!goal->start) {
         result->success = false;
         result->message = "GoHome rejected because start=false";
+        if (executor_ && executor_->getLogger()) {
+          executor_->getLogger()->log_lifecycle_event(
+            "/gohome", "action_result", "validate_goal", "aborted", result->message);
+        }
         goal_handle->abort(result);
         return;
       }
@@ -94,6 +125,10 @@ private:
       if (!ok) {
         result->success = false;
         result->message = error_msg;
+        if (executor_ && executor_->getLogger()) {
+          executor_->getLogger()->log_lifecycle_event(
+            "/gohome", "action_result", "go_named_target", "aborted", result->message);
+        }
         goal_handle->abort(result);
         return;
       }
@@ -106,6 +141,10 @@ private:
       result->message = goal->execute ?
         "Robot moved to home successfully" :
         "GoHome plan succeeded; execution skipped because execute=false";
+      if (executor_ && executor_->getLogger()) {
+        executor_->getLogger()->log_lifecycle_event(
+          "/gohome", "action_result", "go_named_target", "succeeded", result->message);
+      }
       goal_handle->succeed(result);
     }
 };

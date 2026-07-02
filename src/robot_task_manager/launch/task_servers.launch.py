@@ -33,6 +33,14 @@ def generate_launch_description():
         {"planning_group": "arm"},
         {"home_target": "home"},
         {"base_frame": "world"},
+        {
+            "enable_executor_logging": LaunchConfiguration("enable_executor_logging"),
+            "log_root_dir": LaunchConfiguration("log_root_dir"),
+            "executor_log_dir": LaunchConfiguration("executor_log_dir"),
+            "executor_sample_rate_hz": LaunchConfiguration("executor_sample_rate_hz"),
+            "executor_base_frame": LaunchConfiguration("executor_base_frame"),
+            "executor_tcp_frame": LaunchConfiguration("executor_tcp_frame"),
+        },
     ]
     gripper_parameters = [
         moveit_config.to_dict(),
@@ -57,6 +65,36 @@ def generate_launch_description():
         "drl_calibrated_start_tcp_base",
         default_value="[0.375, 0.000, 0.250]",
         description="Default DRL start TCP in base_link frame [x, y, z].",
+    )
+    enable_executor_logging_arg = DeclareLaunchArgument(
+        "enable_executor_logging",
+        default_value="false",
+        description="Enable CSV executor experiment logging in MoveItExecutor-based servers.",
+    )
+    log_root_dir_arg = DeclareLaunchArgument(
+        "log_root_dir",
+        default_value="/home/minhquang/ros2_dev/Log_robot_data",
+        description="Unified root directory for robot log data.",
+    )
+    executor_log_dir_arg = DeclareLaunchArgument(
+        "executor_log_dir",
+        default_value="/home/minhquang/ros2_dev/Log_robot_data/executor_logs",
+        description="Directory for executor experiment logs.",
+    )
+    executor_sample_rate_hz_arg = DeclareLaunchArgument(
+        "executor_sample_rate_hz",
+        default_value="50.0",
+        description="Sampling rate for executor actual data.",
+    )
+    executor_base_frame_arg = DeclareLaunchArgument(
+        "executor_base_frame",
+        default_value="base_link",
+        description="Base frame for executor TCP TF lookup.",
+    )
+    executor_tcp_frame_arg = DeclareLaunchArgument(
+        "executor_tcp_frame",
+        default_value="tcp_link",
+        description="TCP frame for executor TCP TF lookup.",
     )
 
     drl_backend = Node(
@@ -176,6 +214,47 @@ def generate_launch_description():
         }],
     )
 
+    move_target_rl = Node(
+        package="robot_task_manager",
+        executable="move_target_rl_server",
+        name="move_target_rl_action_server",
+        output="screen",
+        parameters=common_parameters + [{
+            "planning_frame": "base_link",
+            "ee_link": "tcp_link",
+            "target_class": "wood",
+            "obstacle_class": "box",
+            "vision_timeout_sec": 1.0,
+            "default_box_size": [0.10, 0.10, 0.10],
+            "target_position_tolerance_m": 0.02,
+            "wood_objects_topic": "/vision/wood_objects",
+            "box_objects_topic": "/vision/box_objects",
+            "position_tolerance_m": 0.01,
+            "drl_timeout_sec": 120.0,
+            "drl_trajectory_endpoint_tolerance_m": 0.015,
+            "drl_plan_attempts": 3,
+            "tf_timeout_sec": 2.0,
+            "sub_action_timeout_sec": 60.0,
+            "drl_planner_node_name": LaunchConfiguration("planner_node_name"),
+        }],
+    )
+
+    move_to_pose_obstacle = Node(
+        package="robot_task_manager",
+        executable="move_to_pose_obstacle_server",
+        name="move_to_pose_obstacle_action_server",
+        output="screen",
+        parameters=common_parameters + [{
+            "obstacle_frame": "base_link",
+            "ee_link": "tcp_link",
+            "obstacle_class": "box",
+            "vision_timeout_sec": 1.0,
+            "box_objects_topic": "/vision/box_objects",
+            "tf_timeout_sec": 2.0,
+            "collision_object_id": "move_to_pose_obstacle_box",
+        }],
+    )
+
     repeatability_test = Node(
         package="robot_task_manager",
         executable="repeatability_test_server",
@@ -190,6 +269,12 @@ def generate_launch_description():
         enable_drl_backend_arg,
         planner_node_name_arg,
         drl_calibrated_start_tcp_arg,
+        enable_executor_logging_arg,
+        log_root_dir_arg,
+        executor_log_dir_arg,
+        executor_sample_rate_hz_arg,
+        executor_base_frame_arg,
+        executor_tcp_frame_arg,
         LogInfo(
             msg=[
                 "[task_servers] Starting action servers; enable_drl_backend=",
@@ -205,5 +290,7 @@ def generate_launch_description():
         pickplace,
         drl_pickplace,
         move_pose_rl,
+        move_target_rl,
+        move_to_pose_obstacle,
         repeatability_test,
     ])

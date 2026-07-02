@@ -7,6 +7,8 @@
 #include <sstream>
 #include <thread>
 
+#include "moveit/robot_trajectory/robot_trajectory.hpp"
+
 namespace robot_task_manager
 {
 
@@ -54,6 +56,121 @@ void MoveItExecutor::initialize(
     planning_group_.c_str(),
     move_group_->getPlanningFrame().c_str(),
     move_group_->getEndEffectorLink().c_str());
+}
+/*---------- initializeLogging -------------------------------------------------------*/
+void MoveItExecutor::initializeLogging(
+                      bool enable,
+                      const std::string & log_dir,
+                      double sample_rate_hz,
+                      const std::string & base_frame,
+                      const std::string & tcp_frame,
+                      const std::string & action_name)
+{
+  log_action_name_ = action_name;
+
+  if (!enable) {
+    RCLCPP_INFO(node_->get_logger(), "MoveItExecutor CSV logging disabled for %s", action_name.c_str());
+    return;
+  }
+
+  try {
+    log_tf_buffer_ = std::make_shared<tf2_ros::Buffer>(node_->get_clock());
+    log_tf_listener_ = std::make_shared<tf2_ros::TransformListener>(*log_tf_buffer_);
+    executor_logger_ = std::make_shared<robot_task_executor::ExecutorExperimentLogger>(
+        node_, log_tf_buffer_, log_dir, sample_rate_hz, base_frame, tcp_frame);
+    RCLCPP_INFO(
+      node_->get_logger(),
+      "MoveItExecutor CSV logging enabled for %s | log_dir=%s | rate=%.1fHz | base=%s | tcp=%s",
+      action_name.c_str(), log_dir.c_str(), sample_rate_hz, base_frame.c_str(), tcp_frame.c_str());
+  } catch (const std::exception & e) {
+    executor_logger_.reset();
+    RCLCPP_WARN(node_->get_logger(), "MoveItExecutor CSV logger unavailable: %s", e.what());
+  }
+}
+/*---------- executor logging helpers -------------------------------------------------------*/
+uint64_t MoveItExecutor::startExecutorLog(const std::string & execute_mode)
+{
+  if (!executor_logger_ || !executor_logger_->enabled()) {
+    return 0;
+  }
+  return executor_logger_->start_call(log_action_name_, execute_mode, "moveit_executor");
+}
+
+void MoveItExecutor::finishExecutorLog(
+    uint64_t call_id,
+    const std::string & status,
+    bool success,
+    const std::string & message,
+    double fraction)
+{
+  if (executor_logger_ && executor_logger_->enabled() && call_id != 0) {
+    executor_logger_->log_summary(call_id, status, success, message, fraction);
+  }
+}
+
+void MoveItExecutor::logRefWaypoint(uint64_t call_id, const geometry_msgs::msg::Pose & pose)
+{
+  if (executor_logger_ && executor_logger_->enabled() && call_id != 0) {
+    executor_logger_->log_ref_waypoint(call_id, 0, pose, node_->get_clock()->now());
+  }
+}
+
+void MoveItExecutor::logJointCommand(
+    uint64_t call_id,
+    const moveit_msgs::msg::RobotTrajectory & trajectory)
+{
+  if (executor_logger_ && executor_logger_->enabled() && call_id != 0) {
+    executor_logger_->log_joint_command(call_id, trajectory, log_action_name_);
+  }
+}
+
+bool MoveItExecutor::executeWithLogging(
+    uint64_t call_id,
+    const std::string & execute_mode,
+    const moveit::planning_interface::MoveGroupInterface::Plan & plan,
+    const std::vector<geometry_msgs::msg::Pose> & refs)
+{
+  logJointCommand(call_id, plan.trajectory);
+  if (executor_logger_ && executor_logger_->enabled() && call_id != 0) {
+    executor_logger_->start_sampling(call_id, execute_mode, refs);
+  }
+  const auto exec_result = move_group_->execute(plan);
+  if (executor_logger_ && executor_logger_->enabled() && call_id != 0) {
+    executor_logger_->stop_sampling(call_id);
+  }
+  return exec_result == moveit::core::MoveItErrorCode::SUCCESS;
+}
+/*---------- extractTcpWaypoints -------------------------------------------------------*/
+std::vector<geometry_msgs::msg::Point> MoveItExecutor::extractTcpWaypoints(
+    const moveit_msgs::msg::RobotTrajectory & trajectory)
+{
+  std::vector<geometry_msgs::msg::Point> waypoints;
+  try {
+    if (!move_group_ || trajectory.joint_trajectory.points.empty()) {
+      return waypoints;
+    }
+    const auto current_state = move_group_->getCurrentState(kCurrentStateTimeoutSec);
+    if (!current_state) {
+      return waypoints;
+    }
+    robot_trajectory::RobotTrajectory robot_traj(current_state->getRobotModel(), planning_group_);
+    robot_traj.setRobotTrajectoryMsg(*current_state, trajectory);
+
+    const std::string & ee_link = move_group_->getEndEffectorLink();
+    waypoints.reserve(robot_traj.getWayPointCount());
+    for (size_t i = 0; i < robot_traj.getWayPointCount(); ++i) {
+      const Eigen::Isometry3d & tf = robot_traj.getWayPoint(i).getGlobalLinkTransform(ee_link);
+      geometry_msgs::msg::Point p;
+      p.x = tf.translation().x();
+      p.y = tf.translation().y();
+      p.z = tf.translation().z();
+      waypoints.push_back(p);
+    }
+  } catch (const std::exception & e) {
+    RCLCPP_WARN(node_->get_logger(), "extractTcpWaypoints failed: %s", e.what());
+    waypoints.clear();
+  }
+  return waypoints;
 }
 /*---------- validateScalingFactors -------------------------------------------------------*/
 bool MoveItExecutor::validateScalingFactors(
@@ -107,11 +224,16 @@ bool MoveItExecutor::goNamedTarget(
 {
   std::lock_guard<std::mutex> lock(motion_mutex_);
 
+  const uint64_t call_id = startExecutorLog(execute ? "joint_target" : "plan_only");
+
   if (!initialized_) {
     error_msg = "MoveItExecutor not initialized";
-    return false;  }
+    finishExecutorLog(call_id, "failed", false, error_msg);
+    return false;
+  }
 
   if (!validateScalingFactors(velocity_scale, acceleration_scale, error_msg)) {
+    finishExecutorLog(call_id, "failed", false, error_msg);
     return false;
   }
 
@@ -121,11 +243,13 @@ bool MoveItExecutor::goNamedTarget(
   const auto current_state =
     getCurrentStateForPlanning(kCurrentStateTimeoutSec, error_msg);
   if (!current_state) {
+    finishExecutorLog(call_id, "failed", false, error_msg);
     return false;
   }
 
   if (!move_group_->setNamedTarget(target_name)) {
     error_msg = "Named target not found: " + target_name;
+    finishExecutorLog(call_id, "failed", false, error_msg);
     return false;
   }
 
@@ -137,6 +261,7 @@ bool MoveItExecutor::goNamedTarget(
 
   if (plan_result != moveit::core::MoveItErrorCode::SUCCESS) {
     error_msg = "Planning to named target failed: " + target_name;
+    finishExecutorLog(call_id, "failed", false, error_msg);
     return false;
   }
 
@@ -151,21 +276,25 @@ bool MoveItExecutor::goNamedTarget(
   }
 
   if (!execute) {
+    logJointCommand(call_id, plan.trajectory);
     publishText("Named target planning succeeded; execution skipped");
     error_msg.clear();
+    finishExecutorLog(call_id, "completed", true, "Named target '" + target_name + "' planned successfully");
     return true;
   }
 
   publishText("Executing named target: " + target_name);
 
-  const auto exec_result = move_group_->execute(plan);
+  const bool exec_ok = executeWithLogging(call_id, "joint_target", plan, {});
 
-  if (exec_result != moveit::core::MoveItErrorCode::SUCCESS) {
+  if (!exec_ok) {
     error_msg = "Execution to named target failed: " + target_name;
+    finishExecutorLog(call_id, "failed", false, error_msg);
     return false;
   }
 
   publishText("Reached named target: " + target_name);
+  finishExecutorLog(call_id, "completed", true, "Named target '" + target_name + "' executed successfully");
   return true;
 }
 /*------------ moveToPose -----------------------------------------------------------*/
@@ -175,16 +304,26 @@ bool MoveItExecutor::moveToPose(
                       double velocity_scale,
                       double acceleration_scale,
                       double planning_time,
-                      bool execute)
+                      bool execute,
+                      MoveItPlanMetrics * out_metrics)
 {
   std::lock_guard<std::mutex> lock(motion_mutex_);
 
+  const uint64_t call_id = startExecutorLog(execute ? "ptp" : "plan_only");
+
+  if (out_metrics) {
+    out_metrics->allowed_planning_time_s = planning_time;
+    out_metrics->planning_group = planning_group_;
+  }
+
   if (!initialized_) {
     error_msg = "MoveItExecutor not initialized";
+    finishExecutorLog(call_id, "failed", false, error_msg);
     return false;
   }
 
   if (!validateScalingFactors(velocity_scale, acceleration_scale, error_msg)) {
+    finishExecutorLog(call_id, "failed", false, error_msg);
     return false;
   }
 
@@ -194,21 +333,44 @@ bool MoveItExecutor::moveToPose(
   const auto current_state =
     getCurrentStateForPlanning(kCurrentStateTimeoutSec, error_msg);
   if (!current_state) {
+    finishExecutorLog(call_id, "failed", false, error_msg);
     return false;
   }
   move_group_->setPoseTarget(target_pose);
+  logRefWaypoint(call_id, target_pose);
 
   visual_tools_->deleteAllMarkers();
   publishTargetAxis(target_pose, "goal_axis");
   publishText("Planning to pose target");
 
   moveit::planning_interface::MoveGroupInterface::Plan plan;
+  const auto plan_start = std::chrono::steady_clock::now();
   const auto plan_result = move_group_->plan(plan);
+  const double plan_elapsed_s =
+    std::chrono::duration<double>(std::chrono::steady_clock::now() - plan_start).count();
+
+  if (out_metrics) {
+    out_metrics->moveit_error_code = plan_result.val;
+    out_metrics->planner_id = move_group_->getPlannerId();
+  }
 
   if (plan_result != moveit::core::MoveItErrorCode::SUCCESS) {
     move_group_->clearPoseTargets();
     error_msg = "Planning to pose failed";
+    finishExecutorLog(call_id, "failed", false, error_msg);
+    if (out_metrics) {
+      out_metrics->planning_time_s = plan_elapsed_s;
+    }
     return false;
+  }
+
+  if (out_metrics) {
+    out_metrics->has_plan = true;
+    // plan.planning_time (MoveIt-reported) is preferred when available;
+    // fall back to our own wall-clock measurement around plan() otherwise.
+    out_metrics->planning_time_s =
+      plan.planning_time > 0.0 ? plan.planning_time : plan_elapsed_s;
+    out_metrics->tcp_waypoints = extractTcpWaypoints(plan.trajectory);
   }
 
   const auto * joint_model_group =
@@ -220,24 +382,34 @@ bool MoveItExecutor::moveToPose(
   }
 
   if (!execute) {
+    logJointCommand(call_id, plan.trajectory);
     move_group_->clearPoseTargets();
     publishText("Pose planning succeeded; execution skipped");
     error_msg.clear();
+    finishExecutorLog(call_id, "completed", true, "Pose target planned successfully");
     return true;
   }
 
   publishText("Executing_pose_target");
-  
-  const auto exec_result = move_group_->execute(plan);
+
+  const auto exec_start = std::chrono::steady_clock::now();
+  const bool exec_ok = executeWithLogging(call_id, "ptp", plan, {target_pose});
+  const double exec_elapsed_s =
+    std::chrono::duration<double>(std::chrono::steady_clock::now() - exec_start).count();
+  if (out_metrics) {
+    out_metrics->execution_time_s = exec_elapsed_s;
+  }
   std::this_thread::sleep_for(std::chrono::milliseconds(1000));
   move_group_->clearPoseTargets();
 
-  if (exec_result != moveit::core::MoveItErrorCode::SUCCESS) {
+  if (!exec_ok) {
     error_msg = "Execution to pose failed";
+    finishExecutorLog(call_id, "failed", false, error_msg);
     return false;
   }
 
   publishText("Reached_pose_target");
+  finishExecutorLog(call_id, "completed", true, "Pose target executed successfully");
   return true;
 }
 /*------------ moveToPoseCartesian -----------------------------------------------------------*/
@@ -252,12 +424,16 @@ bool MoveItExecutor::moveToPoseCartesian(
 {
   std::lock_guard<std::mutex> lock(motion_mutex_);
 
+  const uint64_t call_id = startExecutorLog(execute ? "cartesian" : "plan_only");
+
   if (!initialized_) {
     error_msg = "MoveItExecutor not initialized";
+    finishExecutorLog(call_id, "failed", false, error_msg);
     return false;
   }
 
   if (!validateScalingFactors(velocity_scale, acceleration_scale, error_msg)) {
+    finishExecutorLog(call_id, "failed", false, error_msg);
     return false;
   }
 
@@ -267,12 +443,14 @@ bool MoveItExecutor::moveToPoseCartesian(
   const auto current_state =
     getCurrentStateForPlanning(kCurrentStateTimeoutSec, error_msg);
   if (!current_state) {
+    finishExecutorLog(call_id, "failed", false, error_msg);
     return false;
   }
 
   visual_tools_->deleteAllMarkers();
   publishTargetAxis(target_pose, "goal_axis");
   publishText("Planning Cartesian path");
+  logRefWaypoint(call_id, target_pose);
 
   geometry_msgs::msg::Pose start_pose = move_group_->getCurrentPose().pose;
 
@@ -293,6 +471,7 @@ bool MoveItExecutor::moveToPoseCartesian(
 
   if (fraction < 0.99) {
     error_msg = "Cartesian path planning failed, fraction = " + std::to_string(fraction);
+    finishExecutorLog(call_id, "failed", false, error_msg, fraction);
     return false;
   }
 
@@ -308,21 +487,25 @@ bool MoveItExecutor::moveToPoseCartesian(
   plan.trajectory = trajectory;
 
   if (!execute) {
+    logJointCommand(call_id, trajectory);
     publishText("Cartesian planning succeeded; execution skipped");
     error_msg.clear();
+    finishExecutorLog(call_id, "completed", true, "Cartesian path planned successfully", fraction);
     return true;
   }
 
   publishText("Executing_cartesian_path");
 
-  const auto exec_result = move_group_->execute(plan);
+  const bool exec_ok = executeWithLogging(call_id, "cartesian", plan, {target_pose});
 
-  if (exec_result != moveit::core::MoveItErrorCode::SUCCESS) {
+  if (!exec_ok) {
     error_msg = "Execution of Cartesian path failed";
+    finishExecutorLog(call_id, "failed", false, error_msg, fraction);
     return false;
   }
 
   publishText("Reached_cartesian_target");
+  finishExecutorLog(call_id, "completed", true, "Cartesian path executed successfully", fraction);
   return true;
 }
 /*------------ executeCartesianSegment -----------------------------------------------------------*/
@@ -335,12 +518,16 @@ bool MoveItExecutor::executeCartesianSegment(
                       bool execute,
                       const geometry_msgs::msg::Pose * planned_start_pose)
 {
+  const uint64_t call_id = startExecutorLog(execute ? "cartesian" : "plan_only");
+
   if (!initialized_) {
     error_msg = "MoveItExecutor not initialized";
+    finishExecutorLog(call_id, "failed", false, error_msg);
     return false;
   }
 
   if (!validateScalingFactors(velocity_scale, acceleration_scale, error_msg)) {
+    finishExecutorLog(call_id, "failed", false, error_msg);
     return false;
   }
 
@@ -351,11 +538,14 @@ bool MoveItExecutor::executeCartesianSegment(
   const auto current_state =
     getCurrentStateForPlanning(kCurrentStateTimeoutSec, error_msg);
   if (!current_state) {
+    finishExecutorLog(call_id, "failed", false, error_msg);
     return false;
   }
 
   geometry_msgs::msg::Pose start_pose = planned_start_pose ?
     *planned_start_pose : move_group_->getCurrentPose().pose;
+
+  logRefWaypoint(call_id, target_pose);
 
   std::vector<geometry_msgs::msg::Pose> waypoints;
   waypoints.push_back(start_pose);
@@ -374,6 +564,7 @@ bool MoveItExecutor::executeCartesianSegment(
 
   if (fraction < 0.99) {
     error_msg = "Cartesian segment planning failed, fraction = " + std::to_string(fraction);
+    finishExecutorLog(call_id, "failed", false, error_msg, fraction);
     return false;
   }
 
@@ -389,17 +580,21 @@ bool MoveItExecutor::executeCartesianSegment(
   plan.trajectory = trajectory;
 
   if (!execute) {
+    logJointCommand(call_id, trajectory);
     error_msg.clear();
+    finishExecutorLog(call_id, "completed", true, "Cartesian segment planned successfully", fraction);
     return true;
   }
 
-  const auto exec_result = move_group_->execute(plan);
+  const bool exec_ok = executeWithLogging(call_id, "cartesian", plan, {target_pose});
 
-  if (exec_result != moveit::core::MoveItErrorCode::SUCCESS) {
+  if (!exec_ok) {
     error_msg = "Execution of Cartesian segment failed";
+    finishExecutorLog(call_id, "failed", false, error_msg, fraction);
     return false;
   }
 
+  finishExecutorLog(call_id, "completed", true, "Cartesian segment executed successfully", fraction);
   return true;
 }
 /*------------ checkerBoard -----------------------------------------------------------*/
@@ -567,15 +762,26 @@ bool MoveItExecutor::checkerBoard(
 /*-------------------------------------------------------------------------------------*/
 void MoveItExecutor::stop()
 {
-  std::lock_guard<std::mutex> lock(motion_mutex_);
-
-  if (!initialized_) {
+  // Deliberately does NOT take motion_mutex_: that mutex is held by
+  // moveToPose()/goNamedTarget()/moveToPoseCartesian() for the WHOLE
+  // plan+execute duration. Taking it here would block until the motion has
+  // already finished, so move_group_->stop() would run too late to ever
+  // interrupt anything — that is exactly the "bấm Stop nhưng robot vẫn di
+  // chuyển" bug (codex.md section 7: Stop must actually halt motion, not
+  // just cancel action logic). MoveGroupInterface::stop() is safe to call
+  // from a different thread while an execute() is in flight — it cancels the
+  // active trajectory via the execution manager. initialized_/move_group_
+  // are set once at init and never mutated afterwards, so reading them
+  // without the lock is safe; we avoid clearPoseTargets() here to not race
+  // with a concurrent plan() on the motion thread.
+  if (!initialized_ || !move_group_) {
+    if (node_) {
+      RCLCPP_WARN(node_->get_logger(), "MoveItExecutor::stop(): ignored because executor is not initialized");
+    }
     return;
   }
-
+  RCLCPP_WARN(node_->get_logger(), "MoveItExecutor::stop(): calling move_group_->stop()");
   move_group_->stop();
-  move_group_->clearPoseTargets();
-  publishText("Motion stopped");
 }
 /*-------------------------------------------------------------------------------------*/
 void MoveItExecutor::publishText(const std::string & text)

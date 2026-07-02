@@ -56,6 +56,7 @@ from tf2_ros import Buffer, TransformListener
 from visualization_msgs.msg import Marker, MarkerArray
 
 from robot_drl import config
+from robot_drl.experiment_logger import ExperimentLogger
 from robot_drl.planning_scene_adapter import (
     SceneObstacle,
     manual_obstacle,
@@ -260,6 +261,25 @@ class DrlPlannerNodeBase(Node):
         self._execution_last_message: str = ""
         self._execution_thread: Optional[threading.Thread] = None
 
+        # Experiment CSV logging state.  Disabled unless the ROS parameter below
+        # is true; failures must never affect planning or execution.
+        self._experiment_logger: Optional[ExperimentLogger] = None
+        self._experiment_plan_id: int = 0
+        self._experiment_current_plan_id: Optional[int] = None
+        self._experiment_model_path: str = ""
+        self._experiment_log_dir: str = "robot_drl/experiment_logs"
+        self._experiment_sample_rate_hz: float = 20.0
+        self._experiment_reach_threshold_m: float = 0.02
+        self._experiment_base_frame: str = "base_link"
+        self._experiment_tcp_frame: str = "tcp_link"
+        self._experiment_execute_mode: str = "pose_sequence"
+        self._experiment_active_trajectory: list[np.ndarray] = []
+        self._experiment_active_direction: str = ""
+        self._experiment_execution_start_time: Optional[float] = None
+        self._experiment_next_sample_time: float = 0.0
+        self._experiment_last_sample_warn_time: float = 0.0
+        self._experiment_last_service_message: str = ""
+
     # -------------------------------------------------------------------------
     # Parameter declaration
     # -------------------------------------------------------------------------
@@ -303,6 +323,12 @@ class DrlPlannerNodeBase(Node):
         self.declare_parameter("execute_collision_check_step_m", 0.01)
         self.declare_parameter("execute_collision_clearance_margin_m", 0.0)
         self.declare_parameter("publish_target_block_marker", False)
+        self.declare_parameter("enable_experiment_logging", False)
+        self.declare_parameter("experiment_log_dir", "robot_drl/experiment_logs")
+        self.declare_parameter("experiment_sample_rate_hz", 20.0)
+        self.declare_parameter("reach_threshold_m", 0.02)
+        self.declare_parameter("experiment_tcp_frame", "tcp_link")
+        self.declare_parameter("experiment_base_frame", "base_link")
 
     def _get_calibrated_start_tcp_base(self) -> np.ndarray:
         tcp_param = self.get_parameter("calibrated_start_tcp_base").value
@@ -445,6 +471,26 @@ class DrlPlannerNodeBase(Node):
         self._execute_collision_clearance_margin_m = float(
             self.get_parameter("execute_collision_clearance_margin_m").value
         )
+        self._experiment_log_dir = str(
+            self.get_parameter("experiment_log_dir").value
+        )
+        self._experiment_sample_rate_hz = max(
+            0.1,
+            float(self.get_parameter("experiment_sample_rate_hz").value),
+        )
+        self._experiment_reach_threshold_m = max(
+            0.0,
+            float(self.get_parameter("reach_threshold_m").value),
+        )
+        self._experiment_tcp_frame = str(
+            self.get_parameter("experiment_tcp_frame").value
+        )
+        self._experiment_base_frame = str(
+            self.get_parameter("experiment_base_frame").value
+        )
+        self._experiment_execute_mode = str(
+            self.get_parameter("execute_mode").value
+        )
         if self._preposition_tcp_base.shape != (3,):
             raise ValueError(
                 "preposition_tcp_base must have 3 elements, "
@@ -460,6 +506,26 @@ class DrlPlannerNodeBase(Node):
             self.get_logger().warn(
                 "robot_task_executor_msgs not available; pose sequence execution disabled"
             )
+
+        if bool(self.get_parameter("enable_experiment_logging").value):
+            try:
+                self._experiment_logger = ExperimentLogger(
+                    log_dir=self._experiment_log_dir,
+                    sample_rate_hz=self._experiment_sample_rate_hz,
+                    reach_threshold_m=self._experiment_reach_threshold_m,
+                    base_frame=self._experiment_base_frame,
+                    tcp_frame=self._experiment_tcp_frame,
+                    warn=self.get_logger().warn,
+                )
+                self.get_logger().info(
+                    "Experiment CSV logging enabled: "
+                    f"{self._experiment_logger.csv_path}"
+                )
+            except Exception as exc:
+                self._experiment_logger = None
+                self.get_logger().warn(
+                    f"Experiment CSV logging disabled after init failure: {exc}"
+                )
 
     # -------------------------------------------------------------------------
     # Publishing helpers
@@ -650,6 +716,7 @@ class DrlPlannerNodeBase(Node):
         )
         self._last_has_obstacle = result.has_obstacle
         self._last_planning_time_sec = result.planning_time_sec
+        self._experiment_log_planning_result(result)
 
         # Log summary
         n_fwd = len(self._trajectory_forward_base)
@@ -672,17 +739,38 @@ class DrlPlannerNodeBase(Node):
 
     def _current_tcp_base(self) -> tuple[np.ndarray, bool]:
         """Look up current TCP pose from TF: base_link -> tcp_link."""
+        return self._lookup_tcp_position_base(
+            base_frame="base_link",
+            tcp_frame="tcp_link",
+            timeout_sec=self._tf_timeout_sec,
+        )
+
+    def _lookup_tcp_position_base(
+        self,
+        base_frame: str,
+        tcp_frame: str,
+        timeout_sec: float,
+    ) -> tuple[np.ndarray, bool]:
+        """Look up TCP translation in the requested base frame."""
         try:
             transform = self._tf_buffer.lookup_transform(
-                "base_link",
-                "tcp_link",
+                base_frame,
+                tcp_frame,
                 rclpy.time.Time.from_msg(self.get_clock().now().to_msg()),
-                timeout=rclpy.duration.Duration(seconds=self._tf_timeout_sec),
+                timeout=rclpy.duration.Duration(seconds=float(timeout_sec)),
             )
         except Exception:
             return np.zeros(3, dtype=np.float32), False
         pos = transform.transform.translation
         return np.array([pos.x, pos.y, pos.z], dtype=np.float32), True
+
+    def _current_experiment_tcp_base(self) -> tuple[np.ndarray, bool]:
+        """Non-blocking experiment TF sample using configured frames."""
+        return self._lookup_tcp_position_base(
+            base_frame=self._experiment_base_frame,
+            tcp_frame=self._experiment_tcp_frame,
+            timeout_sec=0.0,
+        )
 
     def _workspace_min_max_base(self) -> tuple[np.ndarray, np.ndarray]:
         """Return planner workspace bounds in base_link frame."""
@@ -746,12 +834,42 @@ class DrlPlannerNodeBase(Node):
         if not self._preposition_before_plan:
             if self._update_start_tcp_from_tf_before_plan:
                 current, got = self._current_tcp_base()
-                if got and self._is_inside_workspace(current) and self._planner is not None:
+                # codex2.md "move_pose_rl_current_tcp_start": previously this
+                # only updated start_tcp when `current` also happened to lie
+                # inside the trained workspace bounds — if the robot's real
+                # TCP (e.g. right after GoHome) was outside those bounds,
+                # start_tcp silently kept whatever value it had before
+                # (the node's calibrated/default start), so the RL
+                # trajectory's first point never matched the actual current
+                # pose and there was no error to explain why. Now: a failed
+                # TF lookup is a hard failure (never plan from a stale/
+                # default pose), but being outside the workspace is not —
+                # start_tcp still gets the real current pose, just with a
+                # loud warning that planning quality may suffer.
+                if not got:
+                    self.get_logger().error(
+                        f"[{label}] failed to read current TCP from TF "
+                        "(base_link -> tcp_link); refusing to plan without "
+                        "a real start pose"
+                    )
+                    return False
+                if self._planner is not None:
                     self._planner.update_start_tcp(current)
-                    self.get_logger().info(
-                        f"[{label}] start_tcp updated from current tcp_link "
-                        f"without preposition: ({current[0]:.4f}, "
-                        f"{current[1]:.4f}, {current[2]:.4f})"
+                inside_ws = self._is_inside_workspace(current)
+                self.get_logger().info(
+                    f"[{label}] start_tcp updated from current tcp_link "
+                    f"without preposition: ({current[0]:.4f}, "
+                    f"{current[1]:.4f}, {current[2]:.4f}) "
+                    f"inside_workspace={inside_ws}"
+                )
+                if not inside_ws:
+                    ws_min, ws_max = self._workspace_min_max_base()
+                    self.get_logger().warn(
+                        f"[{label}] current TCP {current.tolist()} is OUTSIDE "
+                        f"the DRL workspace bounds min={ws_min.tolist()} "
+                        f"max={ws_max.tolist()}; start_tcp still reflects the "
+                        "real current pose, but the RL policy was not "
+                        "trained for this region and may plan poorly"
                     )
             return True
 
@@ -832,6 +950,181 @@ class DrlPlannerNodeBase(Node):
             self._execution_direction = direction
             self._execution_status = status
             self._execution_last_message = message
+
+    def _experiment_is_enabled(self) -> bool:
+        return self._experiment_logger is not None
+
+    def _experiment_safe_warn(self, message: str) -> None:
+        try:
+            self.get_logger().warn(message)
+        except Exception:
+            pass
+
+    def _experiment_log_planning_result(self, result) -> None:
+        """Log plan summary and all forward/backward waypoints."""
+        if not self._experiment_is_enabled():
+            return
+        try:
+            self._experiment_plan_id += 1
+            self._experiment_current_plan_id = self._experiment_plan_id
+            start_base = (
+                np.asarray(result.trajectory_forward_base[0], dtype=np.float32)
+                if result.trajectory_forward_base
+                else (
+                    self._planner.start_tcp_base
+                    if self._planner is not None
+                    else config.DEFAULT_START_TCP_BASE
+                )
+            )
+            self._experiment_logger.log_plan_summary(
+                plan_id=self._experiment_plan_id,
+                result=result,
+                model_path=self._experiment_model_path,
+                start_base=start_base,
+            )
+            self._experiment_logger.log_planned_waypoints(
+                plan_id=self._experiment_plan_id,
+                planned_direction="forward",
+                trajectory_base=result.trajectory_forward_base,
+                start_base=start_base,
+                target_base=result.target_base,
+                has_obstacle=result.has_obstacle,
+                obstacle_center_base=result.obstacle_center_base,
+            )
+            self._experiment_logger.log_planned_waypoints(
+                plan_id=self._experiment_plan_id,
+                planned_direction="backward",
+                trajectory_base=result.trajectory_backward_base,
+                start_base=start_base,
+                target_base=result.target_base,
+                has_obstacle=result.has_obstacle,
+                obstacle_center_base=result.obstacle_center_base,
+            )
+        except Exception as exc:
+            self._experiment_safe_warn(f"experiment plan logging failed: {exc}")
+
+    def _experiment_prepare_execution(
+        self,
+        direction: str,
+        trajectory_base: list[np.ndarray],
+    ) -> None:
+        """Start one experiment execution logging session."""
+        if not self._experiment_is_enabled():
+            return
+        try:
+            self._experiment_active_direction = direction
+            self._experiment_active_trajectory = [p.copy() for p in trajectory_base]
+            self._experiment_execution_start_time = time.monotonic()
+            self._experiment_next_sample_time = self._experiment_execution_start_time
+            self._experiment_last_sample_warn_time = 0.0
+            self._experiment_last_service_message = ""
+            plan_id = self._experiment_current_plan_id or 0
+            with self._execution_lock:
+                status = self._execution_status
+            self._experiment_logger.log_execution_start(
+                plan_id=plan_id,
+                status=status,
+                execute_direction=direction,
+                execute_mode=self._experiment_execute_mode,
+            )
+        except Exception as exc:
+            self._experiment_safe_warn(f"experiment execution-start logging failed: {exc}")
+
+    def _experiment_maybe_log_actual_sample(self) -> None:
+        """Sample configured TCP TF at the requested experiment rate."""
+        if (
+            not self._experiment_is_enabled()
+            or self._experiment_execution_start_time is None
+        ):
+            return
+        now = time.monotonic()
+        if now < self._experiment_next_sample_time:
+            return
+        interval = 1.0 / max(self._experiment_sample_rate_hz, 0.1)
+        while self._experiment_next_sample_time <= now:
+            self._experiment_next_sample_time += interval
+
+        actual, got = self._current_experiment_tcp_base()
+        if not got:
+            if now - self._experiment_last_sample_warn_time > 5.0:
+                self._experiment_last_sample_warn_time = now
+                self._experiment_safe_warn(
+                    "experiment actual sample skipped: TF unavailable "
+                    f"{self._experiment_base_frame} -> {self._experiment_tcp_frame}"
+                )
+            return
+
+        try:
+            plan_id = self._experiment_current_plan_id or 0
+            target = (
+                self._last_target_base
+                if self._last_target_base is not None
+                else np.zeros(3, dtype=np.float32)
+            )
+            obstacle = (
+                self._last_obstacle_center_base
+                if self._last_obstacle_center_base is not None
+                else np.zeros(3, dtype=np.float32)
+            )
+            if self._experiment_active_trajectory:
+                start = self._experiment_active_trajectory[0]
+            elif self._trajectory_forward_base:
+                start = self._trajectory_forward_base[0]
+            else:
+                start = np.zeros(3, dtype=np.float32)
+            with self._execution_lock:
+                status = self._execution_status
+            self._experiment_logger.log_actual_sample(
+                plan_id=plan_id,
+                actual_base=actual,
+                planned_path_base=self._experiment_active_trajectory,
+                start_base=start,
+                target_base=target,
+                has_obstacle=self._last_has_obstacle,
+                obstacle_center_base=obstacle,
+                status=status,
+                execute_direction=self._experiment_active_direction,
+                execute_mode=self._experiment_execute_mode,
+            )
+        except Exception as exc:
+            self._experiment_safe_warn(f"experiment actual sample logging failed: {exc}")
+
+    def _experiment_log_execution_summary(
+        self,
+        success: bool,
+        message: str,
+        direction: str,
+    ) -> None:
+        if not self._experiment_is_enabled():
+            return
+        try:
+            plan_id = self._experiment_current_plan_id or 0
+            started = self._experiment_execution_start_time
+            elapsed = time.monotonic() - started if started is not None else 0.0
+            reach = (
+                self._last_target_base
+                if self._last_target_base is not None
+                else np.zeros(3, dtype=np.float32)
+            )
+            with self._execution_lock:
+                status = self._execution_status
+            service_message = self._experiment_last_service_message or message
+            self._experiment_logger.log_execution_summary(
+                plan_id=plan_id,
+                status=status,
+                service_success=success,
+                service_message=service_message,
+                time_to_reach_sec=elapsed,
+                reach_base=reach,
+                execute_direction=direction,
+                execute_mode=self._experiment_execute_mode,
+            )
+        except Exception as exc:
+            self._experiment_safe_warn(f"experiment execution-summary logging failed: {exc}")
+        finally:
+            self._experiment_active_trajectory = []
+            self._experiment_active_direction = ""
+            self._experiment_execution_start_time = None
 
     def _check_execute_ready(
         self,
@@ -1004,6 +1297,7 @@ class DrlPlannerNodeBase(Node):
 
         deadline = time.monotonic() + self._result_timeout_sec
         while rclpy.ok() and not future.done():
+            self._experiment_maybe_log_actual_sample()
             if time.monotonic() > deadline:
                 return False, f"Pose sequence [{label}] timed out after {self._result_timeout_sec} s."
             time.sleep(0.05)
@@ -1018,6 +1312,9 @@ class DrlPlannerNodeBase(Node):
 
         if resp is None:
             return False, f"Pose sequence [{label}] returned no result."
+
+        if self._experiment_execution_start_time is not None:
+            self._experiment_last_service_message = str(resp.message)
 
         if not resp.success:
             return False, (
@@ -1079,6 +1376,7 @@ class DrlPlannerNodeBase(Node):
             status=status,
             message=message,
         )
+        self._experiment_log_execution_summary(success, message, label)
         self.get_logger().info(
             f"[{label}] background execution finished | status={status} | message={message}"
         )
@@ -1124,6 +1422,8 @@ class DrlPlannerNodeBase(Node):
                 )
             else:
                 trajectory_copy = [p.copy() for p in trajectory_base]
+
+        self._experiment_prepare_execution(label, trajectory_copy)
 
         self.get_logger().info(
             f"[execute_{label}] starting background execution | "
@@ -1268,6 +1568,16 @@ class DrlPlannerNodeBase(Node):
         response.success = True
         response.message = "Trajectory cleared."
         return response
+
+    def destroy_node(self) -> bool:
+        """Close experiment CSV before destroying the ROS node."""
+        if self._experiment_logger is not None:
+            try:
+                self._experiment_logger.close()
+            except Exception as exc:
+                self.get_logger().warn(f"experiment logger close failed: {exc}")
+            self._experiment_logger = None
+        return super().destroy_node()
 
     # -------------------------------------------------------------------------
     # Logging helpers (for subclass use)

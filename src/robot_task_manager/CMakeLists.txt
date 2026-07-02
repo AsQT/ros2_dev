@@ -11,6 +11,7 @@ find_package(rclcpp_action REQUIRED)
 find_package(rosidl_default_generators REQUIRED)
 find_package(rosidl_default_runtime REQUIRED)
 find_package(geometry_msgs REQUIRED)
+find_package(sensor_msgs REQUIRED)
 find_package(std_srvs REQUIRED)
 find_package(rcl_interfaces REQUIRED)
 find_package(tf2 REQUIRED)
@@ -21,7 +22,10 @@ find_package(moveit_ros_planning_interface REQUIRED)
 find_package(moveit_core REQUIRED)
 find_package(moveit_msgs REQUIRED)
 find_package(moveit_visual_tools REQUIRED)
+find_package(shape_msgs REQUIRED)
 find_package(Eigen3 REQUIRED)
+find_package(robot_task_executor REQUIRED)
+find_package(robot_vision_pipeline_msgs REQUIRED)
 
 include_directories(include)
 
@@ -35,6 +39,8 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   "action/DrlPickPlace.action"
   "action/MovePoseRl.action"
   "action/RepeatabilityTest.action"
+  "action/MoveTargetRl.action"
+  "action/MoveToPoseObstacle.action"
   DEPENDENCIES geometry_msgs
 )
 
@@ -51,6 +57,9 @@ ament_target_dependencies(
   moveit_core
   moveit_msgs
   moveit_visual_tools
+  tf2_ros
+  sensor_msgs
+  robot_task_executor
 )
 target_link_libraries(moveit_executor Eigen3::Eigen)
 
@@ -93,6 +102,7 @@ ament_target_dependencies(move_to_pose_server
   moveit_core
   moveit_msgs
   moveit_visual_tools
+  tf2_ros
 )
 target_link_libraries(move_to_pose_server
   moveit_executor
@@ -107,6 +117,7 @@ ament_target_dependencies(move_pose_cartesian_server
   moveit_ros_planning_interface
   moveit_visual_tools
   moveit_msgs
+  tf2_ros
 )
 target_link_libraries(move_pose_cartesian_server
   moveit_executor
@@ -121,6 +132,7 @@ ament_target_dependencies(checker_board_server
   moveit_ros_planning_interface
   moveit_visual_tools
   moveit_msgs
+  tf2_ros
 )
 target_link_libraries(checker_board_server
   moveit_executor
@@ -145,6 +157,8 @@ ament_target_dependencies(pickplace_server
   rclcpp
   rclcpp_action
   moveit_ros_planning_interface
+  tf2_ros
+  robot_task_executor
 )
 target_link_libraries(pickplace_server
   moveit_executor
@@ -164,6 +178,7 @@ ament_target_dependencies(drl_pickplace_server
   tf2
   tf2_ros
   tf2_geometry_msgs
+  robot_task_executor
 )
 target_link_libraries(drl_pickplace_server
   "${cpp_typesupport_target}"
@@ -180,8 +195,45 @@ ament_target_dependencies(move_pose_rl_server
   tf2
   tf2_ros
   tf2_geometry_msgs
+  robot_task_executor
+  robot_vision_pipeline_msgs
 )
 target_link_libraries(move_pose_rl_server
+  "${cpp_typesupport_target}"
+)
+
+add_executable(move_target_rl_server src/move_target_rl_server.cpp)
+ament_target_dependencies(move_target_rl_server
+  rclcpp
+  rclcpp_action
+  geometry_msgs
+  sensor_msgs
+  std_srvs
+  rcl_interfaces
+  tf2
+  tf2_ros
+  tf2_geometry_msgs
+  robot_task_executor
+  robot_vision_pipeline_msgs
+)
+target_link_libraries(move_target_rl_server
+  "${cpp_typesupport_target}"
+)
+
+add_executable(move_to_pose_obstacle_server src/move_to_pose_obstacle_server.cpp)
+ament_target_dependencies(move_to_pose_obstacle_server
+  rclcpp
+  rclcpp_action
+  geometry_msgs
+  moveit_msgs
+  shape_msgs
+  tf2
+  tf2_ros
+  tf2_geometry_msgs
+  robot_vision_pipeline_msgs
+)
+target_link_libraries(move_to_pose_obstacle_server
+  moveit_executor
   "${cpp_typesupport_target}"
 )
 
@@ -191,7 +243,9 @@ ament_target_dependencies(repeatability_test_server
   rclcpp_action
   geometry_msgs
   tf2
+  tf2_ros
   tf2_geometry_msgs
+  robot_task_executor
 )
 target_link_libraries(repeatability_test_server
   "${cpp_typesupport_target}"
@@ -225,6 +279,8 @@ install(TARGETS
   pickplace_server
   drl_pickplace_server
   move_pose_rl_server
+  move_target_rl_server
+  move_to_pose_obstacle_server
   repeatability_test_server
 
   task_manager_client
@@ -238,6 +294,7 @@ install(PROGRAMS
   scripts/drl_pick_place_random_test_client.py
   scripts/drl_pick_place_campaign_runner.py
   scripts/repeatability_test_client.py
+  scripts/analyze_pickplace_tcp_logs.py
   DESTINATION lib/${PROJECT_NAME}
 )
 

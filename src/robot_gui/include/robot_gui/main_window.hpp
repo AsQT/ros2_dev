@@ -17,6 +17,7 @@ class QLabel;
 class QPushButton;
 class QLineEdit;
 class QTextEdit;
+class QTimer;
 
 QT_BEGIN_NAMESPACE
 namespace Ui
@@ -57,6 +58,7 @@ private Q_SLOTS:
   void update_raw_image(QImage image);
   void update_detection_image(QImage image);
   void update_yolo_image(QImage image);
+  void update_tcp_pose();
 
 private:
   void setup_defaults();
@@ -66,6 +68,7 @@ private:
   void setup_robot_controls();
   void setup_axis_controls();
   void setup_logs();
+  void setup_tcp_pose_monitor();
   void log_robot_tab_widget_mapping();
   void log_joint_state_widget_mapping();
   void setup_rviz(QApplication * app);
@@ -95,8 +98,12 @@ private:
   bool raw_image_seen_{false};
   bool detection_image_seen_{false};
   bool yolo_image_seen_{false};
+  QImage latest_detection_image_;
+  QImage latest_yolo_image_;
   QString robot_enable_default_style_;
   QString robot_disable_default_style_;
+  QTimer * tcp_pose_timer_{nullptr};
+  bool tcp_pose_tf_warned_{false};
 };
 
 }  // namespace robot_gui

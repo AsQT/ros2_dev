@@ -1,0 +1,28 @@
+# Static transform from base_link to aruco_world.
+# Temporary calibration for testing vision + MoveTargetRL.
+#
+# Units:
+#   translation: meters
+#   rotation_rpy: radians
+#
+# Interpretation:
+#   parent_frame -> child_frame
+#   base_link    -> aruco_world
+#
+# translation is the position of aruco_world origin expressed in base_link.
+# Later, move TCP to aruco_world origin and replace x/y/z with measured values.
+# See Reports/vision_box_height_and_base_tf_report.md section 14 for the
+# measurement procedure.
+
+parent_frame: base_link
+child_frame: aruco_world
+
+translation:
+  x: 0.300
+  y: 0.000
+  z: 0.010
+
+rotation_rpy:
+  roll: 0.0
+  pitch: 0.0
+  yaw: 0.0

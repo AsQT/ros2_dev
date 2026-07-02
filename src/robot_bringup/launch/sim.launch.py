@@ -1,7 +1,8 @@
 import os
 
 from launch                             import LaunchDescription
-from launch.actions                     import DeclareLaunchArgument, IncludeLaunchDescription, LogInfo, RegisterEventHandler, TimerAction
+from launch.actions                     import DeclareLaunchArgument, IncludeLaunchDescription, LogInfo, RegisterEventHandler, SetEnvironmentVariable, TimerAction
+from launch.conditions                  import IfCondition
 from launch.event_handlers              import OnProcessExit
 from launch.launch_description_sources  import PythonLaunchDescriptionSource
 from launch.substitutions               import LaunchConfiguration
@@ -14,8 +15,15 @@ def generate_launch_description():
     robot_moveit_pkg     = get_package_share_directory("robot_moveit")
     robot_task_pkg       = get_package_share_directory("robot_task_manager")
     robot_control_pkg    = get_package_share_directory("robot_control")
+    robot_vision_pkg     = get_package_share_directory("robot_vision_pipeline")
+    robot_bringup_pkg    = get_package_share_directory("robot_bringup")
 
     controllers_yaml = os.path.join(robot_control_pkg, "config", "robot_controllers.yaml")
+    cyclonedds_config = os.path.join(robot_bringup_pkg, "config", "cyclonedds.xml")
+    set_cyclonedds_uri = SetEnvironmentVariable(
+        name="CYCLONEDDS_URI",
+        value=f"file://{cyclonedds_config}",
+    )
     spawn_demo_woods_arg = DeclareLaunchArgument(
         "spawn_demo_woods",
         default_value="true",
@@ -25,6 +33,34 @@ def generate_launch_description():
         "enable_drl_backend",
         default_value="true",
         description="Forwarded to task_servers_sim.launch.py for DRL backend startup",
+    )
+    use_vision_arg = DeclareLaunchArgument(
+        "use_vision",
+        default_value="false",
+        description=(
+            "Start the whole vision branch: RealSense camera + "
+            "vision_full_pipeline.launch.py (YOLO + mapper) + the temporary "
+            "aruco_world static TF. Sim does not have a simulated camera feed by "
+            "default; MoveTargetRl/MoveToPoseObstacle work without it via goal "
+            "fallback fields."),
+    )
+
+    # Optional vision + static TF branch — isolated from Gazebo/controller
+    # timing on purpose: if the camera is missing or vision nodes fail, that
+    # must not affect gazebo/moveit/task_servers above. use_vision is the only
+    # flag the user sets; use_camera is forwarded internally.
+    vision_full_pipeline = IncludeLaunchDescription(
+        PythonLaunchDescriptionSource(
+            os.path.join(robot_vision_pkg, "launch", "vision_full_pipeline.launch.py")),
+        launch_arguments={
+            "use_camera": LaunchConfiguration("use_vision"),
+        }.items(),
+        condition=IfCondition(LaunchConfiguration("use_vision")),
+    )
+    aruco_world_static_tf = IncludeLaunchDescription(
+        PythonLaunchDescriptionSource(
+            os.path.join(robot_bringup_pkg, "launch", "aruco_world_static_tf.launch.py")),
+        condition=IfCondition(LaunchConfiguration("use_vision")),
     )
 
     # 1) Gazebo bringup
@@ -101,8 +137,10 @@ def generate_launch_description():
 
     # MoveIt after 4 s, task servers after 6 s
     return LaunchDescription([
+        set_cyclonedds_uri,
         spawn_demo_woods_arg,
         enable_drl_backend_arg,
+        use_vision_arg,
         LogInfo(msg="[timing] sim.launch start: Gazebo + robot spawn + bridges"),
         gazebo,
 
@@ -118,4 +156,9 @@ def generate_launch_description():
             LogInfo(msg="[timing] +6.0s starting task servers"),
             task_servers,
         ]),
+
+        # Optional — independent of the Gazebo/controller timing chain above,
+        # so a missing camera or vision node failure never affects it.
+        vision_full_pipeline,
+        aruco_world_static_tf,
     ])

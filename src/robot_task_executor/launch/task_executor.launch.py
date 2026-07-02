@@ -87,12 +87,35 @@ def generate_launch_description() -> LaunchDescription:
             "max_acceleration_scaling_factor",
             default_value="0.5",
             description="Max acceleration scaling factor (0-1)"),
+        DeclareLaunchArgument(
+            "enable_executor_logging",
+            default_value="false",
+            description="Enable CSV executor experiment logging"),
+        DeclareLaunchArgument(
+            "log_root_dir",
+            default_value="/home/minhquang/ros2_dev/Log_robot_data",
+            description="Unified root directory for robot log data"),
+        DeclareLaunchArgument(
+            "executor_log_dir",
+            default_value="/home/minhquang/ros2_dev/Log_robot_data/executor_logs/TaskExecutor",
+            description="Directory for executor experiment logs"),
+        DeclareLaunchArgument(
+            "executor_sample_rate_hz",
+            default_value="50.0",
+            description="Sampling rate for executor actual data"),
+        DeclareLaunchArgument(
+            "executor_base_frame",
+            default_value="base_link",
+            description="Base frame for executor TCP TF lookup"),
+        DeclareLaunchArgument(
+            "executor_tcp_frame",
+            default_value="tcp_link",
+            description="TCP frame for executor TCP TF lookup"),
     ]
 
     node = Node(
         package="robot_task_executor",
         executable="task_executor_node",
-        name="task_executor_node",
         output="screen",
         parameters=[
             moveit_config.to_dict(),
@@ -108,6 +131,12 @@ def generate_launch_description() -> LaunchDescription:
                 "num_planning_attempts": LaunchConfiguration("num_planning_attempts"),
                 "max_velocity_scaling_factor": LaunchConfiguration("max_velocity_scaling_factor"),
                 "max_acceleration_scaling_factor": LaunchConfiguration("max_acceleration_scaling_factor"),
+                "enable_executor_logging": LaunchConfiguration("enable_executor_logging"),
+                "log_root_dir": LaunchConfiguration("log_root_dir"),
+                "executor_log_dir": LaunchConfiguration("executor_log_dir"),
+                "executor_sample_rate_hz": LaunchConfiguration("executor_sample_rate_hz"),
+                "executor_base_frame": LaunchConfiguration("executor_base_frame"),
+                "executor_tcp_frame": LaunchConfiguration("executor_tcp_frame"),
             },
         ],
     )

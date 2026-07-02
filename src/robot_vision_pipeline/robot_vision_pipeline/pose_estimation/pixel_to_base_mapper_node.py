@@ -41,7 +41,12 @@ from rclpy.qos import DurabilityPolicy, HistoryPolicy, QoSProfile, ReliabilityPo
 from sensor_msgs.msg import CameraInfo, Image
 from std_msgs.msg import String
 
-from robot_vision_pipeline.depth_utils import robust_center_depth
+from robot_vision_pipeline.depth_utils import (
+    BboxRoiDepthResult,
+    BoxHeightGridResult,
+    box_height_grid_cluster,
+    robust_bbox_roi_depth,
+)
 from robot_vision_pipeline_msgs.msg import Box, BoxArray, BoxDetection, Wood, WoodArray
 
 
@@ -263,20 +268,95 @@ class PixelToBaseMapperNode(Node):
         self.declare_parameter("box_objects_topic", "/vision/box_objects")
         self.declare_parameter("debug_image_topic", "/vision/debug_image_camera")
 
-        self.declare_parameter("depth_kernel_radius", 2)
         self.declare_parameter("min_depth_m", 0.05)
         self.declare_parameter("max_depth_m", 3.0)
-        self.declare_parameter("depth_outlier_threshold_m", 0.02)
-        self.declare_parameter("min_valid_depth_samples", 3)
+
+        # Robust bbox-ROI depth sampling (codex2.md "vision_depth_roi_and_
+        # height_reference_fix"): a hole at the exact bbox center (common on
+        # white/glossy boxes where the IR pattern washes out) must not drop
+        # the whole detection when the surrounding ROI still has valid depth.
+        self.declare_parameter("depth_roi_enable", True)
+        self.declare_parameter("depth_roi_scale", 0.6)
+        self.declare_parameter("depth_roi_min_width_px", 15)
+        self.declare_parameter("depth_roi_min_height_px", 15)
+        self.declare_parameter("depth_roi_max_width_px", 120)
+        self.declare_parameter("depth_roi_max_height_px", 120)
+        self.declare_parameter("depth_roi_stride_px", 1)
+        self.declare_parameter("depth_min_valid_samples", 20)
+        self.declare_parameter("depth_outlier_threshold_m", 0.03)
+        self.declare_parameter("depth_statistic", "percentile")
+        self.declare_parameter("depth_percentile", 20.0)
 
         self.declare_parameter("default_box_size_x_m", 0.08)
         self.declare_parameter("default_box_size_y_m", 0.08)
         self.declare_parameter("default_box_size_z_m", 0.05)
         self.declare_parameter("box_obstacle_margin_m", 0.02)
 
+        # Box height (size.z) estimation from the center depth ROI, instead of
+        # always using default_box_size_z_m. See _measure_box_height_m().
+        # Legacy path only — used when use_camera_table_depth_for_height is
+        # false. Default path (true) uses camera_table_depth_m instead; see
+        # below.
+        self.declare_parameter("use_measured_box_height", True)
+        self.declare_parameter("box_height_roi_radius_px", 8)
+        self.declare_parameter("box_height_min_valid_samples", 5)
+        self.declare_parameter("box_height_outlier_threshold_m", 0.02)
+        self.declare_parameter("box_height_use_median", True)
+        # Table height in mapper output frame. Only used by the legacy height
+        # path (use_camera_table_depth_for_height=false). If output frame is
+        # aruco_world and aruco_world origin lies on the table plane, this
+        # can stay 0.0 (see config/aruco_world_to_base.yaml).
+        self.declare_parameter("box_table_z_m", 0.0)
+        self.declare_parameter("box_height_min_m", 0.005)
+        self.declare_parameter("box_height_max_m", 0.500)
+
+        # Height = camera_table_depth_m - object_surface_depth_m (both are
+        # raw camera-frame distances along the optical axis) instead of
+        # differencing z in the output/world frame against box_table_z_m —
+        # robust to a pad/riser under the object that makes the world-frame
+        # table-plane assumption wrong. camera_table_depth_m is the distance
+        # from the camera to the table surface; user tunes it after
+        # measuring the real setup (default 0.70 m is a placeholder).
+        self.declare_parameter("use_camera_table_depth_for_height", True)
+        self.declare_parameter("camera_table_depth_m", 0.70)
+        self.declare_parameter("wood_nominal_size_m", 0.030)
+
+        # Box height by 4x4 grid sampling + clustering (codex2.md
+        # "box_height_grid_cluster_estimation"): a single ROI-wide statistic
+        # can still lock onto a pad/support-plane height if enough
+        # bbox-interior pixels belong to it. Sampling a structured grid and
+        # clustering the resulting height_i values (picking the *box-top*
+        # cluster, never a low pad-height cluster when a higher one is also
+        # valid) is more robust. Primary path when enabled; falls back to
+        # robust_bbox_roi_depth-based height, then to skipping the object.
+        self.declare_parameter("box_height_grid_enable", True)
+        self.declare_parameter("box_height_grid_rows", 4)
+        self.declare_parameter("box_height_grid_cols", 4)
+        self.declare_parameter("box_height_grid_inner_scale", 0.70)
+        self.declare_parameter("box_height_grid_patch_half_size_px", 3)
+        self.declare_parameter("box_height_grid_patch_min_valid_px", 5)
+        self.declare_parameter("box_height_grid_min_valid_points", 6)
+        self.declare_parameter("box_height_cluster_tolerance_m", 0.020)
+        self.declare_parameter("box_height_cluster_min_points", 4)
+        self.declare_parameter("box_height_cluster_statistic", "mean")
+
+        # Reject pad/support-plane height being selected as box height.
+        self.declare_parameter("box_height_prefer_higher_cluster", True)
+        self.declare_parameter("box_height_low_cluster_reject_enable", True)
+        self.declare_parameter("box_height_low_cluster_threshold_m", 0.070)
+        self.declare_parameter("box_height_expected_min_m", 0.080)
+
         self.declare_parameter("overlay_timeout_sec", 1.0)
         self.declare_parameter("stale_timeout_sec", 2.0)
         self.declare_parameter("publish_period_sec", 0.5)
+
+        # codex.md "box ghost" fix: publish only ONE box (the latest / most
+        # trusted detection) so a box that moved — and got a new tracker id —
+        # cannot linger in /vision/box_objects alongside its old position until
+        # stale_timeout. Only affects box; wood is untouched.
+        self.declare_parameter("box_publish_single_latest", True)
+        # "latest" = most recently updated box; "highest_confidence" = max conf.
+        self.declare_parameter("box_single_selected_rule", "latest")
 
         self.declare_parameter("use_hough_yaw", True)
         self.declare_parameter("use_hough_yaw_for_wood", True)
@@ -324,15 +404,32 @@ class PixelToBaseMapperNode(Node):
         self._box_objects_topic = str(self.get_parameter("box_objects_topic").value)
         self._debug_image_topic = str(self.get_parameter("debug_image_topic").value)
 
-        self._depth_kernel_radius = max(0, int(self.get_parameter("depth_kernel_radius").value))
         self._min_depth_m = float(self.get_parameter("min_depth_m").value)
         self._max_depth_m = float(self.get_parameter("max_depth_m").value)
+
+        self._depth_roi_enable = bool(self.get_parameter("depth_roi_enable").value)
+        self._depth_roi_scale = float(self.get_parameter("depth_roi_scale").value)
+        self._depth_roi_min_width_px = max(
+            1, int(self.get_parameter("depth_roi_min_width_px").value)
+        )
+        self._depth_roi_min_height_px = max(
+            1, int(self.get_parameter("depth_roi_min_height_px").value)
+        )
+        self._depth_roi_max_width_px = max(
+            self._depth_roi_min_width_px, int(self.get_parameter("depth_roi_max_width_px").value)
+        )
+        self._depth_roi_max_height_px = max(
+            self._depth_roi_min_height_px, int(self.get_parameter("depth_roi_max_height_px").value)
+        )
+        self._depth_roi_stride_px = max(1, int(self.get_parameter("depth_roi_stride_px").value))
+        self._depth_min_valid_samples = max(
+            1, int(self.get_parameter("depth_min_valid_samples").value)
+        )
         self._depth_outlier_threshold_m = float(
             self.get_parameter("depth_outlier_threshold_m").value
         )
-        self._min_valid_depth_samples = max(
-            1, int(self.get_parameter("min_valid_depth_samples").value)
-        )
+        self._depth_statistic = str(self.get_parameter("depth_statistic").value)
+        self._depth_percentile = float(self.get_parameter("depth_percentile").value)
 
         self._default_box_x = float(self.get_parameter("default_box_size_x_m").value)
         self._default_box_y = float(self.get_parameter("default_box_size_y_m").value)
@@ -342,8 +439,76 @@ class PixelToBaseMapperNode(Node):
             float(self.get_parameter("box_obstacle_margin_m").value),
         )
 
+        self._use_measured_box_height = bool(
+            self.get_parameter("use_measured_box_height").value
+        )
+        self._box_height_roi_radius_px = max(
+            0, int(self.get_parameter("box_height_roi_radius_px").value)
+        )
+        self._box_height_min_valid_samples = max(
+            1, int(self.get_parameter("box_height_min_valid_samples").value)
+        )
+        self._box_height_outlier_threshold_m = float(
+            self.get_parameter("box_height_outlier_threshold_m").value
+        )
+        self._box_height_use_median = bool(
+            self.get_parameter("box_height_use_median").value
+        )
+        self._box_table_z_m = float(self.get_parameter("box_table_z_m").value)
+        self._box_height_min_m = float(self.get_parameter("box_height_min_m").value)
+        self._box_height_max_m = float(self.get_parameter("box_height_max_m").value)
+
+        self._use_camera_table_depth_for_height = bool(
+            self.get_parameter("use_camera_table_depth_for_height").value
+        )
+        self._camera_table_depth_m = float(self.get_parameter("camera_table_depth_m").value)
+        self._wood_nominal_size_m = float(self.get_parameter("wood_nominal_size_m").value)
+
+        self._box_height_grid_enable = bool(self.get_parameter("box_height_grid_enable").value)
+        self._box_height_grid_rows = max(1, int(self.get_parameter("box_height_grid_rows").value))
+        self._box_height_grid_cols = max(1, int(self.get_parameter("box_height_grid_cols").value))
+        self._box_height_grid_inner_scale = float(
+            self.get_parameter("box_height_grid_inner_scale").value
+        )
+        self._box_height_grid_patch_half_size_px = max(
+            0, int(self.get_parameter("box_height_grid_patch_half_size_px").value)
+        )
+        self._box_height_grid_patch_min_valid_px = max(
+            1, int(self.get_parameter("box_height_grid_patch_min_valid_px").value)
+        )
+        self._box_height_grid_min_valid_points = max(
+            1, int(self.get_parameter("box_height_grid_min_valid_points").value)
+        )
+        self._box_height_cluster_tolerance_m = float(
+            self.get_parameter("box_height_cluster_tolerance_m").value
+        )
+        self._box_height_cluster_min_points = max(
+            1, int(self.get_parameter("box_height_cluster_min_points").value)
+        )
+        self._box_height_cluster_statistic = str(
+            self.get_parameter("box_height_cluster_statistic").value
+        )
+        self._box_height_prefer_higher_cluster = bool(
+            self.get_parameter("box_height_prefer_higher_cluster").value
+        )
+        self._box_height_low_cluster_reject_enable = bool(
+            self.get_parameter("box_height_low_cluster_reject_enable").value
+        )
+        self._box_height_low_cluster_threshold_m = float(
+            self.get_parameter("box_height_low_cluster_threshold_m").value
+        )
+        self._box_height_expected_min_m = float(
+            self.get_parameter("box_height_expected_min_m").value
+        )
+
         self._overlay_timeout_sec = float(self.get_parameter("overlay_timeout_sec").value)
         self._stale_timeout_sec = float(self.get_parameter("stale_timeout_sec").value)
+        self._box_publish_single_latest = bool(
+            self.get_parameter("box_publish_single_latest").value
+        )
+        self._box_single_selected_rule = str(
+            self.get_parameter("box_single_selected_rule").value
+        )
         self._publish_period_sec = float(self.get_parameter("publish_period_sec").value)
 
         self._use_hough_yaw_for_wood = bool(
@@ -470,6 +635,27 @@ class PixelToBaseMapperNode(Node):
             f"debug={self._debug_image_topic}"
         )
 
+        # codex2.md "mock_vision_z_runtime_param_check": make the *actual
+        # runtime* height config impossible to miss in the launch terminal,
+        # so a wrong/stale camera_table_depth_m (e.g. leftover placeholder
+        # 0.70 instead of the YAML value) is visible without needing
+        # `ros2 param dump`.
+        self.get_logger().info(
+            "[pixel_to_base_mapper_node] height config: "
+            f"use_camera_table_depth_for_height={self._use_camera_table_depth_for_height} "
+            f"camera_table_depth_m={self._camera_table_depth_m:.4f} "
+            f"depth_roi_enable={self._depth_roi_enable} "
+            f"depth_statistic={self._depth_statistic} "
+            f"depth_percentile={self._depth_percentile:.1f} "
+            f"box_table_z_m={self._box_table_z_m:.4f} "
+            f"wood_nominal_size_m={self._wood_nominal_size_m:.4f} "
+            f"box_height_grid_enable={self._box_height_grid_enable} "
+            f"box_height_grid={self._box_height_grid_rows}x{self._box_height_grid_cols} "
+            f"box_height_cluster_tolerance_m={self._box_height_cluster_tolerance_m:.4f} "
+            f"box_height_low_cluster_reject_enable={self._box_height_low_cluster_reject_enable} "
+            f"box_height_low_cluster_threshold_m={self._box_height_low_cluster_threshold_m:.4f}"
+        )
+
     # ------------------------------------------------------------------ common
     def _now_seconds(self) -> float:
         return self.get_clock().now().nanoseconds * 1e-9
@@ -536,6 +722,108 @@ class PixelToBaseMapperNode(Node):
         )
         p_world = self._T_world_camera @ p_camera
         return float(p_world[0]), float(p_world[1]), float(p_world[2])
+
+    def _measure_box_height_m(
+        self,
+        center_u: int,
+        center_v: int,
+    ) -> Tuple[Optional[float], int]:
+        """Measure a box's real height (size.z) from the depth ROI at its center.
+
+        Does NOT treat raw depth as height directly. Instead: for every valid
+        depth pixel in a small square window around (center_u, center_v),
+        back-project to camera-frame 3D, transform to the mapper's output
+        frame (world/aruco_world if use_world_transform is active, otherwise
+        camera frame — same transform already used for object poses), and
+        collect the resulting z. The robust z of that cloud is the box
+        top-surface height in the output frame; height is its distance from
+        box_table_z_m (the table plane in that same output frame).
+
+        Returns (height_m, valid_samples). height_m is None when there are
+        not enough valid samples, or the computed height falls outside
+        [box_height_min_m, box_height_max_m] — callers must fall back to
+        default_box_size_z_m in that case.
+        """
+        intrinsics = self._get_intrinsics()
+        if intrinsics is None:
+            return None, 0
+        fx, fy, cx_i, cy_i = intrinsics
+
+        with self._depth_lock:
+            depth_msg = self._latest_depth_msg
+            depth_encoding = self._latest_depth_encoding
+
+        if depth_msg is None:
+            return None, 0
+
+        try:
+            depth_arr = self._bridge.imgmsg_to_cv2(depth_msg, desired_encoding="passthrough")
+        except CvBridgeError:
+            return None, 0
+        if depth_arr is None or not isinstance(depth_arr, np.ndarray) or depth_arr.ndim != 2:
+            return None, 0
+
+        h, w = depth_arr.shape[:2]
+        radius = self._box_height_roi_radius_px
+        u0 = max(0, center_u - radius)
+        v0 = max(0, center_v - radius)
+        u1 = min(w, center_u + radius + 1)
+        v1 = min(h, center_v + radius + 1)
+        if u0 >= u1 or v0 >= v1:
+            return None, 0
+
+        def _raw_to_m(value: object) -> Optional[float]:
+            if depth_encoding in ("16UC1", "mono16"):
+                raw_int = int(value)  # type: ignore[arg-type]
+                return float(raw_int) * 0.001 if raw_int != 0 else None
+            if depth_encoding in ("32FC1",):
+                raw_f = float(value)  # type: ignore[arg-type]
+                return raw_f if math.isfinite(raw_f) and raw_f > 0.0 else None
+            if np.issubdtype(depth_arr.dtype, np.floating):
+                raw_f = float(value)  # type: ignore[arg-type]
+                return raw_f if math.isfinite(raw_f) and raw_f > 0.0 else None
+            raw_int = int(value)  # type: ignore[arg-type]
+            return float(raw_int) * 0.001 if raw_int != 0 else None
+
+        z_values: list[float] = []
+        for v in range(v0, v1):
+            for u in range(u0, u1):
+                depth_m = _raw_to_m(depth_arr[v, u])
+                if depth_m is None:
+                    continue
+                if depth_m < self._min_depth_m or depth_m > self._max_depth_m:
+                    continue
+                try:
+                    x_c, y_c, z_c = pixel_to_camera_xyz(u, v, depth_m, fx, fy, cx_i, cy_i)
+                except ValueError:
+                    continue
+                _, _, z_out = self.transform_camera_to_world(x_c, y_c, z_c)
+                z_values.append(z_out)
+
+        valid_samples = len(z_values)
+        if valid_samples < self._box_height_min_valid_samples:
+            return None, valid_samples
+
+        z_arr = np.array(z_values, dtype=np.float64)
+        z_anchor = float(np.median(z_arr))
+        deviations = np.abs(z_arr - z_anchor)
+        filtered = z_arr[deviations <= self._box_height_outlier_threshold_m]
+        if len(filtered) < self._box_height_min_valid_samples:
+            # Not enough survive outlier rejection — anchor on the full-window
+            # median rather than discarding the measurement outright.
+            filtered = z_arr
+
+        z_surface = float(
+            np.median(filtered) if self._box_height_use_median else np.mean(filtered)
+        )
+
+        height_m = abs(z_surface - self._box_table_z_m)
+        if not math.isfinite(height_m):
+            return None, valid_samples
+        if height_m < self._box_height_min_m or height_m > self._box_height_max_m:
+            return None, valid_samples
+
+        return height_m, valid_samples
 
     @staticmethod
     def _object_label(
@@ -749,7 +1037,7 @@ class PixelToBaseMapperNode(Node):
             self._latest_depth_msg = msg
             self._latest_depth_encoding = msg.encoding
 
-    def _depth_at_center(self, u: int, v: int) -> Optional[float]:
+    def _read_depth_array(self) -> Tuple[Optional[np.ndarray], str]:
         with self._depth_lock:
             depth_msg = self._latest_depth_msg
             depth_encoding = self._latest_depth_encoding
@@ -760,61 +1048,82 @@ class PixelToBaseMapperNode(Node):
                     f"No depth image yet. Waiting for {self._depth_image_topic}"
                 )
                 self._warned_no_depth = True
-            return None
+            return None, ""
 
         try:
-            depth_arr = self._bridge.imgmsg_to_cv2(
-                depth_msg,
-                desired_encoding="passthrough",
-            )
+            depth_arr = self._bridge.imgmsg_to_cv2(depth_msg, desired_encoding="passthrough")
         except CvBridgeError as exc:
             self.get_logger().warn(f"Depth cv_bridge error: {exc}")
-            return None
+            return None, ""
 
-        if (
-            depth_arr is None
-            or not isinstance(depth_arr, np.ndarray)
-            or depth_arr.ndim != 2
-        ):
+        if depth_arr is None or not isinstance(depth_arr, np.ndarray) or depth_arr.ndim != 2:
             self.get_logger().warn("Invalid depth image array.")
-            return None
+            return None, ""
 
-        h, w = depth_arr.shape[:2]
-        u_clamped = int(max(0, min(int(u), w - 1)))
-        v_clamped = int(max(0, min(int(v), h - 1)))
+        return depth_arr, depth_encoding
 
-        depth_m, _, _, _, _ = robust_center_depth(
-            depth_arr,
-            u_clamped,
-            v_clamped,
-            radius=self._depth_kernel_radius,
-            encoding=depth_encoding,
-            min_depth_m=self._min_depth_m,
-            max_depth_m=self._max_depth_m,
-            outlier_threshold_m=self._depth_outlier_threshold_m,
-            min_valid_samples=self._min_valid_depth_samples,
-        )
+    def _resolve_object_depth(
+        self, det: BoxDetection, center_u: int, center_v: int
+    ) -> Tuple[Optional[float], Optional[BboxRoiDepthResult]]:
+        """Resolve an object's surface depth from a bbox-scaled ROI, not just the
+        bbox center pixel (codex2.md "vision_depth_roi_and_height_reference_fix",
+        sections 6/10).
 
-        if depth_m is None:
-            return None
-
-        depth_m = float(depth_m)
-        if not math.isfinite(depth_m) or depth_m <= 0.0:
-            return None
-
-        return depth_m
-
-    def _resolve_depth(self, det: BoxDetection, center_u: int, center_v: int) -> Optional[float]:
+        Returns (depth_m, roi_result). depth_m is None when neither the ROI
+        sampling nor the detection's own fallback fields produced a usable
+        depth — callers must skip the object rather than reuse stale data.
         """
-        Depth priority:
-          1. aligned depth image around bbox center
-          2. depth fields already available in BoxDetection
-        """
-        depth_from_image = self._depth_at_center(center_u, center_v)
-        if depth_from_image is not None and depth_from_image > 0.0:
-            return depth_from_image
+        depth_arr, depth_encoding = self._read_depth_array()
+        if depth_arr is not None and self._depth_roi_enable:
+            roi_result = robust_bbox_roi_depth(
+                depth_arr,
+                int(det.x_min),
+                int(det.y_min),
+                int(det.x_max),
+                int(det.y_max),
+                encoding=depth_encoding,
+                roi_scale=self._depth_roi_scale,
+                roi_min_width_px=self._depth_roi_min_width_px,
+                roi_min_height_px=self._depth_roi_min_height_px,
+                roi_max_width_px=self._depth_roi_max_width_px,
+                roi_max_height_px=self._depth_roi_max_height_px,
+                stride=self._depth_roi_stride_px,
+                min_depth_m=self._min_depth_m,
+                max_depth_m=self._max_depth_m,
+                outlier_threshold_m=self._depth_outlier_threshold_m,
+                min_valid_samples=self._depth_min_valid_samples,
+                statistic=self._depth_statistic,
+                percentile=self._depth_percentile,
+            )
+            if roi_result.surface_depth_m is not None:
+                if not roi_result.center_valid:
+                    self.get_logger().info(
+                        f"Center depth invalid, fallback to ROI depth succeeded: "
+                        f"class={det.class_name} id={int(det.object_id)} "
+                        f"center=({center_u},{center_v}) "
+                        f"valid={roi_result.valid_count}/{roi_result.total_count} "
+                        f"surface_depth={roi_result.surface_depth_m:.4f}"
+                    )
+                self.get_logger().debug(
+                    f"robust_depth bbox id={int(det.object_id)} class={det.class_name} "
+                    f"center=({center_u},{center_v}) "
+                    f"valid={roi_result.valid_count}/{roi_result.total_count} "
+                    f"depth_surface={roi_result.surface_depth_m:.4f} "
+                    f"statistic={self._depth_statistic}{self._depth_percentile:.0f}"
+                )
+                return roi_result.surface_depth_m, roi_result
+        else:
+            roi_result = None
 
-        return fallback_depth_from_detection(det)
+        fallback_m = fallback_depth_from_detection(det)
+        if fallback_m is not None and fallback_m > 0.0:
+            self.get_logger().info(
+                f"ROI depth unavailable, using BoxDetection fallback field: "
+                f"class={det.class_name} id={int(det.object_id)} depth={fallback_m:.4f}"
+            )
+            return fallback_m, roi_result
+
+        return None, roi_result
 
     # ------------------------------------------------------------------ image debug
     def _on_color_image(self, msg: Image) -> None:
@@ -1102,11 +1411,13 @@ class PixelToBaseMapperNode(Node):
         center_u = int(msg.center_x)
         center_v = int(msg.center_y)
 
-        depth_m = self._resolve_depth(msg, center_u, center_v)
+        depth_m, roi_result = self._resolve_object_depth(msg, center_u, center_v)
         if depth_m is None or depth_m <= 0.0:
+            valid = roi_result.valid_count if roi_result is not None else 0
+            total = roi_result.total_count if roi_result is not None else 0
             self.get_logger().warn(
-                f"Wood depth invalid; skip id={int(msg.object_id)} "
-                f"center=({center_u},{center_v})"
+                f"Wood depth invalid after ROI sampling; skip id={int(msg.object_id)} "
+                f"center=({center_u},{center_v}) valid={valid}/{total}"
             )
             return
 
@@ -1127,6 +1438,42 @@ class PixelToBaseMapperNode(Node):
         now = self._now_seconds()
         class_name = str(msg.class_name) if str(msg.class_name) else "wood"
         x_out, y_out, z_out = self.transform_camera_to_world(x_c, y_c, z_c)
+
+        # codex2.md section 9: wood.pose.position.z is the CENTER of the
+        # 30mm cube marker, not the top-surface depth. Height above the
+        # table comes from the same camera-frame surface depth used for x/y
+        # (camera_table_depth_m - depth_m), matching the box height formula
+        # in section 7 — both avoid trusting box_table_z_m/world-frame table
+        # plane, which is wrong when a pad/riser sits under the object.
+        if self._use_camera_table_depth_for_height:
+            wood_surface_height_m = self._camera_table_depth_m - depth_m
+            wood_half_size_m = self._wood_nominal_size_m * 0.5
+            wood_center_z_m = wood_surface_height_m - wood_half_size_m
+            if wood_center_z_m < wood_half_size_m:
+                self.get_logger().warn(
+                    f"wood center_z clamped: table_depth={self._camera_table_depth_m:.3f} "
+                    f"surface_depth={depth_m:.3f} surface_height={wood_surface_height_m:.3f} "
+                    f"raw_center_z={wood_center_z_m:.4f} clamp_to={wood_half_size_m:.4f}",
+                    throttle_duration_sec=5.0,
+                )
+                wood_center_z_m = wood_half_size_m
+            if self._world_transform_active():
+                z_out = wood_center_z_m
+            else:
+                self.get_logger().warn(
+                    "wood center z not computed: use_world_transform inactive, output "
+                    "is camera frame where camera_table_depth_m has no valid meaning; "
+                    "keeping surface z as pose.position.z",
+                    throttle_duration_sec=5.0,
+                )
+
+            self.get_logger().info(
+                f"wood height id={int(msg.object_id)} "
+                f"camera_table_depth_m={self._camera_table_depth_m:.3f} "
+                f"surface_depth_m={depth_m:.3f} surface_height_m={wood_surface_height_m:.3f} "
+                f"wood_center_z_m={wood_center_z_m:.4f} wood_pose=({x_out:.3f},{y_out:.3f},{z_out:.3f})",
+                throttle_duration_sec=2.0,
+            )
 
         yaw_data = self._find_matching_hough_yaw(center_u, center_v)
         if yaw_data is not None:
@@ -1195,11 +1542,13 @@ class PixelToBaseMapperNode(Node):
         center_u = int(msg.center_x)
         center_v = int(msg.center_y)
 
-        depth_m = self._resolve_depth(msg, center_u, center_v)
+        depth_m, roi_result = self._resolve_object_depth(msg, center_u, center_v)
         if depth_m is None or depth_m <= 0.0:
+            valid = roi_result.valid_count if roi_result is not None else 0
+            total = roi_result.total_count if roi_result is not None else 0
             self.get_logger().warn(
-                f"Box depth invalid; skip id={int(msg.object_id)} "
-                f"center=({center_u},{center_v})"
+                f"Box depth invalid after ROI sampling; skip id={int(msg.object_id)} "
+                f"center=({center_u},{center_v}) valid={valid}/{total}"
             )
             return
 
@@ -1220,7 +1569,7 @@ class PixelToBaseMapperNode(Node):
         bbox_w_px = float(msg.width_px) if float(msg.width_px) > 0.0 else float(msg.x_max - msg.x_min)
         bbox_h_px = float(msg.height_px) if float(msg.height_px) > 0.0 else float(msg.y_max - msg.y_min)
 
-        width_m, length_m, height_m = compute_box_size_from_bbox(
+        width_m, length_m, default_height_m = compute_box_size_from_bbox(
             bbox_w_px=bbox_w_px,
             bbox_h_px=bbox_h_px,
             depth_m=depth_m,
@@ -1230,6 +1579,138 @@ class PixelToBaseMapperNode(Node):
             default_y_m=self._default_box_y,
             default_z_m=self._default_box_z,
         )
+        height_m = default_height_m
+
+        # size.z: prefer a real measurement over the default_box_size_z_m
+        # constant returned above (codex.md Part A — "Không được lấy raw
+        # depth camera rồi gọi trực tiếp là chiều cao").
+        height_source = "fallback_default"
+        measured_height_m: Optional[float] = None
+        valid_height_samples = 0
+
+        if self._use_camera_table_depth_for_height and self._box_height_grid_enable:
+            # codex2.md "box_height_grid_cluster_estimation": don't trust a
+            # single ROI-wide statistic for height — sample a 4x4 grid inside
+            # the bbox and cluster the resulting height_i values, explicitly
+            # rejecting a low pad/support-plane cluster when a higher
+            # box-top cluster is also valid (this is what was previously
+            # causing box.pose.position.z to lock onto ~0.05 m, the pad's
+            # height, instead of the box's real height).
+            depth_arr, depth_encoding = self._read_depth_array()
+            grid_result: Optional[BoxHeightGridResult] = None
+            if depth_arr is not None:
+                grid_result = box_height_grid_cluster(
+                    depth_arr,
+                    int(msg.x_min), int(msg.y_min), int(msg.x_max), int(msg.y_max),
+                    encoding=depth_encoding,
+                    camera_table_depth_m=self._camera_table_depth_m,
+                    grid_rows=self._box_height_grid_rows,
+                    grid_cols=self._box_height_grid_cols,
+                    inner_scale=self._box_height_grid_inner_scale,
+                    patch_half_size_px=self._box_height_grid_patch_half_size_px,
+                    patch_min_valid_px=self._box_height_grid_patch_min_valid_px,
+                    grid_min_valid_points=self._box_height_grid_min_valid_points,
+                    min_depth_m=self._min_depth_m,
+                    max_depth_m=self._max_depth_m,
+                    box_height_min_m=self._box_height_min_m,
+                    box_height_max_m=self._box_height_max_m,
+                    cluster_tolerance_m=self._box_height_cluster_tolerance_m,
+                    cluster_min_points=self._box_height_cluster_min_points,
+                    cluster_statistic=self._box_height_cluster_statistic,
+                    prefer_higher_cluster=self._box_height_prefer_higher_cluster,
+                    low_cluster_reject_enable=self._box_height_low_cluster_reject_enable,
+                    low_cluster_threshold_m=self._box_height_low_cluster_threshold_m,
+                )
+                self.get_logger().info(
+                    f"[box_height_grid] id={int(msg.object_id)} "
+                    f"valid_points={grid_result.valid_points}/{grid_result.total_points} "
+                    f"cluster_points={len(grid_result.selected_cluster)} "
+                    f"heights={['%.4f' % h if h is not None else None for h in grid_result.heights]} "
+                    f"selected_cluster={['%.4f' % h for h in grid_result.selected_cluster]} "
+                    f"rejected_clusters={[['%.4f' % h for h in c] for c in grid_result.rejected_clusters]} "
+                    f"height_m={grid_result.height_m if grid_result.height_m is not None else float('nan'):.4f} "
+                    f"camera_table_depth_m={self._camera_table_depth_m:.4f}",
+                    throttle_duration_sec=1.0,
+                )
+
+            if grid_result is not None and grid_result.height_m is not None:
+                measured_height_m = grid_result.height_m
+                height_m = grid_result.height_m
+                height_source = "grid_cluster"
+                valid_height_samples = len(grid_result.selected_cluster)
+            else:
+                valid_points = grid_result.valid_points if grid_result is not None else 0
+                self.get_logger().warn(
+                    f"Box height grid failed: valid_points={valid_points}/16 id={int(msg.object_id)}; "
+                    f"falling back to ROI-wide height",
+                    throttle_duration_sec=2.0,
+                )
+                fallback_height_m = self._camera_table_depth_m - depth_m
+                if (
+                    math.isfinite(fallback_height_m)
+                    and self._box_height_min_m <= fallback_height_m <= self._box_height_max_m
+                ):
+                    measured_height_m = fallback_height_m
+                    height_m = fallback_height_m
+                    height_source = "fallback_roi_after_grid_fail"
+                    valid_height_samples = roi_result.valid_count if roi_result is not None else 0
+                    self.get_logger().info(
+                        f"Fallback ROI height used: id={int(msg.object_id)} height_m={height_m:.4f}",
+                        throttle_duration_sec=2.0,
+                    )
+                else:
+                    self.get_logger().warn(
+                        f"Box height invalid after grid and ROI; skip id={int(msg.object_id)} "
+                        f"center=({center_u},{center_v})"
+                    )
+                    return
+        elif self._use_camera_table_depth_for_height:
+            # codex2.md "vision_depth_roi_and_height_reference_fix" section 7:
+            # height = camera_table_depth_m - object_surface_depth_m. Both
+            # terms are raw camera-frame distances along the optical axis —
+            # this sidesteps the world-frame table-plane assumption
+            # (box_table_z_m) entirely, which breaks when a pad/riser sits
+            # under the object. Used only when box_height_grid_enable=false.
+            measured_height_m = self._camera_table_depth_m - depth_m
+            valid_height_samples = roi_result.valid_count if roi_result is not None else 0
+            if (
+                not math.isfinite(measured_height_m)
+                or measured_height_m < self._box_height_min_m
+                or measured_height_m > self._box_height_max_m
+            ):
+                self.get_logger().warn(
+                    f"invalid height from camera_table_depth_m, "
+                    f"table_depth={self._camera_table_depth_m:.3f}, "
+                    f"surface_depth={depth_m:.3f}, height={measured_height_m:.4f}; "
+                    f"falling back to default_box_size_z_m={self._default_box_z:.3f}",
+                    throttle_duration_sec=5.0,
+                )
+                height_m = self._default_box_z
+                height_source = "fallback_default_invalid_height"
+            else:
+                height_m = measured_height_m
+                height_source = "camera_table_depth_m"
+        elif self._use_measured_box_height:
+            # Legacy path: world-frame z-cloud minus box_table_z_m.
+            measured_height_m, valid_height_samples = self._measure_box_height_m(
+                center_u, center_v
+            )
+            if measured_height_m is not None:
+                height_m = measured_height_m
+                height_source = "measured_depth_roi_legacy"
+
+        # codex2.md addendum: a box.size.z landing near the pad/support-plane
+        # height is a red flag even if it passed the [min,max] range check —
+        # warn (don't reject outright, some objects legitimately are this
+        # short) so it's visible in the terminal instead of silently PASSing.
+        if height_m < self._box_height_expected_min_m:
+            self.get_logger().warn(
+                f"box height below expected_min: id={int(msg.object_id)} "
+                f"height_m={height_m:.4f} expected_min_m={self._box_height_expected_min_m:.4f} "
+                f"height_source={height_source} — verify this isn't a pad/support-plane height",
+                throttle_duration_sec=2.0,
+            )
+
         area_m2 = width_m * length_m
         area_cm2 = area_m2 * 10000.0
 
@@ -1241,6 +1722,45 @@ class PixelToBaseMapperNode(Node):
         now = self._now_seconds()
         class_name = str(msg.class_name) if str(msg.class_name) else "box"
         x_out, y_out, z_out = self.transform_camera_to_world(x_c, y_c, z_c)
+
+        # z_out from transform_camera_to_world is the box TOP SURFACE height in
+        # the output frame (z_surface), not the box center — the center pixel's
+        # depth back-projects onto the top face of the box. Box.pose.position.z
+        # must be the box CENTER along Z (codex.md section 1): the table plane
+        # (z=0 in aruco_world, codex2.md section 8) plus half the height.
+        # size.z (height_m) is unchanged. This is only correct when we
+        # actually have a table-plane-at-origin output frame. When the world
+        # transform is inactive the output is the raw camera frame, so we
+        # keep the surface z rather than compute a wrong center (codex.md
+        # section 1.4 — "không được tự tính sai. Phải fallback hoặc báo cáo
+        # rõ").
+        z_surface_m = z_out
+        if self._world_transform_active():
+            if self._use_camera_table_depth_for_height:
+                box_center_z = height_m * 0.5
+            else:
+                box_center_z = self._box_table_z_m + height_m * 0.5
+        else:
+            box_center_z = z_surface_m
+            self.get_logger().warn(
+                "box center z not computed: use_world_transform inactive, output "
+                "is camera frame where the table-plane reference is undefined; "
+                "keeping surface z as pose.position.z (size.z height unaffected)",
+                throttle_duration_sec=5.0,
+            )
+        z_out = box_center_z
+
+        self.get_logger().info(
+            f"box height id={int(msg.object_id)} height_source={height_source} "
+            f"measured_height_m={measured_height_m if measured_height_m is not None else float('nan'):.4f} "
+            f"valid_samples={valid_height_samples} camera_table_depth_m={self._camera_table_depth_m:.3f} "
+            f"surface_depth_m={depth_m:.3f} box_table_z_m={self._box_table_z_m:.3f} "
+            f"z_surface_m={z_surface_m:.3f} box_height_m={height_m:.3f} "
+            f"box_center_z_m={box_center_z:.3f} "
+            f"box_pose=({x_out:.3f},{y_out:.3f},{z_out:.3f}) "
+            f"box_size=({width_m:.3f},{length_m:.3f},{height_m:.3f})",
+            throttle_duration_sec=2.0,
+        )
 
         with self._data_lock:
             self._latest_boxes[int(msg.object_id)] = BoxData(
@@ -1297,6 +1817,26 @@ class PixelToBaseMapperNode(Node):
 
             woods_snapshot = list(self._latest_woods.values())
             boxes_snapshot = list(self._latest_boxes.values())
+
+        # codex.md "box ghost": collapse to a single latest/most-trusted box so a
+        # moved box (which may have a new tracker id) never coexists with its old
+        # position in /vision/box_objects. Wood is left as-is.
+        if self._box_publish_single_latest and len(boxes_snapshot) > 0:
+            if self._box_single_selected_rule == "highest_confidence":
+                selected = max(boxes_snapshot, key=lambda b: b.confidence)
+            else:  # "latest": most recently updated detection
+                selected = max(boxes_snapshot, key=lambda b: b.stamp_sec)
+            dropped = len(boxes_snapshot) - 1
+            boxes_snapshot = [selected]
+            if dropped > 0:
+                self.get_logger().info(
+                    "[pixel_to_base_mapper] publish latest box only: "
+                    f"selected_id={selected.box_id} confidence={selected.confidence:.3f} "
+                    f"center=({selected.x_out_m:.3f},{selected.y_out_m:.3f},{selected.z_out_m:.3f}) "
+                    f"size=({selected.size_x_m:.3f},{selected.size_y_m:.3f},{selected.size_z_m:.3f}) "
+                    f"rule={self._box_single_selected_rule} old_boxes_dropped={dropped}",
+                    throttle_duration_sec=1.0,
+                )
 
         wood_arr_msg = WoodArray()
         wood_arr_msg.header.stamp = now_msg

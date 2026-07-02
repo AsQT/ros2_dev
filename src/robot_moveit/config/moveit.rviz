@@ -362,6 +362,18 @@ Visualization Manager:
         Reliability Policy: Reliable
         Value: /drl/forward_trajectory_marker
       Value: true
+    - Class: rviz_default_plugins/MarkerArray
+      Enabled: true
+      Name: Vision Object Markers
+      Namespaces:
+        {}
+      Topic:
+        Depth: 10
+        Durability Policy: Volatile
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /vision/object_markers
+      Value: true
   Enabled: true
   Global Options:
     Background Color: 222; 221; 218
