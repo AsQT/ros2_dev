@@ -20,7 +20,7 @@ Notes:
   - This node publishes poses in camera_color_optical_frame.
   - Camera -> base_link transform is NOT implemented here.
   - Homography is NOT used.
-  - Wood yaw is read from /vision/yolo/hough_yaw_json and stored in pose.orientation.
+  - Wood cube pose.orientation is fixed at yaw 0 deg; Hough yaw is debug-only.
 """
 
 from __future__ import annotations
@@ -46,6 +46,13 @@ from robot_vision_pipeline.depth_utils import (
     BoxHeightGridResult,
     box_height_grid_cluster,
     robust_bbox_roi_depth,
+)
+from robot_vision_pipeline.pose_estimation.wood_normalization import (
+    normalize_wood_z_output_m,
+    WOOD_CUBE_YAW_OUTPUT_DEG,
+    wood_cube_yaw_output_deg,
+    WOOD_Z_BAND_HIGH_60MM,
+    WOOD_Z_BAND_LOW_20MM,
 )
 from robot_vision_pipeline_msgs.msg import Box, BoxArray, BoxDetection, Wood, WoodArray
 
@@ -148,6 +155,7 @@ class HoughYawData:
     confidence: float
     center_u: float
     center_v: float
+    yaw_raw_deg: float
     yaw_deg: float
     yaw_valid: bool
     method: str
@@ -240,6 +248,7 @@ class PixelToBaseMapperNode(Node):
         self._data_lock = threading.Lock()
         self._latest_woods: Dict[int, WoodData] = {}
         self._latest_boxes: Dict[int, BoxData] = {}
+        self._wood_z_last_valid_m: Optional[float] = None
 
         self._yaw_lock = threading.Lock()
         self._latest_hough_yaws: Dict[int, HoughYawData] = {}
@@ -861,9 +870,11 @@ class PixelToBaseMapperNode(Node):
                 yaw_value = obj.get("yaw_deg", None)
                 if yaw_value is None:
                     continue
-                yaw_deg = float(yaw_value)
-                if not math.isfinite(yaw_deg):
+                yaw_raw_value = obj.get("yaw_raw_deg", yaw_value)
+                yaw_raw_deg = float(yaw_raw_value)
+                if not math.isfinite(yaw_raw_deg):
                     continue
+                yaw_deg = wood_cube_yaw_output_deg(yaw_raw_deg)
 
                 yaw_valid = bool(obj.get("yaw_valid", True))
                 if not yaw_valid:
@@ -884,6 +895,7 @@ class PixelToBaseMapperNode(Node):
                     confidence=confidence,
                     center_u=center_u,
                     center_v=center_v,
+                    yaw_raw_deg=yaw_raw_deg,
                     yaw_deg=float(yaw_deg),
                     yaw_valid=True,
                     method=method,
@@ -893,6 +905,13 @@ class PixelToBaseMapperNode(Node):
                     arrow_end_u=arrow_end_u,
                     arrow_end_v=arrow_end_v,
                     stamp_sec=now,
+                )
+                self.get_logger().info(
+                    f"wood_yaw_raw_deg={yaw_raw_deg:.2f} "
+                    f"wood_yaw_output_deg={yaw_deg:.1f} "
+                    f"reason=wood_is_cube_yaw_ignored "
+                    f"source=hough_json method={method}",
+                    throttle_duration_sec=2.0,
                 )
             except Exception as exc:
                 self.get_logger().warn(f"Skip malformed hough yaw object: {exc}")
@@ -1475,9 +1494,39 @@ class PixelToBaseMapperNode(Node):
                 throttle_duration_sec=2.0,
             )
 
+        z_before_normalize_m = float(z_out)
+        z_out, wood_z_raw_cm, wood_z_band, next_last_valid_m, used_last_valid = (
+            normalize_wood_z_output_m(z_before_normalize_m, self._wood_z_last_valid_m)
+        )
+        if next_last_valid_m is not None:
+            self._wood_z_last_valid_m = float(next_last_valid_m)
+        last_valid_text = (
+            "None" if self._wood_z_last_valid_m is None else f"{self._wood_z_last_valid_m:.3f}"
+        )
+        z_log = (
+            f"wood_z_raw_cm={wood_z_raw_cm:.3f} "
+            f"wood_z_band={wood_z_band} "
+            f"wood_z_last_valid_m={last_valid_text} "
+            f"wood_z_output_m={z_out:.3f} "
+            f"wood_z_previous_m={z_before_normalize_m:.4f}"
+        )
+        if wood_z_band in (WOOD_Z_BAND_LOW_20MM, WOOD_Z_BAND_HIGH_60MM):
+            self.get_logger().info(z_log, throttle_duration_sec=2.0)
+        elif used_last_valid:
+            self.get_logger().warn(
+                f"{z_log} reason=using_last_valid_normalized_z",
+                throttle_duration_sec=5.0,
+            )
+        else:
+            self.get_logger().warn(
+                f"{z_log} reason=no_last_valid_normalized_z_fallback_to_current_raw",
+                throttle_duration_sec=5.0,
+            )
+
         yaw_data = self._find_matching_hough_yaw(center_u, center_v)
         if yaw_data is not None:
-            yaw_deg = float(yaw_data.yaw_deg)
+            yaw_raw_deg = float(yaw_data.yaw_raw_deg)
+            yaw_deg = wood_cube_yaw_output_deg(yaw_raw_deg)
             yaw_valid = True
             yaw_method = yaw_data.method
             arrow_valid = bool(yaw_data.arrow_valid)
@@ -1485,13 +1534,24 @@ class PixelToBaseMapperNode(Node):
             arrow_start_v = float(yaw_data.arrow_start_v)
             arrow_end_u = float(yaw_data.arrow_end_u)
             arrow_end_v = float(yaw_data.arrow_end_v)
+            self.get_logger().info(
+                f"wood_yaw_raw_deg={yaw_raw_deg:.2f} "
+                f"wood_yaw_output_deg={yaw_deg:.1f} "
+                f"reason=wood_is_cube_yaw_ignored "
+                f"source=wood_pose_output method={yaw_method}",
+                throttle_duration_sec=2.0,
+            )
         else:
             self.get_logger().warn(
-                "No Hough yaw matched for wood object, use identity orientation."
+                f"wood_yaw_raw_deg=0.00 "
+                f"wood_yaw_output_deg={WOOD_CUBE_YAW_OUTPUT_DEG:.1f} "
+                f"reason=wood_is_cube_yaw_ignored "
+                f"source=wood_pose_output method=no_hough_match",
+                throttle_duration_sec=2.0,
             )
-            yaw_deg = 0.0
-            yaw_valid = False
-            yaw_method = "none"
+            yaw_deg = WOOD_CUBE_YAW_OUTPUT_DEG
+            yaw_valid = True
+            yaw_method = "wood_cube_fixed_yaw"
             arrow_valid = False
             arrow_start_u = float(center_u)
             arrow_start_v = float(center_v)
@@ -1855,10 +1915,7 @@ class PixelToBaseMapperNode(Node):
             wood_msg.pose.position.y = wood_data.y_out_m
             wood_msg.pose.position.z = wood_data.z_out_m
 
-            if wood_data.yaw_valid:
-                qx, qy, qz, qw = yaw_to_quaternion_z(wood_data.yaw_deg)
-            else:
-                qx, qy, qz, qw = 0.0, 0.0, 0.0, 1.0
+            qx, qy, qz, qw = yaw_to_quaternion_z(WOOD_CUBE_YAW_OUTPUT_DEG)
 
             wood_msg.pose.orientation.x = qx
             wood_msg.pose.orientation.y = qy

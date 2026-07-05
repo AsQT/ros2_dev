@@ -50,7 +50,7 @@ from geometry_msgs.msg import (
 )
 from rclpy.node import Node
 from rclpy.qos import DurabilityPolicy, QoSProfile, ReliabilityPolicy
-from std_msgs.msg import String
+from std_msgs.msg import Float64MultiArray, String
 from std_srvs.srv import Trigger
 from tf2_ros import Buffer, TransformListener
 from visualization_msgs.msg import Marker, MarkerArray
@@ -267,7 +267,10 @@ class DrlPlannerNodeBase(Node):
         self._experiment_plan_id: int = 0
         self._experiment_current_plan_id: Optional[int] = None
         self._experiment_model_path: str = ""
-        self._experiment_log_dir: str = "robot_drl/experiment_logs"
+        self._experiment_log_dir: str = (
+            "/home/minhquang/ros2_dev/Log_robot_data/mock/rl/"
+            "move_pose_rl/drl_planner_experiment"
+        )
         self._experiment_sample_rate_hz: float = 20.0
         self._experiment_reach_threshold_m: float = 0.02
         self._experiment_base_frame: str = "base_link"
@@ -317,6 +320,11 @@ class DrlPlannerNodeBase(Node):
         self.declare_parameter("preposition_clamp_to_workspace", True)
         self.declare_parameter("preposition_verify_timeout_sec", 3.0)
         self.declare_parameter("update_start_tcp_from_tf_before_plan", True)
+        self.declare_parameter("use_manual_start_tcp_before_plan", False)
+        self.declare_parameter(
+            "manual_start_tcp_base",
+            config.DEFAULT_START_TCP_BASE.tolist(),
+        )
         self.declare_parameter("fallback_to_final_pose_on_execute_failure", True)
         self.declare_parameter("execute_final_pose_only", False)
         self.declare_parameter("validate_obstacle_before_execute", True)
@@ -324,7 +332,11 @@ class DrlPlannerNodeBase(Node):
         self.declare_parameter("execute_collision_clearance_margin_m", 0.0)
         self.declare_parameter("publish_target_block_marker", False)
         self.declare_parameter("enable_experiment_logging", False)
-        self.declare_parameter("experiment_log_dir", "robot_drl/experiment_logs")
+        self.declare_parameter(
+            "experiment_log_dir",
+            "/home/minhquang/ros2_dev/Log_robot_data/mock/rl/"
+            "move_pose_rl/drl_planner_experiment",
+        )
         self.declare_parameter("experiment_sample_rate_hz", 20.0)
         self.declare_parameter("reach_threshold_m", 0.02)
         self.declare_parameter("experiment_tcp_frame", "tcp_link")
@@ -360,6 +372,9 @@ class DrlPlannerNodeBase(Node):
         )
         self._forward_poses_pub = self.create_publisher(
             PoseArray, "/drl/forward_trajectory_poses", trajectory_qos
+        )
+        self._last_plan_observation_pub = self.create_publisher(
+            Float64MultiArray, "/drl/last_plan_observation_15d", trajectory_qos
         )
 
         # Backward trajectory
@@ -456,6 +471,13 @@ class DrlPlannerNodeBase(Node):
         self._update_start_tcp_from_tf_before_plan = bool(
             self.get_parameter("update_start_tcp_from_tf_before_plan").value
         )
+        self._use_manual_start_tcp_before_plan = bool(
+            self.get_parameter("use_manual_start_tcp_before_plan").value
+        )
+        self._manual_start_tcp_base = np.array(
+            self.get_parameter("manual_start_tcp_base").value,
+            dtype=np.float32,
+        )
         self._fallback_to_final_pose_on_execute_failure = bool(
             self.get_parameter("fallback_to_final_pose_on_execute_failure").value
         )
@@ -495,6 +517,11 @@ class DrlPlannerNodeBase(Node):
             raise ValueError(
                 "preposition_tcp_base must have 3 elements, "
                 f"got shape {self._preposition_tcp_base.shape}"
+            )
+        if self._manual_start_tcp_base.shape != (3,):
+            raise ValueError(
+                "manual_start_tcp_base must have 3 elements, "
+                f"got shape {self._manual_start_tcp_base.shape}"
             )
 
         if MoveCartesianPoseSequence is not None:
@@ -674,6 +701,7 @@ class DrlPlannerNodeBase(Node):
         self._forward_poses_pub.publish(
             build_trajectory_poses(fwd, now=now)
         )
+        self._publish_last_plan_observation(result)
 
         # Backward trajectory MarkerArray
         backward_markers: list[Marker] = []
@@ -732,6 +760,28 @@ class DrlPlannerNodeBase(Node):
             f"backward={n_bwd}wp [{bwd_first[0]:.3f},{bwd_first[1]:.3f},{bwd_first[2]:.3f}]"
             f" -> [{bwd_last[0]:.3f},{bwd_last[1]:.3f},{bwd_last[2]:.3f}]"
         )
+
+    def _publish_last_plan_observation(self, result) -> None:
+        """Publish the exact first 15D observation pair used by the policy."""
+        raw = getattr(result, "first_raw_observation", None)
+        model = getattr(result, "first_model_observation", None)
+        if raw is None or model is None:
+            return
+        try:
+            raw_obs = np.asarray(raw, dtype=np.float64).reshape(-1)
+            model_obs = np.asarray(model, dtype=np.float64).reshape(-1)
+        except (TypeError, ValueError) as exc:
+            self.get_logger().warn(f"Cannot publish DRL observation 15D: {exc}")
+            return
+        if raw_obs.size != 15 or model_obs.size != 15:
+            self.get_logger().warn(
+                "Cannot publish DRL observation 15D: "
+                f"raw_shape={raw_obs.shape} model_shape={model_obs.shape}"
+            )
+            return
+        msg = Float64MultiArray()
+        msg.data = [float(v) for v in raw_obs] + [float(v) for v in model_obs]
+        self._last_plan_observation_pub.publish(msg)
 
     # -------------------------------------------------------------------------
     # Execution
@@ -832,6 +882,34 @@ class DrlPlannerNodeBase(Node):
             self.get_parameter("preposition_verify_timeout_sec").value
         )
         if not self._preposition_before_plan:
+            use_manual_start = bool(
+                self.get_parameter("use_manual_start_tcp_before_plan").value
+            )
+            if use_manual_start:
+                manual_start = np.array(
+                    self.get_parameter("manual_start_tcp_base").value,
+                    dtype=np.float32,
+                )
+                if manual_start.shape != (3,):
+                    self.get_logger().error(
+                        f"[{label}] manual_start_tcp_base must have 3 elements, "
+                        f"got shape {manual_start.shape}"
+                    )
+                    return False
+                try:
+                    if self._planner is not None:
+                        self._planner.update_start_tcp(manual_start)
+                except ValueError as exc:
+                    self.get_logger().error(
+                        f"[{label}] manual_start_tcp_base invalid: {exc}"
+                    )
+                    return False
+                self.get_logger().info(
+                    f"[{label}] start_tcp overridden from manual_start_tcp_base "
+                    f"without TF update: ({manual_start[0]:.4f}, "
+                    f"{manual_start[1]:.4f}, {manual_start[2]:.4f})"
+                )
+                return True
             if self._update_start_tcp_from_tf_before_plan:
                 current, got = self._current_tcp_base()
                 # codex2.md "move_pose_rl_current_tcp_start": previously this

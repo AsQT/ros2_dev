@@ -23,6 +23,7 @@
 #include "robot_hardware_interface/srv/stop_axis.hpp"
 #include "robot_vision_pipeline_msgs/msg/box_array.hpp"
 #include "robot_vision_pipeline_msgs/msg/wood_array.hpp"
+#include "robot_gui/pick_place_target_resolver.hpp"
 #include "tf2_ros/buffer.h"
 #include "tf2_ros/transform_listener.h"
 
@@ -123,6 +124,18 @@ public:
     geometry_msgs::msg::Pose & pose,
     geometry_msgs::msg::Vector3 & size,
     float & confidence,
+    std::string & error) const;
+
+  // codex.md Phase 3: return EVERY fresh wood detection transformed into
+  // target_frame (base_link), so the shared resolver can filter and pick the
+  // valid candidate nearest to the place pose. Each candidate is marked valid
+  // unless its TF transform fails (invalid_reason set). Returns false with
+  // `error` only when there is no fresh WoodArray at all; an empty-but-fresh
+  // message returns true with an empty vector so AUTO reports NO_WOOD_DETECTED
+  // rather than a stale-data error.
+  bool wood_candidates_base(
+    const std::string & target_frame,
+    std::vector<WoodCandidate> & candidates,
     std::string & error) const;
 
 private:

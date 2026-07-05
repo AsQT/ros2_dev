@@ -47,6 +47,9 @@ void MoveItExecutor::initialize(
   move_group_->startStateMonitor();
   visual_tools_->deleteAllMarkers();
   visual_tools_->loadRemoteControl();
+  planned_joint_trajectory_pub_ =
+    node_->create_publisher<moveit_msgs::msg::RobotTrajectory>(
+      "/robot_task_manager/last_planned_joint_trajectory", rclcpp::QoS(10).reliable());
 
   initialized_ = true;
 
@@ -121,6 +124,14 @@ void MoveItExecutor::logJointCommand(
 {
   if (executor_logger_ && executor_logger_->enabled() && call_id != 0) {
     executor_logger_->log_joint_command(call_id, trajectory, log_action_name_);
+  }
+}
+
+void MoveItExecutor::publishPlannedJointTrajectory(
+    const moveit_msgs::msg::RobotTrajectory & trajectory)
+{
+  if (planned_joint_trajectory_pub_) {
+    planned_joint_trajectory_pub_->publish(trajectory);
   }
 }
 
@@ -276,6 +287,7 @@ bool MoveItExecutor::goNamedTarget(
   }
 
   if (!execute) {
+    publishPlannedJointTrajectory(plan.trajectory);
     logJointCommand(call_id, plan.trajectory);
     publishText("Named target planning succeeded; execution skipped");
     error_msg.clear();
@@ -285,6 +297,7 @@ bool MoveItExecutor::goNamedTarget(
 
   publishText("Executing named target: " + target_name);
 
+  publishPlannedJointTrajectory(plan.trajectory);
   const bool exec_ok = executeWithLogging(call_id, "joint_target", plan, {});
 
   if (!exec_ok) {
@@ -370,7 +383,16 @@ bool MoveItExecutor::moveToPose(
     // fall back to our own wall-clock measurement around plan() otherwise.
     out_metrics->planning_time_s =
       plan.planning_time > 0.0 ? plan.planning_time : plan_elapsed_s;
+    out_metrics->robot_trajectory = plan.trajectory;
     out_metrics->tcp_waypoints = extractTcpWaypoints(plan.trajectory);
+    out_metrics->tcp_poses.clear();
+    out_metrics->tcp_poses.reserve(out_metrics->tcp_waypoints.size());
+    for (const auto & p : out_metrics->tcp_waypoints) {
+      geometry_msgs::msg::Pose pose;
+      pose.position = p;
+      pose.orientation.w = 1.0;
+      out_metrics->tcp_poses.push_back(pose);
+    }
   }
 
   const auto * joint_model_group =
@@ -382,6 +404,7 @@ bool MoveItExecutor::moveToPose(
   }
 
   if (!execute) {
+    publishPlannedJointTrajectory(plan.trajectory);
     logJointCommand(call_id, plan.trajectory);
     move_group_->clearPoseTargets();
     publishText("Pose planning succeeded; execution skipped");
@@ -392,6 +415,7 @@ bool MoveItExecutor::moveToPose(
 
   publishText("Executing_pose_target");
 
+  publishPlannedJointTrajectory(plan.trajectory);
   const auto exec_start = std::chrono::steady_clock::now();
   const bool exec_ok = executeWithLogging(call_id, "ptp", plan, {target_pose});
   const double exec_elapsed_s =
@@ -487,6 +511,7 @@ bool MoveItExecutor::moveToPoseCartesian(
   plan.trajectory = trajectory;
 
   if (!execute) {
+    publishPlannedJointTrajectory(trajectory);
     logJointCommand(call_id, trajectory);
     publishText("Cartesian planning succeeded; execution skipped");
     error_msg.clear();
@@ -496,6 +521,7 @@ bool MoveItExecutor::moveToPoseCartesian(
 
   publishText("Executing_cartesian_path");
 
+  publishPlannedJointTrajectory(trajectory);
   const bool exec_ok = executeWithLogging(call_id, "cartesian", plan, {target_pose});
 
   if (!exec_ok) {
@@ -516,7 +542,9 @@ bool MoveItExecutor::executeCartesianSegment(
                       double acceleration_scale,
                       double planning_time,
                       bool execute,
-                      const geometry_msgs::msg::Pose * planned_start_pose)
+                      const geometry_msgs::msg::Pose * planned_start_pose,
+                      const std::string & stage,
+                      JointTrajectoryCallback joint_trajectory_cb)
 {
   const uint64_t call_id = startExecutorLog(execute ? "cartesian" : "plan_only");
 
@@ -578,14 +606,19 @@ bool MoveItExecutor::executeCartesianSegment(
 
   moveit::planning_interface::MoveGroupInterface::Plan plan;
   plan.trajectory = trajectory;
+  if (joint_trajectory_cb) {
+    joint_trajectory_cb(stage, trajectory);
+  }
 
   if (!execute) {
+    publishPlannedJointTrajectory(trajectory);
     logJointCommand(call_id, trajectory);
     error_msg.clear();
     finishExecutorLog(call_id, "completed", true, "Cartesian segment planned successfully", fraction);
     return true;
   }
 
+  publishPlannedJointTrajectory(trajectory);
   const bool exec_ok = executeWithLogging(call_id, "cartesian", plan, {target_pose});
 
   if (!exec_ok) {
@@ -606,7 +639,8 @@ bool MoveItExecutor::checkerBoard(
                       double planning_time,
                       bool execute,
                       double measurement_settle_time_s,
-                      FeedbackCallback feedback_cb)
+                      FeedbackCallback feedback_cb,
+                      JointTrajectoryCallback joint_trajectory_cb)
 {
   std::lock_guard<std::mutex> lock(motion_mutex_);
 
@@ -702,7 +736,9 @@ bool MoveItExecutor::checkerBoard(
         acceleration_scale,
         planning_time,
         execute,
-        execute ? nullptr : &planned_pose))
+        execute ? nullptr : &planned_pose,
+        travel_stage.str(),
+        joint_trajectory_cb))
     {
       error_msg = travel_stage.str() + " failed: " + error_msg;
       return false;
@@ -728,7 +764,9 @@ bool MoveItExecutor::checkerBoard(
         acceleration_scale,
         planning_time,
         execute,
-        execute ? nullptr : &planned_pose))
+        execute ? nullptr : &planned_pose,
+        drop_stage.str(),
+        joint_trajectory_cb))
     {
       error_msg = drop_stage.str() + " failed: " + error_msg;
       return false;

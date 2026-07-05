@@ -39,6 +39,21 @@
         <joint name="joint_6" value="1.5757"/>
     </group_state>
 
+    <!-- home_2 / home_vision (codex.md Phase 4): the "ready-for-vision" home the
+         AUTO PickPlace/PickPlaceRL flow moves to before requesting a wood
+         detection. Values are FIXED placeholders (a distinct, reachable
+         elevated config based on pose_1) so the pose is fully deterministic and
+         debuggable — the user is expected to retune these joint values later.
+         This is additive: the original "home" group_state is untouched. -->
+    <group_state name="home_2" group="arm">
+        <joint name="joint_1" value="0.435276544478746"/>
+        <joint name="joint_2" value="0.028269381411889716"/>
+        <joint name="joint_3" value="0.9315776281155654"/>
+        <joint name="joint_4" value="-0.0017646575666866921"/>
+        <joint name="joint_5" value="0.6107511065213997"/>
+        <joint name="joint_6" value="0.4373504752303231"/>
+    </group_state>
+
 
 
 <!--VIRTUAL JOINT: Purpose: 

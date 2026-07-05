@@ -35,8 +35,8 @@ OBS_DIM = 15
 ACTION_DIM = 3
 
 # Default paths
-DEFAULT_MODEL_NAME = "run2/model/best_model.zip"
-DEFAULT_VEC_NORMALIZE_NAME = "run2/model/vec_normalize_stats.pkl"
+DEFAULT_MODEL_NAME = "sac_3/model/best_model.zip"
+DEFAULT_VEC_NORMALIZE_NAME = "sac_3/model/vec_normalize_stats.pkl"
 DEFAULT_RATE_HZ = 10.0
 
 # Trained action step in metres (from env_config.yaml action_step)

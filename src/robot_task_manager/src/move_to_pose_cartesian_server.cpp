@@ -25,12 +25,17 @@ public:
     base_frame_ = declare_parameter<std::string>("base_frame", "world");
 
     enable_executor_logging_ = declare_parameter<bool>("enable_executor_logging", false);
+    enable_debug_logging_ = declare_parameter<bool>("enable_debug_logging", false);
     log_root_dir_            = declare_parameter<std::string>("log_root_dir", robot_task_manager::kDefaultLogRootDir);
+    runtime_mode_            = declare_parameter<std::string>("runtime_mode", "mock");
     executor_log_dir_        = declare_parameter<std::string>(
       "executor_log_dir", robot_task_manager::executorLogBaseDir(log_root_dir_));
     executor_sample_rate_hz_ = declare_parameter<double>("executor_sample_rate_hz", 50.0);
     executor_base_frame_     = declare_parameter<std::string>("executor_base_frame", "base_link");
     executor_tcp_frame_      = declare_parameter<std::string>("executor_tcp_frame", "tcp_link");
+    declare_parameter<bool>("use_mock", true);
+    declare_parameter<std::string>("hardware_plugin", "unknown");
+    declare_parameter<bool>("enable_log_plots", true);
 
     action_server_ = rclcpp_action::create_server<MoveToPoseCartesian>(
       this,
@@ -48,7 +53,7 @@ public:
     executor_->initialize(shared_from_this(), planning_group_, base_frame_);
     executor_->initializeLogging(
       enable_executor_logging_,
-      robot_task_manager::executorActionLogDir(log_root_dir_, executor_log_dir_, "MoveToPoseCartesian"),
+      robot_task_manager::executorActionLogDir(log_root_dir_, executor_log_dir_, runtime_mode_, "MoveToPoseCartesian"),
       executor_sample_rate_hz_,
       executor_base_frame_,
       executor_tcp_frame_,
@@ -59,9 +64,10 @@ public:
       tcp_log_tf_listener_ = std::make_shared<tf2_ros::TransformListener>(*tcp_log_tf_buffer_);
       tcp_logger_ = std::make_shared<robot_task_manager::PerCallTcpLogger>(
         shared_from_this(), tcp_log_tf_buffer_,
-        robot_task_manager::executorActionLogDir(log_root_dir_, executor_log_dir_, "MoveToPoseCartesian"),
+        robot_task_manager::executorActionLogDir(log_root_dir_, executor_log_dir_, runtime_mode_, "MoveToPoseCartesian"),
         executor_sample_rate_hz_,
         executor_base_frame_, executor_tcp_frame_, "move_to_pose_cartesian", "/move_to_pose_cartesian");
+      robot_task_manager::applyLogProvenanceFromParams(this, tcp_logger_);
     } catch (const std::exception & e) {
       tcp_logger_.reset();
       RCLCPP_WARN(get_logger(), "MoveToPoseCartesian per-call TCP logger unavailable: %s", e.what());
@@ -73,7 +79,9 @@ private:
   std::string base_frame_;
 
   bool enable_executor_logging_{false};
+  bool enable_debug_logging_{false};
   std::string log_root_dir_;
+  std::string runtime_mode_;
   std::string executor_log_dir_;
   double executor_sample_rate_hz_{50.0};
   std::string executor_base_frame_;
@@ -169,6 +177,7 @@ private:
       get_logger(), "[move_to_pose_cartesian server] enable_tcp_log=%s",
       goal->enable_tcp_log ? "true" : "false");
 
+    // codex.md §4: evaluation logging gated ONLY by the per-goal flag.
     std::shared_ptr<robot_task_manager::PerCallTcpLogger::Call> tcp_call;
     if (tcp_logger_ && goal->enable_tcp_log) {
       std::ostringstream meta;

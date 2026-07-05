@@ -9,6 +9,8 @@
 
 #include "robot_task_manager/action/move_gripper.hpp"
 #include "robot_task_manager/gripper_executor.hpp"
+#include "robot_task_manager/log_paths.hpp"
+#include "robot_task_manager/standard_action_logger.hpp"
 
 class MoveGripperActionServer : public rclcpp::Node
 {
@@ -26,6 +28,9 @@ public:
     // Velocity/acceleration scale lấy bằng parameter nội bộ của server.
     default_velocity_scale_ = declare_parameter<double>("velocity_scale", 0.1);
     default_acceleration_scale_ = declare_parameter<double>("acceleration_scale", 0.5);
+    enable_standard_logging_ = declare_parameter<bool>("enable_standard_logging", true);
+    log_root_dir_ = declare_parameter<std::string>("log_root_dir", robot_task_manager::kDefaultLogRootDir);
+    runtime_mode_ = declare_parameter<std::string>("runtime_mode", "mock");
 
     action_server_ = rclcpp_action::create_server<MoveGripper>(
       this,
@@ -41,6 +46,11 @@ public:
   {
     gripper_executor_ = std::make_shared<robot_task_manager::GripperExecutor>();
     gripper_executor_->initialize(shared_from_this(), planning_group_, base_frame_);
+    if (enable_standard_logging_) {
+      standard_logger_ = std::make_shared<robot_task_manager::StandardActionLogger>(
+        shared_from_this(), log_root_dir_, runtime_mode_, "MoveGripper",
+        "", base_frame_, "", "", "", "baseline", "");
+    }
   }
 
 private:
@@ -48,8 +58,12 @@ private:
   std::string base_frame_;
   double default_velocity_scale_ = 0.1;
   double default_acceleration_scale_ = 0.5;
+  bool enable_standard_logging_{true};
+  std::string log_root_dir_;
+  std::string runtime_mode_;
 
   std::shared_ptr<robot_task_manager::GripperExecutor> gripper_executor_;
+  std::shared_ptr<robot_task_manager::StandardActionLogger> standard_logger_;
   rclcpp_action::Server<MoveGripper>::SharedPtr action_server_;
 
   rclcpp_action::GoalResponse handle_goal(
@@ -101,6 +115,7 @@ private:
     auto result = std::make_shared<MoveGripper::Result>();
 
     const auto goal = goal_handle->get_goal();
+    auto log_call = standard_logger_ ? standard_logger_->startCall() : nullptr;
 
     feedback->stage = goal->execute ? "Planning gripper motion" : "Planning gripper motion (plan-only)";
     feedback->progress = 30.0f;
@@ -121,6 +136,20 @@ private:
 
       result->success = false;
       result->message = "MoveGripper action canceled";
+      if (standard_logger_ && log_call) {
+        robot_task_manager::StandardSummary summary;
+        summary.execute_requested = goal->execute;
+        summary.success = false;
+        summary.failed_stage = "canceled";
+        summary.failure_reason = "canceled";
+        summary.message = result->message;
+        summary.total_time_s = (now() - log_call->start_time).seconds();
+        summary.extra_header = "target_opening_mm,actual_opening_mm,motion_time_s";
+        summary.extra_values = robot_task_manager::standardFormatDouble(goal->position * 1000.0) + ",," +
+          robot_task_manager::standardFormatDouble(summary.total_time_s);
+        standard_logger_->writeSummary(*log_call, summary);
+        standard_logger_->appendEvent(*log_call, "execute", "action_result", false, result->message, summary.total_time_s);
+      }
       goal_handle->canceled(result);
       return;
     }
@@ -128,6 +157,20 @@ private:
     if (!ok) {
       result->success = false;
       result->message = error_msg;
+      if (standard_logger_ && log_call) {
+        robot_task_manager::StandardSummary summary;
+        summary.execute_requested = goal->execute;
+        summary.success = false;
+        summary.failed_stage = "move_to_opening";
+        summary.failure_reason = "executor_failed";
+        summary.message = result->message;
+        summary.total_time_s = (now() - log_call->start_time).seconds();
+        summary.extra_header = "target_opening_mm,actual_opening_mm,motion_time_s";
+        summary.extra_values = robot_task_manager::standardFormatDouble(goal->position * 1000.0) + ",," +
+          robot_task_manager::standardFormatDouble(summary.total_time_s);
+        standard_logger_->writeSummary(*log_call, summary);
+        standard_logger_->appendEvent(*log_call, "move_to_opening", "action_result", false, result->message, summary.total_time_s);
+      }
       goal_handle->abort(result);
       return;
     }
@@ -140,6 +183,18 @@ private:
     result->message = goal->execute ?
       "Gripper moved successfully" :
       "MoveGripper planning success; execution skipped";
+    if (standard_logger_ && log_call) {
+      robot_task_manager::StandardSummary summary;
+      summary.execute_requested = goal->execute;
+      summary.success = true;
+      summary.message = result->message;
+      summary.total_time_s = (now() - log_call->start_time).seconds();
+      summary.extra_header = "target_opening_mm,actual_opening_mm,motion_time_s";
+      summary.extra_values = robot_task_manager::standardFormatDouble(goal->position * 1000.0) + ",," +
+        robot_task_manager::standardFormatDouble(summary.total_time_s);
+      standard_logger_->writeSummary(*log_call, summary);
+      standard_logger_->appendEvent(*log_call, "move_to_opening", "action_result", true, result->message, summary.total_time_s);
+    }
     goal_handle->succeed(result);
   }
 };

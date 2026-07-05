@@ -116,7 +116,9 @@ public:
       "collision_object_id", "move_to_pose_obstacle_box");
 
     enable_executor_logging_ = declare_parameter<bool>("enable_executor_logging", false);
+    enable_debug_logging_ = declare_parameter<bool>("enable_debug_logging", false);
     log_root_dir_            = declare_parameter<std::string>("log_root_dir", robot_task_manager::kDefaultLogRootDir);
+    runtime_mode_            = declare_parameter<std::string>("runtime_mode", "mock");
     executor_log_dir_        = declare_parameter<std::string>(
       "executor_log_dir", robot_task_manager::executorLogBaseDir(log_root_dir_));
     executor_sample_rate_hz_ = declare_parameter<double>("executor_sample_rate_hz", 50.0);
@@ -139,7 +141,11 @@ public:
       });
 
     metrics_logger_ = std::make_shared<robot_task_manager::ActionMetricsLogger>(
-      robot_task_manager::actionMetricsLogDir(log_root_dir_, "MoveToPoseObstacle"), get_logger());
+      robot_task_manager::actionMetricsLogDir(log_root_dir_, runtime_mode_, "MoveToPoseObstacle"), get_logger());
+    declare_parameter<bool>("use_mock", true);
+    declare_parameter<std::string>("hardware_plugin", "unknown");
+    declare_parameter<bool>("enable_log_plots", true);
+    robot_task_manager::applyLogProvenanceFromParams(this, metrics_logger_);
 
     action_server_ = rclcpp_action::create_server<MoveToPoseObstacle>(
       this,
@@ -161,7 +167,7 @@ public:
     executor_->initialize(shared_from_this(), planning_group_, base_frame_);
     executor_->initializeLogging(
       enable_executor_logging_,
-      robot_task_manager::executorActionLogDir(log_root_dir_, executor_log_dir_, "MoveToPoseObstacle"),
+      robot_task_manager::executorActionLogDir(log_root_dir_, executor_log_dir_, runtime_mode_, "MoveToPoseObstacle"),
       executor_sample_rate_hz_,
       executor_base_frame_,
       executor_tcp_frame_,
@@ -180,7 +186,9 @@ private:
   std::string collision_object_id_;
 
   bool enable_executor_logging_{false};
+  bool enable_debug_logging_{false};
   std::string log_root_dir_;
+  std::string runtime_mode_;
   std::string executor_log_dir_;
   double executor_sample_rate_hz_{50.0};
   std::string executor_base_frame_;
@@ -690,6 +698,7 @@ private:
       get_logger(), "[move_to_pose_obstacle server] enable_metrics_log=%s",
       goal->enable_metrics_log ? "true" : "false");
 
+    // codex.md §4: evaluation metrics logging gated ONLY by the per-goal flag.
     metrics_row_.reset();
     if (goal->enable_metrics_log) {
       metrics_row_ = metrics_logger_->startCall(
@@ -813,9 +822,23 @@ private:
       goal_handle, goal->execute ? "planning_and_execution" : "planning", 50.0f,
       obstacle_res.pose_obstacle_frame);
     robot_task_manager::MoveItPlanMetrics plan_metrics;
+    geometry_msgs::msg::Pose target_for_sampling = goal->target_pose;
+    target_for_sampling.position = target_obstacle_frame;
+    robot_task_manager::AabbObstacle exec_aabb;
+    exec_aabb.center = obstacle_res.pose_obstacle_frame.pose.position;
+    exec_aabb.size = obstacle_res.size;
+    exec_aabb.has_obstacle = obstacle_res.has_obstacle;
+    auto tcp_sampler = goal->execute ? metrics_logger_->startTcpExecutionSampling(
+      metrics_row_, "planning_and_execution", target_for_sampling, {}, {},
+      obstacle_res.has_obstacle ? &exec_aabb : nullptr,
+      [this](geometry_msgs::msg::PoseStamped & out, std::string & err) {
+        return current_tcp_in_obstacle_frame(out, err);
+      },
+      executor_sample_rate_hz_) : nullptr;
     const bool ok = executor_->moveToPose(
       goal->target_pose, error_msg, goal->velocity_scale, 0.3, 5.0, goal->execute,
       metrics_row_ ? &plan_metrics : nullptr);
+    metrics_logger_->stopTcpExecutionSampling(tcp_sampler);
 
     if (metrics_row_) {
       metrics_row_->planning_success = plan_metrics.has_plan;
@@ -832,14 +855,23 @@ private:
       }
       if (plan_metrics.has_plan && !plan_metrics.tcp_waypoints.empty()) {
         std::vector<geometry_msgs::msg::Point> waypoints_obstacle_frame;
+        std::vector<geometry_msgs::msg::Pose> poses_obstacle_frame;
         waypoints_obstacle_frame.reserve(plan_metrics.tcp_waypoints.size());
+        poses_obstacle_frame.reserve(plan_metrics.tcp_waypoints.size());
         std::string transform_error;
         for (const auto & wp_base : plan_metrics.tcp_waypoints) {
           geometry_msgs::msg::Point wp_obstacle;
           if (transform_point_to_obstacle_frame(wp_base, base_frame_, wp_obstacle, transform_error)) {
             waypoints_obstacle_frame.push_back(wp_obstacle);
+            geometry_msgs::msg::Pose pose;
+            pose.position = wp_obstacle;
+            pose.orientation.w = 1.0;
+            poses_obstacle_frame.push_back(pose);
           }
         }
+        metrics_logger_->writeMoveItExecutionPath(
+          *metrics_row_, plan_metrics.robot_trajectory, poses_obstacle_frame,
+          "moveit_plan_trajectory_empty");
         metrics_row_->trajectory_points = static_cast<double>(waypoints_obstacle_frame.size());
         robot_task_manager::AabbObstacle aabb;
         aabb.center = obstacle_res.pose_obstacle_frame.pose.position;

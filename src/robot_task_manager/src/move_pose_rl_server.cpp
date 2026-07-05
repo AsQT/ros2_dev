@@ -1,10 +1,13 @@
 #include <algorithm>
+#include <array>
 #include <atomic>
 #include <chrono>
 #include <cmath>
 #include <future>
+#include <iomanip>
 #include <memory>
 #include <mutex>
+#include <sstream>
 #include <string>
 #include <thread>
 #include <vector>
@@ -18,7 +21,9 @@
 #include "rclcpp/rclcpp.hpp"
 #include "rclcpp_action/rclcpp_action.hpp"
 #include "sensor_msgs/msg/joint_state.hpp"
+#include "std_msgs/msg/float64_multi_array.hpp"
 #include "std_srvs/srv/trigger.hpp"
+#include "tf2/LinearMath/Matrix3x3.h"
 #include "tf2/LinearMath/Quaternion.h"
 #include "tf2_geometry_msgs/tf2_geometry_msgs.hpp"
 #include "tf2_ros/buffer.h"
@@ -27,6 +32,7 @@
 #include "robot_task_manager/action/move_pose_rl.hpp"
 #include "robot_task_manager/action_metrics_logger.hpp"
 #include "robot_task_manager/log_paths.hpp"
+#include "robot_task_manager/rl_obstacle_input.hpp"
 #include "robot_task_executor/executor_experiment_logger.hpp"
 #include "robot_vision_pipeline_msgs/msg/box_array.hpp"
 
@@ -44,6 +50,35 @@ bool finite_pose(const geometry_msgs::msg::Pose & pose)
          std::isfinite(pose.orientation.y) &&
          std::isfinite(pose.orientation.z) &&
          std::isfinite(pose.orientation.w);
+}
+
+std::array<double, 3> rpy_deg_from_quat(const geometry_msgs::msg::Quaternion & q)
+{
+  tf2::Quaternion quat(q.x, q.y, q.z, q.w);
+  if (quat.length2() <= 1e-12) {
+    return {0.0, 0.0, 0.0};
+  }
+  quat.normalize();
+  double roll = 0.0;
+  double pitch = 0.0;
+  double yaw = 0.0;
+  tf2::Matrix3x3(quat).getRPY(roll, pitch, yaw);
+  constexpr double kRadToDeg = 180.0 / M_PI;
+  return {roll * kRadToDeg, pitch * kRadToDeg, yaw * kRadToDeg};
+}
+
+std::string format_values(const std::vector<double> & values)
+{
+  std::ostringstream oss;
+  oss << std::fixed << std::setprecision(6) << "[";
+  for (size_t i = 0; i < values.size(); ++i) {
+    if (i != 0) {
+      oss << ", ";
+    }
+    oss << values[i];
+  }
+  oss << "]";
+  return oss.str();
 }
 
 bool valid_quaternion(const geometry_msgs::msg::Quaternion & q)
@@ -145,6 +180,7 @@ public:
 
     enable_executor_logging_ = declare_parameter<bool>("enable_executor_logging", false);
     log_root_dir_            = declare_parameter<std::string>("log_root_dir", robot_task_manager::kDefaultLogRootDir);
+    runtime_mode_            = declare_parameter<std::string>("runtime_mode", "mock");
     executor_log_dir_        = declare_parameter<std::string>(
       "executor_log_dir", robot_task_manager::executorLogBaseDir(log_root_dir_));
     executor_sample_rate_hz_ = declare_parameter<double>("executor_sample_rate_hz", 50.0);
@@ -173,6 +209,22 @@ public:
         latest_trajectory_ = *msg;
         trajectory_seq_++;
       });
+    observation_sub_ = create_subscription<std_msgs::msg::Float64MultiArray>(
+      "/drl/last_plan_observation_15d",
+      trajectory_qos,
+      [this](const std_msgs::msg::Float64MultiArray::SharedPtr msg) {
+        if (msg->data.size() < 30) {
+          RCLCPP_WARN(
+            get_logger(),
+            "Ignoring /drl/last_plan_observation_15d with %zu values; expected 30",
+            msg->data.size());
+          return;
+        }
+        std::lock_guard<std::mutex> lock(observation_mutex_);
+        latest_raw_observation_.assign(msg->data.begin(), msg->data.begin() + 15);
+        latest_model_observation_.assign(msg->data.begin() + 15, msg->data.begin() + 30);
+        observation_seq_++;
+      });
 
     joint_state_sub_ = create_subscription<sensor_msgs::msg::JointState>(
       "/joint_states",
@@ -200,7 +252,11 @@ public:
       });
 
     metrics_logger_ = std::make_shared<robot_task_manager::ActionMetricsLogger>(
-      robot_task_manager::actionMetricsLogDir(log_root_dir_, "MovePoseRl"), get_logger());
+      robot_task_manager::actionMetricsLogDir(log_root_dir_, runtime_mode_, "MovePoseRl"), get_logger());
+    declare_parameter<bool>("use_mock", true);
+    declare_parameter<std::string>("hardware_plugin", "unknown");
+    declare_parameter<bool>("enable_log_plots", true);
+    robot_task_manager::applyLogProvenanceFromParams(this, metrics_logger_);
 
     action_server_ = rclcpp_action::create_server<MovePoseRl>(
       this,
@@ -225,7 +281,7 @@ public:
       log_tf_listener_ = std::make_shared<tf2_ros::TransformListener>(*log_tf_buffer_);
       logger_ = std::make_shared<robot_task_executor::ExecutorExperimentLogger>(
         shared_from_this(), log_tf_buffer_,
-        robot_task_manager::executorActionLogDir(log_root_dir_, executor_log_dir_, "MovePoseRl"),
+        robot_task_manager::executorActionLogDir(log_root_dir_, executor_log_dir_, runtime_mode_, "MovePoseRl"),
         executor_sample_rate_hz_,
         executor_base_frame_, executor_tcp_frame_);
     } catch (const std::exception & e) {
@@ -252,6 +308,7 @@ private:
 
   bool enable_executor_logging_{false};
   std::string log_root_dir_;
+  std::string runtime_mode_;
   std::string executor_log_dir_;
   double executor_sample_rate_hz_{50.0};
   std::string executor_base_frame_;
@@ -273,6 +330,7 @@ private:
   rclcpp::Client<std_srvs::srv::Trigger>::SharedPtr drl_planning_status_client_;
   rclcpp::Client<std_srvs::srv::Trigger>::SharedPtr cartesian_stop_client_;
   rclcpp::Subscription<geometry_msgs::msg::PoseArray>::SharedPtr trajectory_sub_;
+  rclcpp::Subscription<std_msgs::msg::Float64MultiArray>::SharedPtr observation_sub_;
   rclcpp::Subscription<sensor_msgs::msg::JointState>::SharedPtr joint_state_sub_;
   rclcpp::Subscription<robot_vision_pipeline_msgs::msg::BoxArray>::SharedPtr box_sub_;
 
@@ -281,6 +339,11 @@ private:
   std::mutex trajectory_mutex_;
   geometry_msgs::msg::PoseArray latest_trajectory_;
   uint64_t trajectory_seq_{0};
+
+  std::mutex observation_mutex_;
+  std::vector<double> latest_raw_observation_;
+  std::vector<double> latest_model_observation_;
+  uint64_t observation_seq_{0};
 
   std::mutex joint_state_mutex_;
   bool received_joint_state_{false};
@@ -453,55 +516,23 @@ private:
       return result;
     }
 
-    struct Candidate
-    {
-      geometry_msgs::msg::Point center_base;
-      geometry_msgs::msg::Vector3 size;
-    };
-    std::vector<Candidate> candidates;
-    std::string transform_error;
-    for (const auto & box : box_snapshot.boxes) {
-      if (box.class_name != obstacle_class_) {
-        continue;
-      }
-      if (!finite_pose(box.pose) || !positive_size(box.size)) {
-        continue;
-      }
-      geometry_msgs::msg::Point center_base;
-      if (!transform_point_to_planning_frame(
-          box.pose.position, box_snapshot.header.frame_id, center_base, transform_error))
-      {
-        continue;
-      }
-      candidates.push_back({center_base, box.size});
-    }
-
-    if (candidates.empty()) {
-      result.ok = true;
-      result.has_obstacle = false;
-      result.source = "none";
-      return result;
-    }
-
-    const Candidate * chosen = &candidates.front();
-    if (candidates.size() > 1) {
-      double best_dist = point_to_segment_distance(
-        candidates.front().center_base, current_tcp_base, target_base);
-      for (size_t i = 1; i < candidates.size(); ++i) {
-        const double d = point_to_segment_distance(
-          candidates[i].center_base, current_tcp_base, target_base);
-        if (d < best_dist) {
-          best_dist = d;
-          chosen = &candidates[i];
-        }
-      }
-    }
+    // Shared selection logic (robot_task_manager/rl_obstacle_input.hpp) so
+    // MovePoseRL and PickPlaceRL feed the DRL policy an obstacle resolved the
+    // exact same way.
+    const robot_task_manager::RlObstacleInput shared = robot_task_manager::resolveRlObstacleInput(
+      box_snapshot, obstacle_class_, current_tcp_base, target_base,
+      [this](
+        const geometry_msgs::msg::Point & in, const std::string & frame_in,
+        geometry_msgs::msg::Point & out) {
+        std::string err;
+        return transform_point_to_planning_frame(in, frame_in, out, err);
+      });
 
     result.ok = true;
-    result.has_obstacle = true;
-    result.source = "vision";
-    result.center_base = chosen->center_base;
-    result.size = chosen->size;
+    result.has_obstacle = shared.has_obstacle;
+    result.source = shared.source;
+    result.center_base = shared.center_base;
+    result.size = shared.size;
     return result;
   }
 
@@ -850,6 +881,31 @@ private:
     return false;
   }
 
+  bool copy_observation_after(
+    uint64_t seq_before,
+    std::vector<double> & raw_observation,
+    std::vector<double> & model_observation,
+    double timeout_sec = 2.0)
+  {
+    const auto deadline = std::chrono::steady_clock::now() +
+      std::chrono::duration<double>(timeout_sec);
+    while (rclcpp::ok() && std::chrono::steady_clock::now() < deadline) {
+      {
+        std::lock_guard<std::mutex> lock(observation_mutex_);
+        if (observation_seq_ > seq_before &&
+          latest_raw_observation_.size() == 15 &&
+          latest_model_observation_.size() == 15)
+        {
+          raw_observation = latest_raw_observation_;
+          model_observation = latest_model_observation_;
+          return true;
+        }
+      }
+      std::this_thread::sleep_for(20ms);
+    }
+    return false;
+  }
+
   bool wait_for_drl_execution(std::string & error_msg)
   {
     const auto deadline = std::chrono::steady_clock::now() +
@@ -888,7 +944,9 @@ private:
     const geometry_msgs::msg::Pose & target,
     const ObstacleResolution & obstacle,
     std::string & failed_stage,
-    std::string & error_msg)
+    std::string & error_msg,
+    std::vector<double> & raw_observation,
+    std::vector<double> & model_observation)
   {
     const int attempts = std::max(1, drl_plan_attempts_);
     std::string last_error;
@@ -920,6 +978,11 @@ private:
         std::lock_guard<std::mutex> lock(trajectory_mutex_);
         seq_before = trajectory_seq_;
       }
+      uint64_t observation_seq_before = 0;
+      {
+        std::lock_guard<std::mutex> lock(observation_mutex_);
+        observation_seq_before = observation_seq_;
+      }
 
       std::string msg;
       if (!call_trigger(drl_clear_client_, "/drl/clear_trajectory", msg, 5.0)) {
@@ -931,6 +994,11 @@ private:
       } else if (!wait_for_planned_trajectory(seq_before, target, last_error)) {
         failed_stage = "endpoint_check";
       } else {
+        if (!copy_observation_after(observation_seq_before, raw_observation, model_observation)) {
+          RCLCPP_WARN(
+            get_logger(),
+            "DRL trajectory was ready but no fresh /drl/last_plan_observation_15d arrived");
+        }
         return true;
       }
 
@@ -1052,6 +1120,19 @@ private:
       target_pose.pose.position.x, target_pose.pose.position.y, target_pose.pose.position.z,
       target_pose.pose.orientation.x, target_pose.pose.orientation.y,
       target_pose.pose.orientation.z, target_pose.pose.orientation.w);
+    const auto target_rpy_deg = rpy_deg_from_quat(target_pose.pose.orientation);
+    RCLCPP_INFO(
+      get_logger(),
+      "[MovePoseRL] current_tcp=(%.4f, %.4f, %.4f)",
+      start_pose.pose.position.x, start_pose.pose.position.y, start_pose.pose.position.z);
+    RCLCPP_INFO(
+      get_logger(),
+      "[MovePoseRL] target_after_offset=(%.4f, %.4f, %.4f)",
+      target_pose.pose.position.x, target_pose.pose.position.y, target_pose.pose.position.z);
+    RCLCPP_INFO(
+      get_logger(),
+      "[MovePoseRL] target_rpy_deg=(%.2f, %.2f, %.2f)",
+      target_rpy_deg[0], target_rpy_deg[1], target_rpy_deg[2]);
 
     // codex2.md "move_pose_rl_obstacle_avoidance": resolve a fresh vision
     // obstacle (best-effort — MovePoseRl.action has no obstacle goal fields
@@ -1104,12 +1185,23 @@ private:
 
     publish_feedback(goal_handle, "drl_plan", 45.0f);
     std::string failed_stage;
+    std::vector<double> raw_observation;
+    std::vector<double> model_observation;
     const auto drl_plan_start = std::chrono::steady_clock::now();
-    const bool planned = plan_with_drl(target_pose.pose, obstacle, failed_stage, error_msg);
+    const bool planned = plan_with_drl(
+      target_pose.pose, obstacle, failed_stage, error_msg, raw_observation, model_observation);
+    if (raw_observation.size() == 15) {
+      RCLCPP_INFO(
+        get_logger(),
+        "[MovePoseRL] rl_observation_15d=%s",
+        format_values(raw_observation).c_str());
+    }
 
     std::vector<geometry_msgs::msg::Point> waypoints;
+    std::vector<geometry_msgs::msg::Pose> planned_poses;
     {
       std::lock_guard<std::mutex> lock(trajectory_mutex_);
+      planned_poses = latest_trajectory_.poses;
       waypoints.reserve(latest_trajectory_.poses.size());
       for (const auto & pose : latest_trajectory_.poses) {
         waypoints.push_back(pose.position);
@@ -1194,6 +1286,15 @@ private:
           traj_metrics.collision_or_inside_obstacle_count;
         metrics_row_->min_clearance_with_margin_m = traj_metrics.min_clearance_with_margin_m;
         metrics_row_->clearance_ok = traj_metrics.clearance_ok;
+        if (raw_observation.size() == 15 && model_observation.size() == 15) {
+          metrics_logger_->writeRlInput15d(
+            *metrics_row_, "rl_observation.csv", "plan", raw_observation,
+            model_observation, "drl_unified_planner_node:first_raw_observation");
+        }
+        metrics_logger_->writePlanningTrajectory(
+          *metrics_row_, "rl_planning_path.csv", "plan", planned_poses,
+          target_pose.pose.position, obstacle.has_obstacle ? &aabb : nullptr,
+          false);
       }
     }
 
@@ -1225,8 +1326,20 @@ private:
     }
 
     publish_feedback(goal_handle, "execute_forward", 70.0f);
+    robot_task_manager::AabbObstacle exec_aabb;
+    exec_aabb.center = obstacle.center_base;
+    exec_aabb.size = obstacle.size;
+    exec_aabb.has_obstacle = obstacle.has_obstacle;
+    auto tcp_sampler = metrics_logger_->startTcpExecutionSampling(
+      metrics_row_, "execute_forward", target_pose.pose, planned_poses, {},
+      obstacle.has_obstacle ? &exec_aabb : nullptr,
+      [this](geometry_msgs::msg::PoseStamped & out, std::string & err) {
+        return current_pose(out, err);
+      },
+      executor_sample_rate_hz_);
     std::string msg;
     if (!call_trigger(drl_execute_client_, "/drl/execute_forward", msg, 5.0)) {
+      metrics_logger_->stopTcpExecutionSampling(tcp_sampler);
       abort_goal(goal_handle, result, "execute_forward", "Start DRL execution failed: " + msg);
       return;
     }
@@ -1240,6 +1353,7 @@ private:
       metrics_row_->execution_time_s = metrics_row_->drl_execution_wait_time_s;
       metrics_row_->execution_success = exec_ok;
     }
+    metrics_logger_->stopTcpExecutionSampling(tcp_sampler);
     if (!exec_ok) {
       abort_goal(goal_handle, result, "execution_status", error_msg);
       return;

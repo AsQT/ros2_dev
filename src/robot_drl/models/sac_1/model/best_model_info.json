@@ -1,0 +1,10 @@
+{
+    "step": 26554248,
+    "eval_success_rate": 0.99,
+    "eval_mean_reward": 16.200707844743878,
+    "eval_mean_final_distance": 0.026176998354494573,
+    "eval_collision_rate": 0.0,
+    "eval_workspace_violation_rate": 0.0,
+    "eval_episodes": 100,
+    "saved_at": "2026-06-11T18:36:51.028292+00:00"
+}

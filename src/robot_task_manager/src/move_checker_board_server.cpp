@@ -1,10 +1,19 @@
+#include <array>
+#include <algorithm>
+#include <filesystem>
+#include <fstream>
+#include <iomanip>
 #include <memory>
+#include <mutex>
 #include <sstream>
+#include <string>
 #include <thread>
 #include <cmath>
 
+#include "moveit_msgs/msg/robot_trajectory.hpp"
 #include "rclcpp/rclcpp.hpp"
 #include "rclcpp_action/rclcpp_action.hpp"
+#include "sensor_msgs/msg/joint_state.hpp"
 
 #include "robot_task_manager/action/checker_board.hpp"
 #include "robot_task_manager/log_paths.hpp"
@@ -12,6 +21,35 @@
 #include "robot_task_manager/per_call_tcp_logger.hpp"
 #include "tf2_ros/buffer.h"
 #include "tf2_ros/transform_listener.h"
+
+namespace
+{
+
+std::string csv_escape(const std::string & value)
+{
+  bool needs_quotes = false;
+  for (const char c : value) {
+    if (c == ',' || c == '"' || c == '\n' || c == '\r') {
+      needs_quotes = true;
+      break;
+    }
+  }
+  if (!needs_quotes) {
+    return value;
+  }
+  std::string out = "\"";
+  for (const char c : value) {
+    if (c == '"') {
+      out += "\"\"";
+    } else {
+      out += c;
+    }
+  }
+  out += "\"";
+  return out;
+}
+
+}  // namespace
 
 class CheckerBoardActionServer : public rclcpp::Node
 {
@@ -28,11 +66,24 @@ public:
 
     enable_executor_logging_ = declare_parameter<bool>("enable_executor_logging", false);
     log_root_dir_            = declare_parameter<std::string>("log_root_dir", robot_task_manager::kDefaultLogRootDir);
+    runtime_mode_            = declare_parameter<std::string>("runtime_mode", "mock");
     executor_log_dir_        = declare_parameter<std::string>(
       "executor_log_dir", robot_task_manager::executorLogBaseDir(log_root_dir_));
     executor_sample_rate_hz_ = declare_parameter<double>("executor_sample_rate_hz", 50.0);
     executor_base_frame_     = declare_parameter<std::string>("executor_base_frame", "base_link");
     executor_tcp_frame_      = declare_parameter<std::string>("executor_tcp_frame", "tcp_link");
+    declare_parameter<bool>("use_mock", true);
+    declare_parameter<std::string>("hardware_plugin", "unknown");
+    declare_parameter<bool>("enable_log_plots", true);
+
+    joint_state_sub_ = create_subscription<sensor_msgs::msg::JointState>(
+      "/joint_states",
+      rclcpp::SensorDataQoS(),
+      [this](const sensor_msgs::msg::JointState::SharedPtr msg) {
+        std::lock_guard<std::mutex> lock(joint_state_mutex_);
+        latest_joint_state_ = *msg;
+        have_joint_state_ = !msg->name.empty() && !msg->position.empty();
+      });
 
     action_server_ = rclcpp_action::create_server<CheckerBoard>(
       this,
@@ -54,9 +105,10 @@ public:
       tcp_log_tf_listener_ = std::make_shared<tf2_ros::TransformListener>(*tcp_log_tf_buffer_);
       tcp_logger_ = std::make_shared<robot_task_manager::PerCallTcpLogger>(
         shared_from_this(), tcp_log_tf_buffer_,
-        robot_task_manager::executorActionLogDir(log_root_dir_, executor_log_dir_, "CheckerBoard"),
+        robot_task_manager::executorActionLogDir(log_root_dir_, executor_log_dir_, runtime_mode_, "CheckerBoard"),
         executor_sample_rate_hz_,
         executor_base_frame_, executor_tcp_frame_, "checker_board", "/move_checker_board");
+      robot_task_manager::applyLogProvenanceFromParams(this, tcp_logger_);
     } catch (const std::exception & e) {
       tcp_logger_.reset();
       RCLCPP_WARN(get_logger(), "CheckerBoard per-call TCP logger unavailable: %s", e.what());
@@ -70,6 +122,7 @@ private:
 
   bool enable_executor_logging_{false};
   std::string log_root_dir_;
+  std::string runtime_mode_;
   std::string executor_log_dir_;
   double executor_sample_rate_hz_{50.0};
   std::string executor_base_frame_;
@@ -80,6 +133,94 @@ private:
 
   std::shared_ptr<robot_task_manager::MoveItExecutor> executor_;
   rclcpp_action::Server<CheckerBoard>::SharedPtr action_server_;
+  rclcpp::Subscription<sensor_msgs::msg::JointState>::SharedPtr joint_state_sub_;
+
+  std::mutex joint_state_mutex_;
+  sensor_msgs::msg::JointState latest_joint_state_;
+  bool have_joint_state_{false};
+  std::mutex joint_tracking_mutex_;
+
+  bool lookup_actual_joint(
+    const sensor_msgs::msg::JointState & state,
+    const std::string & name,
+    double & value) const
+  {
+    for (size_t i = 0; i < state.name.size() && i < state.position.size(); ++i) {
+      if (state.name[i] == name) {
+        value = state.position[i];
+        return std::isfinite(value);
+      }
+    }
+    return false;
+  }
+
+  void append_joint_tracking_row(
+    const std::shared_ptr<robot_task_manager::PerCallTcpLogger::Call> & tcp_call,
+    const std::string & stage,
+    const moveit_msgs::msg::RobotTrajectory & trajectory)
+  {
+    if (!tcp_call || trajectory.joint_trajectory.joint_names.size() < 6 ||
+      trajectory.joint_trajectory.points.empty())
+    {
+      return;
+    }
+    const auto & point = trajectory.joint_trajectory.points.back();
+    if (point.positions.size() < 6) {
+      return;
+    }
+
+    sensor_msgs::msg::JointState actual_state;
+    {
+      std::lock_guard<std::mutex> lock(joint_state_mutex_);
+      if (!have_joint_state_) {
+        RCLCPP_WARN(get_logger(), "CheckerBoard joint_tracking skipped: no /joint_states yet");
+        return;
+      }
+      actual_state = latest_joint_state_;
+    }
+
+    std::array<double, 6> set{};
+    std::array<double, 6> actual{};
+    std::array<double, 6> error{};
+    for (size_t i = 0; i < 6; ++i) {
+      set[i] = point.positions[i];
+      if (!lookup_actual_joint(actual_state, trajectory.joint_trajectory.joint_names[i], actual[i])) {
+        RCLCPP_WARN(
+          get_logger(),
+          "CheckerBoard joint_tracking skipped: /joint_states missing joint '%s'",
+          trajectory.joint_trajectory.joint_names[i].c_str());
+        return;
+      }
+      error[i] = actual[i] - set[i];
+    }
+
+    double error_norm = 0.0;
+    for (const double e : error) {
+      error_norm += e * e;
+    }
+    error_norm = std::sqrt(error_norm);
+    const double t_rel = (now() - tcp_call->start_time).seconds();
+    const auto path = std::filesystem::path(tcp_call->call_dir) / "joint_tracking.csv";
+
+    std::lock_guard<std::mutex> lock(joint_tracking_mutex_);
+    std::ofstream out(path, std::ios::out | std::ios::app);
+    if (!out.is_open()) {
+      RCLCPP_WARN(get_logger(), "Failed to append CheckerBoard joint_tracking.csv");
+      return;
+    }
+    out << std::fixed << std::setprecision(9)
+        << t_rel << "," << csv_escape(stage);
+    for (const double v : set) {
+      out << "," << v;
+    }
+    for (const double v : actual) {
+      out << "," << v;
+    }
+    for (const double v : error) {
+      out << "," << v;
+    }
+    out << "," << error_norm << "\n";
+  }
 
   rclcpp_action::GoalResponse handle_goal(
                                   const rclcpp_action::GoalUUID &,
@@ -184,7 +325,9 @@ private:
       std::ostringstream meta;
       meta << "{\"step\":" << goal->step
            << ",\"velocity_scale\":" << goal->velocity_scale
-           << ",\"execute\":" << (goal->execute ? "true" : "false") << "}";
+           << ",\"execute\":" << (goal->execute ? "true" : "false")
+           << ",\"joint_tracking_set_source\":\"nearest_planned_joint_point\""
+           << ",\"joint_tracking_actual_source\":\"/joint_states\"}";
       tcp_call = tcp_logger_->startCall(meta.str());
       if (tcp_call) {
         tcp_logger_->logEvent(tcp_call, "checker_board_start", "received", "CheckerBoard goal accepted");
@@ -223,6 +366,12 @@ private:
             tcp_logger_->setStage(tcp_call, stage);
             tcp_logger_->logEvent(tcp_call, stage, "progress", stage);
           }
+        },
+        [this, tcp_call](
+          const std::string & stage,
+          const moveit_msgs::msg::RobotTrajectory & trajectory)
+        {
+          append_joint_tracking_row(tcp_call, stage, trajectory);
         });
       RCLCPP_INFO(this->get_logger(), "Returned from CheckerBoard(), ok=%s", ok ? "true" : "false");
     } catch (const std::exception &e) {

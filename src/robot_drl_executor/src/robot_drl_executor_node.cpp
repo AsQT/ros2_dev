@@ -119,7 +119,7 @@ private:
     declare_parameter<bool>("enable_executor_logging", false);
     declare_parameter<std::string>("log_root_dir", "/home/minhquang/ros2_dev/Log_robot_data");
     declare_parameter<std::string>(
-      "executor_log_dir", "/home/minhquang/ros2_dev/Log_robot_data/executor_logs/DrlExecutor");
+      "executor_log_dir", "/home/minhquang/ros2_dev/Log_robot_data/mock/rl/drl_executor_internal");
     declare_parameter<double>("executor_sample_rate_hz", 50.0);
     declare_parameter<std::string>("executor_base_frame", "base_link");
     declare_parameter<std::string>("executor_tcp_frame", "tcp_link");

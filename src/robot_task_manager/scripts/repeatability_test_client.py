@@ -18,6 +18,7 @@ class RepeatabilityTestClient(Node):
         self.declare_parameter("meas_offset", 0.02)
         self.declare_parameter("velocity_scale", 0.1)
         self.declare_parameter("execute", True)
+        self.declare_parameter("enable_tcp_log", True)
         self.declare_parameter("frame_id", "world")
         self.declare_parameter("goal_timeout_sec", 600.0)
 
@@ -54,12 +55,13 @@ class RepeatabilityTestClient(Node):
         goal.repeat_count = int(self.get_parameter("repeat_count").value)
         goal.velocity_scale = float(self.get_parameter("velocity_scale").value)
         goal.execute = bool(self.get_parameter("execute").value)
+        goal.enable_tcp_log = bool(self.get_parameter("enable_tcp_log").value)
 
         self.get_logger().info(
             "Sending RepeatabilityTest goal: "
             f"axis={goal.axis} repeat_count={goal.repeat_count} "
             f"offset={goal.meas_offset:.3f} velocity={goal.velocity_scale:.2f} "
-            f"execute={goal.execute}"
+            f"execute={goal.execute} enable_tcp_log={goal.enable_tcp_log}"
         )
 
         send_future = self._client.send_goal_async(

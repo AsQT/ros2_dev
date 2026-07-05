@@ -72,6 +72,27 @@ install(TARGETS robot_gui_node
   DESTINATION lib/${PROJECT_NAME}
 )
 
+# codex.md Phase 5/6: pure-logic self-test for the shared pick/place target
+# resolver. No ROS runtime needed — just geometry_msgs headers. Registered as a
+# ctest so `colcon test` exercises the MANUAL/AUTO/multi-wood selection rules.
+add_executable(pick_place_resolver_selftest test/pick_place_resolver_selftest.cpp)
+target_include_directories(pick_place_resolver_selftest PRIVATE include)
+ament_target_dependencies(pick_place_resolver_selftest geometry_msgs)
+install(TARGETS pick_place_resolver_selftest
+  DESTINATION lib/${PROJECT_NAME}
+)
+if(BUILD_TESTING)
+  find_package(ament_cmake_test REQUIRED)
+  # The self-test is a plain C++ binary (non-zero exit == failure); it does not
+  # emit a JUnit result file, so ask run_test.py to synthesize a passing result
+  # from a zero exit code instead of reporting "did not generate a result file".
+  ament_add_test(pick_place_resolver_selftest
+    COMMAND "$<TARGET_FILE:pick_place_resolver_selftest>"
+    GENERATE_RESULT_FOR_RETURN_CODE_ZERO
+    TIMEOUT 60
+  )
+endif()
+
 install(DIRECTORY launch ui
   DESTINATION share/${PROJECT_NAME}
 )

@@ -12,6 +12,7 @@
 
 #include "geometry_msgs/msg/point_stamped.hpp"
 #include "geometry_msgs/msg/pose_array.hpp"
+#include "std_msgs/msg/float64_multi_array.hpp"
 #include "geometry_msgs/msg/pose_stamped.hpp"
 #include "rcl_interfaces/msg/parameter.hpp"
 #include "rcl_interfaces/msg/parameter_type.hpp"
@@ -136,6 +137,19 @@ public:
     box_objects_topic_ = declare_parameter<std::string>(
       "box_objects_topic", "/vision/box_objects");
 
+    // Vision trigger (action-gated YOLO): when the YOLO node runs in
+    // one_shot/action_gated mode it is idle until asked. Before resolving the
+    // vision target we call this Trigger service once so a fresh detection is
+    // published, then wait briefly for the wood/box topic to update. Enabled by
+    // default; harmless when YOLO already runs continuous/throttled (the trigger
+    // just forces one extra detection, and a missing service is non-fatal).
+    enable_vision_trigger_ = declare_parameter<bool>("enable_vision_trigger", true);
+    vision_trigger_service_ = declare_parameter<std::string>(
+      "vision_trigger_service", "/vision/yolo/trigger_detect");
+    vision_trigger_timeout_s_ = declare_parameter<double>("vision_trigger_timeout_s", 3.0);
+    vision_result_wait_timeout_s_ =
+      declare_parameter<double>("vision_result_wait_timeout_s", 2.0);
+
     position_tolerance_m_ = declare_parameter<double>("position_tolerance_m", 0.01);
     drl_timeout_sec_ = declare_parameter<double>("drl_timeout_sec", 120.0);
     drl_trajectory_endpoint_tolerance_m_ =
@@ -151,6 +165,7 @@ public:
 
     enable_executor_logging_ = declare_parameter<bool>("enable_executor_logging", false);
     log_root_dir_            = declare_parameter<std::string>("log_root_dir", robot_task_manager::kDefaultLogRootDir);
+    runtime_mode_            = declare_parameter<std::string>("runtime_mode", "mock");
     executor_log_dir_        = declare_parameter<std::string>(
       "executor_log_dir", robot_task_manager::executorLogBaseDir(log_root_dir_));
     executor_sample_rate_hz_ = declare_parameter<double>("executor_sample_rate_hz", 50.0);
@@ -167,6 +182,7 @@ public:
     // Stop path (codex.md 7.6): RL robot motion runs in the cartesian executor
     // via /move_cartesian_pose_sequence; a real Stop must halt it there.
     cartesian_stop_client_ = create_client<std_srvs::srv::Trigger>("/move_cartesian_stop");
+    vision_trigger_client_ = create_client<std_srvs::srv::Trigger>(vision_trigger_service_);
 
     auto trajectory_qos = rclcpp::QoS(1).reliable().transient_local();
     trajectory_sub_ = create_subscription<geometry_msgs::msg::PoseArray>(
@@ -176,6 +192,20 @@ public:
         std::lock_guard<std::mutex> lock(trajectory_mutex_);
         latest_trajectory_ = *msg;
         trajectory_seq_++;
+      });
+
+    // codex.md §3.1/§5.8: cache the planner's 15D observation so MoveTargetRl
+    // can write rl_observation.csv (parity with MovePoseRl/DrlPickPlace).
+    observation_sub_ = create_subscription<std_msgs::msg::Float64MultiArray>(
+      "/drl/last_plan_observation_15d", rclcpp::QoS(1).reliable().transient_local(),
+      [this](const std_msgs::msg::Float64MultiArray::SharedPtr msg) {
+        if (msg->data.size() < 30) {
+          return;
+        }
+        std::lock_guard<std::mutex> lock(observation_mutex_);
+        latest_raw_observation_.assign(msg->data.begin(), msg->data.begin() + 15);
+        latest_model_observation_.assign(msg->data.begin() + 15, msg->data.begin() + 30);
+        observation_seq_++;
       });
 
     // Vision detections are published BEST_EFFORT/VOLATILE by
@@ -212,7 +242,11 @@ public:
       });
 
     metrics_logger_ = std::make_shared<robot_task_manager::ActionMetricsLogger>(
-      robot_task_manager::actionMetricsLogDir(log_root_dir_, "MoveTargetRl"), get_logger());
+      robot_task_manager::actionMetricsLogDir(log_root_dir_, runtime_mode_, "MoveTargetRl"), get_logger());
+    declare_parameter<bool>("use_mock", true);
+    declare_parameter<std::string>("hardware_plugin", "unknown");
+    declare_parameter<bool>("enable_log_plots", true);
+    robot_task_manager::applyLogProvenanceFromParams(this, metrics_logger_);
 
     action_server_ = rclcpp_action::create_server<MoveTargetRl>(
       this,
@@ -242,7 +276,7 @@ public:
       log_tf_listener_ = std::make_shared<tf2_ros::TransformListener>(*log_tf_buffer_);
       logger_ = std::make_shared<robot_task_executor::ExecutorExperimentLogger>(
         shared_from_this(), log_tf_buffer_,
-        robot_task_manager::executorActionLogDir(log_root_dir_, executor_log_dir_, "MoveTargetRl"),
+        robot_task_manager::executorActionLogDir(log_root_dir_, executor_log_dir_, runtime_mode_, "MoveTargetRl"),
         executor_sample_rate_hz_,
         executor_base_frame_, executor_tcp_frame_);
     } catch (const std::exception & e) {
@@ -278,6 +312,7 @@ private:
 
   bool enable_executor_logging_{false};
   std::string log_root_dir_;
+  std::string runtime_mode_;
   std::string executor_log_dir_;
   double executor_sample_rate_hz_{50.0};
   std::string executor_base_frame_;
@@ -298,7 +333,18 @@ private:
   rclcpp::Client<std_srvs::srv::Trigger>::SharedPtr drl_status_client_;
   rclcpp::Client<std_srvs::srv::Trigger>::SharedPtr drl_planning_status_client_;
   rclcpp::Client<std_srvs::srv::Trigger>::SharedPtr cartesian_stop_client_;
+  rclcpp::Client<std_srvs::srv::Trigger>::SharedPtr vision_trigger_client_;
+
+  bool enable_vision_trigger_{true};
+  std::string vision_trigger_service_;
+  double vision_trigger_timeout_s_{3.0};
+  double vision_result_wait_timeout_s_{2.0};
   rclcpp::Subscription<geometry_msgs::msg::PoseArray>::SharedPtr trajectory_sub_;
+  rclcpp::Subscription<std_msgs::msg::Float64MultiArray>::SharedPtr observation_sub_;
+  std::mutex observation_mutex_;
+  std::vector<double> latest_raw_observation_;
+  std::vector<double> latest_model_observation_;
+  uint64_t observation_seq_{0};
   rclcpp::Subscription<sensor_msgs::msg::JointState>::SharedPtr joint_state_sub_;
   rclcpp::Subscription<robot_vision_pipeline_msgs::msg::WoodArray>::SharedPtr wood_sub_;
   rclcpp::Subscription<robot_vision_pipeline_msgs::msg::BoxArray>::SharedPtr box_sub_;
@@ -516,6 +562,61 @@ private:
     std::string failed_stage;
     std::string error_msg;
   };
+
+  // Action-gated vision: force ONE YOLO detection, then wait briefly for the
+  // wood topic to refresh, so a gated (one_shot/action_gated) YOLO node has
+  // published a fresh detection before resolve_target() reads it. Best-effort:
+  // a missing/failed trigger is logged but does NOT abort — resolve_target()
+  // still enforces detection freshness and will fail clearly if truly stale.
+  void trigger_vision_detection(const MoveTargetRl::Goal & goal)
+  {
+    if (!enable_vision_trigger_ || goal.use_fallback_target) {
+      return;
+    }
+    if (logger_) {
+      logger_->log_lifecycle_event(
+        "/move_target_rl", "vision_trigger", "execute", "start",
+        "Calling YOLO trigger " + vision_trigger_service_, "", action_call_id_);
+    }
+    const rclcpp::Time before = now();
+    std::string msg;
+    bool ok = false;
+    if (vision_trigger_client_ &&
+      vision_trigger_client_->wait_for_service(
+        std::chrono::duration_cast<std::chrono::nanoseconds>(
+          std::chrono::duration<double>(vision_trigger_timeout_s_))))
+    {
+      ok = call_trigger(
+        vision_trigger_client_, vision_trigger_service_, msg, vision_trigger_timeout_s_);
+    } else {
+      msg = "vision trigger service unavailable: " + vision_trigger_service_;
+    }
+
+    if (ok) {
+      // Wait (best-effort) for a wood detection stamped after the trigger.
+      const rclcpp::Time deadline =
+        now() + rclcpp::Duration::from_seconds(vision_result_wait_timeout_s_);
+      while (rclcpp::ok() && now() < deadline) {
+        {
+          std::lock_guard<std::mutex> lock(vision_mutex_);
+          if (have_wood_ && latest_wood_stamp_ >= before) {
+            break;
+          }
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(20));
+      }
+    }
+
+    const double elapsed = (now() - before).seconds();
+    RCLCPP_INFO(
+      get_logger(), "[MoveTargetRl] vision_trigger %s (%.2fs): %s",
+      ok ? "success" : "fail/skip", elapsed, msg.c_str());
+    if (logger_) {
+      logger_->log_lifecycle_event(
+        "/move_target_rl", "vision_trigger", "execute", ok ? "success" : "fail",
+        "YOLO trigger result: " + msg, "", action_call_id_);
+    }
+  }
 
   TargetResolution resolve_target(const MoveTargetRl::Goal & goal)
   {
@@ -1003,6 +1104,34 @@ private:
     return resp->success;
   }
 
+  // codex.md §3.1/§5.8: fetch the planner's latest 15D observation published
+  // after seq_before. Returns false on timeout (rl_observation.csv then stays
+  // header-only, which is honest — no observation was produced).
+  bool copy_observation_after(
+    uint64_t seq_before,
+    std::vector<double> & raw_observation,
+    std::vector<double> & model_observation,
+    double timeout_sec = 2.0)
+  {
+    const auto deadline = std::chrono::steady_clock::now() +
+      std::chrono::duration<double>(timeout_sec);
+    while (rclcpp::ok() && std::chrono::steady_clock::now() < deadline) {
+      {
+        std::lock_guard<std::mutex> lock(observation_mutex_);
+        if (observation_seq_ > seq_before &&
+          latest_raw_observation_.size() == 15 &&
+          latest_model_observation_.size() == 15)
+        {
+          raw_observation = latest_raw_observation_;
+          model_observation = latest_model_observation_;
+          return true;
+        }
+      }
+      std::this_thread::sleep_for(20ms);
+    }
+    return false;
+  }
+
   bool wait_for_planned_trajectory(
     uint64_t seq_before,
     const geometry_msgs::msg::Point & target,
@@ -1255,6 +1384,7 @@ private:
     }
 
     publish_feedback(goal_handle, "resolve_target", 20.0f, empty_pose, empty_pose);
+    trigger_vision_detection(*goal);
     const TargetResolution target_res = resolve_target(*goal);
     if (!target_res.ok) {
       abort_goal(goal_handle, result, target_res.failed_stage, target_res.error_msg);
@@ -1266,6 +1396,19 @@ private:
       metrics_row_->target_y = target_res.pose_base.pose.position.y;
       metrics_row_->target_z = target_res.pose_base.pose.position.z;
       metrics_row_->source = target_res.source;
+      // codex.md §5: vision provenance fields for metadata.json.
+      const bool via_vision = !goal->use_fallback_target;
+      metrics_row_->extra_metadata = {
+        {"target_source", via_vision ? "vision" : "fallback"},
+        {"object_id", goal->target_class.empty() ? "unknown" : goal->target_class},
+        {"vision_confidence", "not_available"},
+        {"frame_in", via_vision ? planning_frame_ : "goal_fallback"},
+        {"frame_out", target_res.pose_base.header.frame_id.empty() ?
+          std::string("base_link") : target_res.pose_base.header.frame_id},
+        {"selected_rule", target_res.source},
+        {"wood_id", "not_available"},
+        {"source_topic", via_vision ? std::string("/vision/box_objects") : std::string("goal_fallback")}
+      };
     }
     RCLCPP_INFO(
       get_logger(), "MoveTargetRl target_wood_base=(%.4f, %.4f, %.4f) source=%s",
@@ -1323,6 +1466,11 @@ private:
       goal_handle, "drl_plan", 45.0f, target_res.pose_base, obstacle_res.pose_base);
     std::string failed_stage;
     uint32_t trajectory_points = 0;
+    uint64_t observation_seq_before = 0;
+    {
+      std::lock_guard<std::mutex> lock(observation_mutex_);
+      observation_seq_before = observation_seq_;
+    }
     const auto drl_plan_start = std::chrono::steady_clock::now();
     const bool planned = plan_with_drl(
       target_res.pose_base.pose.position,
@@ -1340,19 +1488,38 @@ private:
     result->trajectory_points = trajectory_points;
     if (metrics_row_) {
       metrics_row_->trajectory_points = trajectory_points;
-      std::vector<geometry_msgs::msg::Point> waypoints;
-      {
-        std::lock_guard<std::mutex> lock(trajectory_mutex_);
-        waypoints.reserve(latest_trajectory_.poses.size());
-        for (const auto & pose : latest_trajectory_.poses) {
-          waypoints.push_back(pose.position);
-        }
+    }
+    std::vector<geometry_msgs::msg::Point> waypoints;
+    std::vector<geometry_msgs::msg::Pose> planned_poses;
+    {
+      std::lock_guard<std::mutex> lock(trajectory_mutex_);
+      waypoints.reserve(latest_trajectory_.poses.size());
+      planned_poses = latest_trajectory_.poses;
+      for (const auto & pose : latest_trajectory_.poses) {
+        waypoints.push_back(pose.position);
       }
+    }
+    if (metrics_row_) {
       if (!waypoints.empty()) {
         robot_task_manager::AabbObstacle aabb;
         aabb.center = obstacle_res.pose_base.pose.position;
         aabb.size = obstacle_res.size;
         aabb.has_obstacle = obstacle_res.has_obstacle;
+        // codex.md §5.8: MoveTargetRl now writes its own planning_rl.csv (was
+        // missing a writer), mirroring MovePoseRl.
+        metrics_logger_->writePlanningTrajectory(
+          *metrics_row_, "rl_planning_path.csv", "plan", planned_poses,
+          target_res.pose_base.pose.position,
+          obstacle_res.has_obstacle ? &aabb : nullptr, false);
+        // codex.md §3.1/§5.8: rl_observation.csv (15D planner observation).
+        std::vector<double> raw_obs, model_obs;
+        if (copy_observation_after(observation_seq_before, raw_obs, model_obs) &&
+          raw_obs.size() == 15 && model_obs.size() == 15)
+        {
+          metrics_logger_->writeRlInput15d(
+            *metrics_row_, "rl_observation.csv", "plan", raw_obs, model_obs,
+            "drl_unified_planner_node:first_raw_observation");
+        }
         const auto traj_metrics = robot_task_manager::computeTrajectoryMetrics(
           waypoints, start_pose.pose.position, target_res.pose_base.pose.position,
           obstacle_res.has_obstacle ? &aabb : nullptr, 0.0);
@@ -1395,8 +1562,20 @@ private:
 
     publish_feedback(
       goal_handle, "execute_forward", 70.0f, target_res.pose_base, obstacle_res.pose_base);
+    robot_task_manager::AabbObstacle exec_aabb;
+    exec_aabb.center = obstacle_res.pose_base.pose.position;
+    exec_aabb.size = obstacle_res.size;
+    exec_aabb.has_obstacle = obstacle_res.has_obstacle;
+    auto tcp_sampler = metrics_logger_->startTcpExecutionSampling(
+      metrics_row_, "execute_forward", target_res.pose_base.pose, planned_poses, {},
+      obstacle_res.has_obstacle ? &exec_aabb : nullptr,
+      [this](geometry_msgs::msg::PoseStamped & out, std::string & err) {
+        return current_pose(out, err);
+      },
+      executor_sample_rate_hz_);
     std::string msg;
     if (!call_trigger(drl_execute_client_, "/drl/execute_forward", msg, 5.0)) {
+      metrics_logger_->stopTcpExecutionSampling(tcp_sampler);
       abort_goal(goal_handle, result, "execute_forward", "Start DRL execution failed: " + msg);
       return;
     }
@@ -1411,6 +1590,7 @@ private:
       metrics_row_->execution_time_s = metrics_row_->drl_execution_wait_time_s;
       metrics_row_->execution_success = exec_ok;
     }
+    metrics_logger_->stopTcpExecutionSampling(tcp_sampler);
     if (!exec_ok) {
       abort_goal(goal_handle, result, "execution_status", error_msg);
       return;

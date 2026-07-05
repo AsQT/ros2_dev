@@ -35,6 +35,9 @@ def generate_launch_description():
         {"base_frame": "world"},
         {
             "enable_executor_logging": LaunchConfiguration("enable_executor_logging"),
+            "runtime_mode": LaunchConfiguration("runtime_mode"),
+            "enable_debug_logging": LaunchConfiguration("enable_debug_logging"),
+            "enable_standard_logging": LaunchConfiguration("enable_standard_logging"),
             "log_root_dir": LaunchConfiguration("log_root_dir"),
             "executor_log_dir": LaunchConfiguration("executor_log_dir"),
             "executor_sample_rate_hz": LaunchConfiguration("executor_sample_rate_hz"),
@@ -46,6 +49,11 @@ def generate_launch_description():
         moveit_config.to_dict(),
         {"planning_group": "gripper"},
         {"base_frame": "link_6"},
+        {
+            "runtime_mode": LaunchConfiguration("runtime_mode"),
+            "enable_standard_logging": LaunchConfiguration("enable_standard_logging"),
+            "log_root_dir": LaunchConfiguration("log_root_dir"),
+        },
     ]
 
     enable_drl_backend_arg = DeclareLaunchArgument(
@@ -71,6 +79,21 @@ def generate_launch_description():
         default_value="false",
         description="Enable CSV executor experiment logging in MoveItExecutor-based servers.",
     )
+    runtime_mode_arg = DeclareLaunchArgument(
+        "runtime_mode",
+        default_value="mock",
+        description="Runtime log branch: mock or real.",
+    )
+    enable_standard_logging_arg = DeclareLaunchArgument(
+        "enable_standard_logging",
+        default_value="true",
+        description="Enable standard summary/events/metadata logging for summary-only actions.",
+    )
+    enable_debug_logging_arg = DeclareLaunchArgument(
+        "enable_debug_logging",
+        default_value="false",
+        description="Enable standalone debug logs for child/helper actions.",
+    )
     log_root_dir_arg = DeclareLaunchArgument(
         "log_root_dir",
         default_value="/home/minhquang/ros2_dev/Log_robot_data",
@@ -78,7 +101,7 @@ def generate_launch_description():
     )
     executor_log_dir_arg = DeclareLaunchArgument(
         "executor_log_dir",
-        default_value="/home/minhquang/ros2_dev/Log_robot_data/executor_logs",
+        default_value="/home/minhquang/ros2_dev/Log_robot_data/mock/baseline/executor_internal",
         description="Directory for executor experiment logs.",
     )
     executor_sample_rate_hz_arg = DeclareLaunchArgument(
@@ -134,11 +157,22 @@ def generate_launch_description():
     )
 
     gohome_server = Node(
-        package="robot_task_manager",                          
+        package="robot_task_manager",
         executable="gohome_server",
         name="gohome_server",
         output="screen",
         parameters=common_parameters,
+    )
+
+    gohome2_server = Node(
+        package="robot_task_manager",
+        executable="gohome_server",
+        name="gohome2_server",
+        output="screen",
+        parameters=common_parameters + [{
+            "home_target": "home_2",
+            "action_name": "gohome_2",
+        }],
     )
 
     move_to_pose_server = Node(
@@ -192,6 +226,9 @@ def generate_launch_description():
             "planning_frame": "base_link",
             "ee_link": "tcp_link",
             "planner_node_name": LaunchConfiguration("planner_node_name"),
+            # codex.md: PickPlaceRL plans PLAN_TO_PRE_PICK from the current TCP; do
+            # NOT drive the arm to the fixed preposition_tcp_base first.
+            "use_preposition_before_pre_pick": False,
         }],
     )
 
@@ -270,6 +307,9 @@ def generate_launch_description():
         planner_node_name_arg,
         drl_calibrated_start_tcp_arg,
         enable_executor_logging_arg,
+        runtime_mode_arg,
+        enable_standard_logging_arg,
+        enable_debug_logging_arg,
         log_root_dir_arg,
         executor_log_dir_arg,
         executor_sample_rate_hz_arg,
@@ -283,6 +323,7 @@ def generate_launch_description():
         ),
         drl_backend,
         gohome_server,
+        gohome2_server,
         move_to_pose_server,
         move_pose_cartesian_server,
         checker_board,

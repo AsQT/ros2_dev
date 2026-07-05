@@ -62,7 +62,15 @@ install(
 )
 
 if(BUILD_TESTING)
+  find_package(Python3 REQUIRED COMPONENTS Interpreter)
+  find_package(ament_cmake_test REQUIRED)
   find_package(ament_lint_auto REQUIRED)
+  ament_add_test(wood_normalization_selftest
+    COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/test/wood_normalization_selftest.py
+    ENV PYTHONPATH=${CMAKE_CURRENT_SOURCE_DIR}:$ENV{PYTHONPATH}
+    GENERATE_RESULT_FOR_RETURN_CODE_ZERO
+    TIMEOUT 30
+  )
   set(ament_cmake_copyright_FOUND TRUE)
   set(ament_cmake_cpplint_FOUND TRUE)
   ament_lint_auto_find_test_dependencies()

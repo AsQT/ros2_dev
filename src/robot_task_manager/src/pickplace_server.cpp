@@ -23,10 +23,15 @@
 #include "robot_task_manager/action/move_to_pose_cartesian.hpp"
 #include "robot_task_manager/action/move_gripper.hpp"
 #include "robot_task_manager/log_paths.hpp"
+#include "robot_task_manager/log_plot_hook.hpp"
+#include "robot_task_manager/standard_action_logger.hpp"
 #include "tf2/LinearMath/Quaternion.h"
+#include "tf2/LinearMath/Matrix3x3.h"
 #include "tf2_ros/buffer.h"
 #include "tf2_ros/transform_listener.h"
 #include "robot_task_executor/executor_experiment_logger.hpp"
+#include <map>
+#include <vector>
 
 using namespace std::chrono_literals;
 
@@ -57,6 +62,8 @@ public:
     uint32_t call_index = 0;
     std::string csv_filename;
     std::string csv_path;
+    std::string call_dir;
+    std::string action_call_id;
     std::ofstream csv;
     rclcpp::Time start_time;
     std::string start_iso;
@@ -106,17 +113,24 @@ public:
     std::lock_guard<std::mutex> lock(mutex_);
     auto call = std::make_shared<Call>();
     call->call_index = ++next_call_index_;
+    std::ostringstream call_id;
+    call_id << "call_" << std::setw(4) << std::setfill('0') << call->call_index;
+    call->action_call_id = call_id.str();
     call->start_time = node_->get_clock()->now();
     call->start_iso = isoNow();
     call->velocity_scale = velocity_scale;
     call->pick_x = pick.x; call->pick_y = pick.y; call->pick_z = pick.z;
     call->place_x = place.x; call->place_y = place.y; call->place_z = place.z;
 
-    std::ostringstream name;
-    name << "pickplace_" << std::setw(4) << std::setfill('0') << call->call_index
-         << "_" << timeStamp("%Y%m%d_%H%M%S") << ".csv";
-    call->csv_filename = name.str();
-    call->csv_path = run_dir_ + "/" + call->csv_filename;
+    call->call_dir = (std::filesystem::path(run_dir_) / call->action_call_id).string();
+    std::error_code ec;
+    std::filesystem::create_directories(call->call_dir, ec);
+    if (ec) {
+      RCLCPP_WARN(node_->get_logger(), "PickPlaceTcpLogger: cannot create %s", call->call_dir.c_str());
+      return nullptr;
+    }
+    call->csv_filename = "trajectory_tracking.csv";
+    call->csv_path = (std::filesystem::path(call->call_dir) / call->csv_filename).string();
 
     call->csv.open(call->csv_path, std::ios::out | std::ios::trunc);
     if (!call->csv.is_open()) {
@@ -125,6 +139,8 @@ public:
       return nullptr;
     }
     writeHeader(call->csv);
+    writeMetadata(*call);
+    appendEvent(*call, "start", "action_start", "", "PickPlace log created");
     RCLCPP_INFO(node_->get_logger(), "Executor CSV saved: %s", call->csv_path.c_str());
 
     // Seed stage/set-pose immediately so no sample ever has an empty stage or
@@ -179,6 +195,7 @@ public:
       }
     }
     writeRow(call, "event", stage, has_set ? &set_pose : nullptr, status, message);
+    appendEvent(*call, stage, status, "", message);
   }
 
   void updateStage(
@@ -241,10 +258,233 @@ public:
 
     const std::string end_iso = isoNow();
     const double duration_sec = (node_->get_clock()->now() - call->start_time).seconds();
+    writeSummary(*call, end_iso, duration_sec, status, success, message);
+    appendEvent(*call, "pickplace_end", "action_result", success ? "true" : "false", message);
     appendIndexRow(*call, end_iso, duration_sec, status, success, message);
+    // codex.md §2: task-level evaluation files derived from the tracking rows.
+    writeTaskEvalFiles(*call, duration_sec, success, message);
+    robot_task_manager::runLogPlotsAsync(node_->get_logger(), call->call_dir, true);
   }
 
 private:
+  // codex.md §2: derive phase_summary.csv, tcp_tracking.csv (RPY/phase),
+  // object_tracking.csv and a task-level summary.csv by post-processing the
+  // trajectory_tracking.csv rows this call already wrote. No robot interaction.
+  struct PhaseAgg
+  {
+    std::string phase;
+    double t_first = std::numeric_limits<double>::quiet_NaN();
+    double t_last = std::numeric_limits<double>::quiet_NaN();
+    double sx = 0, sy = 0, sz = 0, sroll = 0, spitch = 0, syaw = 0;   // start actual
+    double fx = 0, fy = 0, fz = 0, froll = 0, fpitch = 0, fyaw = 0;   // final actual
+    double tx = 0, ty = 0, tz = 0, troll = 0, tpitch = 0, tyaw = 0;   // last set/target
+    double final_pos_err = std::numeric_limits<double>::quiet_NaN();
+    double final_ori_err = std::numeric_limits<double>::quiet_NaN();
+    double path_len = 0.0;
+    bool has_prev = false;
+    double px = 0, py = 0, pz = 0;
+    bool seeded = false;
+  };
+
+  static std::vector<std::string> splitCsv(const std::string & line)
+  {
+    std::vector<std::string> out;
+    std::string cur;
+    bool q = false;
+    for (size_t i = 0; i < line.size(); ++i) {
+      const char c = line[i];
+      if (q) {
+        if (c == '"') {
+          if (i + 1 < line.size() && line[i + 1] == '"') {cur += '"'; ++i;} else {q = false;}
+        } else {cur += c;}
+      } else if (c == '"') {q = true;}
+      else if (c == ',') {out.push_back(cur); cur.clear();}
+      else {cur += c;}
+    }
+    out.push_back(cur);
+    return out;
+  }
+
+  static double toRpyComponent(double qx, double qy, double qz, double qw, int idx)
+  {
+    tf2::Quaternion tq(qx, qy, qz, qw);
+    if (tq.length2() <= 1e-12) {return std::numeric_limits<double>::quiet_NaN();}
+    tq.normalize();
+    double r, p, y;
+    tf2::Matrix3x3(tq).getRPY(r, p, y);
+    return idx == 0 ? r : (idx == 1 ? p : y);
+  }
+
+  void writeTaskEvalFiles(const Call & call, double total_time_s, bool success,
+    const std::string & message)
+  {
+    const std::filesystem::path dir(call.call_dir);
+    std::ifstream in(call.csv_path);
+    if (!in.is_open()) {
+      return;
+    }
+    std::string line;
+    if (!std::getline(in, line)) {return;}
+    const auto header = splitCsv(line);
+    auto idx = [&header](const std::string & n) -> int {
+      for (size_t i = 0; i < header.size(); ++i) {if (header[i] == n) {return static_cast<int>(i);}}
+      return -1;
+    };
+    const int i_t = idx("time_s"), i_stage = idx("stage");
+    const int i_ax = idx("actual_x"), i_ay = idx("actual_y"), i_az = idx("actual_z");
+    const int i_aqx = idx("actual_qx"), i_aqy = idx("actual_qy"), i_aqz = idx("actual_qz"), i_aqw = idx("actual_qw");
+    const int i_sx = idx("set_x"), i_sy = idx("set_y"), i_sz = idx("set_z");
+    const int i_sqx = idx("set_qx"), i_sqy = idx("set_qy"), i_sqz = idx("set_qz"), i_sqw = idx("set_qw");
+    const int i_pe = idx("position_error_m"), i_oe = idx("orientation_error_rad");
+
+    auto num = [](const std::vector<std::string> & f, int i) -> double {
+      if (i < 0 || i >= static_cast<int>(f.size()) || f[i].empty()) {
+        return std::numeric_limits<double>::quiet_NaN();
+      }
+      try {return std::stod(f[i]);} catch (...) {return std::numeric_limits<double>::quiet_NaN();}
+    };
+
+    std::vector<PhaseAgg> phases;
+    std::map<std::string, size_t> phase_idx;
+    std::ofstream tcp(dir / "tcp_tracking.csv", std::ios::out | std::ios::trunc);
+    if (tcp.is_open()) {
+      tcp << "t_s,phase,tcp_x,tcp_y,tcp_z,tcp_roll,tcp_pitch,tcp_yaw,"
+             "target_x,target_y,target_z,target_roll,target_pitch,target_yaw,"
+             "position_error_m,orientation_error_rad,distance_to_phase_target,path_length_so_far_m\n";
+    }
+    double total_path = 0.0, max_err = 0.0, sum_pe2 = 0.0, sum_oe2 = 0.0;
+    uint64_t nerr = 0;
+    bool have_last = false;
+    double lx = 0, ly = 0, lz = 0;
+    auto fmt = [](double v) {
+      if (!std::isfinite(v)) {return std::string();}
+      std::ostringstream o; o << std::fixed << std::setprecision(6) << v; return o.str();
+    };
+
+    while (std::getline(in, line)) {
+      const auto f = splitCsv(line);
+      const std::string stage = (i_stage >= 0 && i_stage < static_cast<int>(f.size())) ? f[i_stage] : "";
+      const double t = num(f, i_t);
+      const double ax = num(f, i_ax), ay = num(f, i_ay), az = num(f, i_az);
+      const double aroll = toRpyComponent(num(f, i_aqx), num(f, i_aqy), num(f, i_aqz), num(f, i_aqw), 0);
+      const double apitch = toRpyComponent(num(f, i_aqx), num(f, i_aqy), num(f, i_aqz), num(f, i_aqw), 1);
+      const double ayaw = toRpyComponent(num(f, i_aqx), num(f, i_aqy), num(f, i_aqz), num(f, i_aqw), 2);
+      const double sx = num(f, i_sx), sy = num(f, i_sy), sz = num(f, i_sz);
+      const double sroll = toRpyComponent(num(f, i_sqx), num(f, i_sqy), num(f, i_sqz), num(f, i_sqw), 0);
+      const double spitch = toRpyComponent(num(f, i_sqx), num(f, i_sqy), num(f, i_sqz), num(f, i_sqw), 1);
+      const double syaw = toRpyComponent(num(f, i_sqx), num(f, i_sqy), num(f, i_sqz), num(f, i_sqw), 2);
+      const double pe = num(f, i_pe), oe = num(f, i_oe);
+
+      double step = 0.0;
+      if (have_last && std::isfinite(ax)) {
+        const double dx = ax - lx, dy = ay - ly, dz = az - lz;
+        step = std::sqrt(dx * dx + dy * dy + dz * dz);
+        total_path += step;
+      }
+      if (std::isfinite(ax)) {lx = ax; ly = ay; lz = az; have_last = true;}
+      if (std::isfinite(pe)) {sum_pe2 += pe * pe; max_err = std::max(max_err, pe); ++nerr;}
+      if (std::isfinite(oe)) {sum_oe2 += oe * oe;}
+      double dist_phase_target = std::numeric_limits<double>::quiet_NaN();
+      if (std::isfinite(sx) && std::isfinite(ax)) {
+        dist_phase_target = std::sqrt((sx - ax) * (sx - ax) + (sy - ay) * (sy - ay) + (sz - az) * (sz - az));
+      }
+      if (tcp.is_open()) {
+        tcp << fmt(t) << "," << stage << "," << fmt(ax) << "," << fmt(ay) << "," << fmt(az) << ","
+            << fmt(aroll) << "," << fmt(apitch) << "," << fmt(ayaw) << ","
+            << fmt(sx) << "," << fmt(sy) << "," << fmt(sz) << ","
+            << fmt(sroll) << "," << fmt(spitch) << "," << fmt(syaw) << ","
+            << fmt(pe) << "," << fmt(oe) << "," << fmt(dist_phase_target) << "," << fmt(total_path) << "\n";
+      }
+
+      // per-phase aggregation
+      auto pit = phase_idx.find(stage);
+      if (pit == phase_idx.end()) {
+        phase_idx[stage] = phases.size();
+        phases.push_back(PhaseAgg{});
+        phases.back().phase = stage;
+        pit = phase_idx.find(stage);
+      }
+      PhaseAgg & pa = phases[pit->second];
+      if (!pa.seeded && std::isfinite(ax)) {
+        pa.t_first = t; pa.sx = ax; pa.sy = ay; pa.sz = az; pa.sroll = aroll; pa.spitch = apitch; pa.syaw = ayaw;
+        pa.seeded = true;
+      }
+      pa.t_last = t;
+      if (std::isfinite(ax)) {pa.fx = ax; pa.fy = ay; pa.fz = az; pa.froll = aroll; pa.fpitch = apitch; pa.fyaw = ayaw;}
+      if (std::isfinite(sx)) {pa.tx = sx; pa.ty = sy; pa.tz = sz; pa.troll = sroll; pa.tpitch = spitch; pa.tyaw = syaw;}
+      if (std::isfinite(pe)) {pa.final_pos_err = pe;}
+      if (std::isfinite(oe)) {pa.final_ori_err = oe;}
+      if (pa.has_prev && std::isfinite(ax)) {
+        const double dx = ax - pa.px, dy = ay - pa.py, dz = az - pa.pz;
+        pa.path_len += std::sqrt(dx * dx + dy * dy + dz * dz);
+      }
+      if (std::isfinite(ax)) {pa.px = ax; pa.py = ay; pa.pz = az; pa.has_prev = true;}
+    }
+    if (tcp.is_open()) {tcp.flush();}
+
+    // phase_summary.csv
+    std::ofstream ps(dir / "phase_summary.csv", std::ios::out | std::ios::trunc);
+    if (ps.is_open()) {
+      ps << "phase,start_time_s,end_time_s,duration_s,success,failed_reason,"
+            "start_tcp_x,start_tcp_y,start_tcp_z,start_tcp_roll,start_tcp_pitch,start_tcp_yaw,"
+            "target_tcp_x,target_tcp_y,target_tcp_z,target_tcp_roll,target_tcp_pitch,target_tcp_yaw,"
+            "final_tcp_x,final_tcp_y,final_tcp_z,final_tcp_roll,final_tcp_pitch,final_tcp_yaw,"
+            "final_position_error_m,final_orientation_error_rad,path_length_m,planning_time_s,execution_time_s,"
+            "rl_num_points,moveit_num_points,min_obstacle_clearance_m\n";
+      for (const auto & pa : phases) {
+        const double dur = (std::isfinite(pa.t_first) && std::isfinite(pa.t_last)) ? (pa.t_last - pa.t_first) : std::numeric_limits<double>::quiet_NaN();
+        ps << pa.phase << "," << fmt(pa.t_first) << "," << fmt(pa.t_last) << "," << fmt(dur) << ",,"  // success,failed_reason: per-phase not tracked
+           << "," << fmt(pa.sx) << "," << fmt(pa.sy) << "," << fmt(pa.sz) << "," << fmt(pa.sroll) << "," << fmt(pa.spitch) << "," << fmt(pa.syaw)
+           << "," << fmt(pa.tx) << "," << fmt(pa.ty) << "," << fmt(pa.tz) << "," << fmt(pa.troll) << "," << fmt(pa.tpitch) << "," << fmt(pa.tyaw)
+           << "," << fmt(pa.fx) << "," << fmt(pa.fy) << "," << fmt(pa.fz) << "," << fmt(pa.froll) << "," << fmt(pa.fpitch) << "," << fmt(pa.fyaw)
+           << "," << fmt(pa.final_pos_err) << "," << fmt(pa.final_ori_err) << "," << fmt(pa.path_len)
+           << ",,,not_applicable,not_applicable,not_applicable\n";  // planning/execution time not separable; RL/obstacle N/A for baseline
+      }
+    }
+
+    // object_tracking.csv — initial pick/place object poses from the goal.
+    std::ofstream ot(dir / "object_tracking.csv", std::ios::out | std::ios::trunc);
+    if (ot.is_open()) {
+      ot << "data_available,empty_reason,t_s,phase,object_id,object_source,"
+            "object_x,object_y,object_z,object_roll,object_pitch,object_yaw,"
+            "object_confidence,object_attached,object_dropped\n";
+      ot << "true,,0,pick,unknown,goal_pose," << fmt(call.pick_x) << "," << fmt(call.pick_y) << "," << fmt(call.pick_z) << ",,,,,,\n";
+      ot << "true,," << fmt(total_time_s) << ",place,unknown,goal_pose," << fmt(call.place_x) << "," << fmt(call.place_y) << "," << fmt(call.place_z) << ",,,,,,\n";
+    }
+
+    // task-level summary.csv
+    const double rmse_pos = nerr ? std::sqrt(sum_pe2 / static_cast<double>(nerr)) : std::numeric_limits<double>::quiet_NaN();
+    const double rmse_ori = nerr ? std::sqrt(sum_oe2 / static_cast<double>(nerr)) : std::numeric_limits<double>::quiet_NaN();
+    auto phaseTime = [&phases](const std::string & key) {
+      double s = 0.0; bool any = false;
+      for (const auto & pa : phases) {
+        if (pa.phase.find(key) != std::string::npos && std::isfinite(pa.t_first) && std::isfinite(pa.t_last)) {
+          s += (pa.t_last - pa.t_first); any = true;
+        }
+      }
+      return any ? s : std::numeric_limits<double>::quiet_NaN();
+    };
+    std::ofstream ts(dir / "summary.csv", std::ios::out | std::ios::trunc);
+    if (ts.is_open()) {
+      ts << "action_name,hardware_mode,evaluation_group,run_id,call_id,goal_uuid,task_success,failed_phase,"
+            "failed_stage,failure_reason,message,execute_requested,planning_only,"
+            "total_time_s,total_planning_time_s,total_execution_time_s,pick_time_s,place_time_s,"
+            "pick_success,place_success,pick_position_error_m,place_position_error_m,"
+            "pick_orientation_error_rad,place_orientation_error_rad,"
+            "total_tcp_path_length_m,max_tcp_error_m,rmse_tcp_position_m,rmse_tcp_orientation_rad,path_efficiency,"
+            "object_source,object_id,object_dropped,total_rl_points,total_moveit_points,"
+            "min_obstacle_clearance_m,collision_detected,workspace_violation\n";
+      ts << "pick_place," << runtimeModeFromRunDir() << ",03_task_execution_eval,"
+         << std::filesystem::path(run_dir_).filename().string() << "," << call.action_call_id << ",,"
+         << (success ? "true" : "false") << ",,"
+         << (success ? "" : "see_message") << ",," << csvEscape(message) << ",true,false,"
+         << fmt(total_time_s) << ",,," << fmt(phaseTime("pick")) << "," << fmt(phaseTime("place")) << ","
+         << (success ? "true" : "") << "," << (success ? "true" : "") << ",,,,,"
+         << fmt(total_path) << "," << fmt(max_err) << "," << fmt(rmse_pos) << "," << fmt(rmse_ori) << ",,"
+         << "goal_pose,unknown,,not_applicable,not_applicable,not_applicable,,\n";
+    }
+  }
+
   void sampleLoop(std::shared_ptr<Call> call)
   {
     const double period_sec = 1.0 / sample_rate_hz_;
@@ -316,9 +556,9 @@ private:
     const double time_sec = (node_->get_clock()->now() - call->start_time).seconds();
 
     std::ostringstream row;
+    (void)row_type;
     row << formatDouble(time_sec) << ","
-        << csvEscape(stage) << ","
-        << csvEscape(row_type) << ",";
+        << csvEscape(stage) << ",";
 
     if (set_pose) {
       row << formatDouble(set_pose->position.x) << "," << formatDouble(set_pose->position.y) << ","
@@ -350,19 +590,15 @@ private:
       row << ",,,,,";
     }
 
-    row << csvEscape(status) << ",";
-    if (success) {
-      row << (*success ? "true" : "false");
-    }
-    row << ",";
     std::string full_message = message;
     if (!tf_warning.empty()) {
       full_message = full_message.empty() ? tf_warning : (full_message + " | " + tf_warning);
     }
-    row << csvEscape(full_message) << ","
-        << call->call_index << "," << formatDouble(call->velocity_scale) << ","
-        << formatDouble(call->pick_x) << "," << formatDouble(call->pick_y) << "," << formatDouble(call->pick_z) << ","
-        << formatDouble(call->place_x) << "," << formatDouble(call->place_y) << "," << formatDouble(call->place_z);
+    row << csvEscape(status) << ",";
+    if (success) {
+      row << (*success ? "true" : "false");
+    }
+    row << "," << csvEscape(full_message);
 
     std::lock_guard<std::mutex> lock(mutex_);
     call->csv << row.str() << "\n";
@@ -372,12 +608,11 @@ private:
 
   void writeHeader(std::ofstream & csv)
   {
-    csv << "time_sec,stage,row_type,"
+    csv << "time_s,stage,"
            "set_x,set_y,set_z,set_qx,set_qy,set_qz,set_qw,"
            "actual_x,actual_y,actual_z,actual_qx,actual_qy,actual_qz,actual_qw,"
-           "error_x,error_y,error_z,error_pos_norm,error_ori_rad,"
-           "status,success,message,"
-           "call_index,velocity_scale,pick_x,pick_y,pick_z,place_x,place_y,place_z\n";
+           "error_x,error_y,error_z,position_error_m,orientation_error_rad,"
+           "status,success,message\n";
     csv.flush();
   }
 
@@ -404,7 +639,7 @@ private:
       if (!idx.is_open()) {
         return;
       }
-      idx << "call_index,action_name,csv_file,start_time,end_time,duration_sec,"
+      idx << "call_index,action_name,call_dir,start_time,end_time,duration_sec,"
              "status,success,message,row_count\n";
       ready_ = true;
       RCLCPP_INFO(node_->get_logger(), "PickPlaceTcpLogger run dir: %s", run_dir_.c_str());
@@ -430,7 +665,7 @@ private:
     }
     idx << std::setw(4) << std::setfill('0') << call.call_index << ","
         << "/pickplace" << ","
-        << csvEscape(call.csv_filename) << ","
+        << csvEscape(call.action_call_id) << ","
         << call.start_iso << ","
         << end_iso << ","
         << formatDouble(duration_sec) << ","
@@ -439,6 +674,94 @@ private:
         << csvEscape(message) << ","
         << call.row_count << "\n";
     idx.flush();
+  }
+
+  std::string runtimeModeFromRunDir() const
+  {
+    for (const auto & part : std::filesystem::path(run_dir_)) {
+      const auto s = part.string();
+      if (s == "mock" || s == "real") {
+        return s;
+      }
+    }
+    return "mock";
+  }
+
+  void appendEvent(
+    const Call & call,
+    const std::string & stage,
+    const std::string & event_type,
+    const std::string & success,
+    const std::string & message)
+  {
+    const auto path = std::filesystem::path(call.call_dir) / "events.csv";
+    const bool new_file = !std::filesystem::exists(path);
+    std::ofstream out(path, std::ios::out | std::ios::app);
+    if (!out.is_open()) {
+      return;
+    }
+    if (new_file) {
+      out << "timestamp_iso,t_rel_sec,stage,event_type,success,message\n";
+    }
+    out << csvEscape(isoNow()) << ","
+        << formatDouble((node_->get_clock()->now() - call.start_time).seconds()) << ","
+        << csvEscape(stage) << "," << csvEscape(event_type) << ","
+        << success << "," << csvEscape(message) << "\n";
+  }
+
+  void writeMetadata(const Call & call)
+  {
+    std::ofstream out(std::filesystem::path(call.call_dir) / "metadata.json", std::ios::out | std::ios::trunc);
+    if (!out.is_open()) {
+      return;
+    }
+    out << "{\n"
+        << "  \"runtime_mode\": \"" << runtimeModeFromRunDir() << "\",\n"
+        << "  \"log_group\": \"baseline\",\n"
+        << "  \"action_name\": \"pick_place\",\n"
+        << "  \"run_id\": \"" << std::filesystem::path(run_dir_).filename().string() << "\",\n"
+        << "  \"action_call_id\": \"" << call.action_call_id << "\",\n"
+        << "  \"parent_action_call_id\": \"\",\n"
+        << "  \"goal_uuid\": \"\",\n"
+        << "  \"robot_model\": \"\",\n"
+        << "  \"base_frame\": \"" << base_frame_ << "\",\n"
+        << "  \"tcp_frame\": \"" << tcp_frame_ << "\",\n"
+        << "  \"hardware_backend\": \"\",\n"
+        << "  \"vision_source\": \"\",\n"
+        << "  \"planner_type\": \"baseline\",\n"
+        << "  \"model_path\": \"\",\n"
+        << "  \"created_by_node\": \"" << node_->get_name() << "\",\n"
+        << "  \"launch_context\": \"\"\n"
+        << "}\n";
+  }
+
+  void writeSummary(
+    const Call & call,
+    const std::string & end_iso,
+    double duration_sec,
+    const std::string & status,
+    bool success,
+    const std::string & message)
+  {
+    std::ofstream out(std::filesystem::path(call.call_dir) / "summary.csv", std::ios::out | std::ios::trunc);
+    if (!out.is_open()) {
+      return;
+    }
+    out << robot_task_manager::standardSummaryHeader()
+        << ",pick_x,pick_y,pick_z,place_x,place_y,place_z,execution_time_s,final_position_error_m,final_orientation_error_rad,object_grasp_success,object_place_success\n";
+    out << runtimeModeFromRunDir() << ",baseline,pick_place,"
+        << std::filesystem::path(run_dir_).filename().string() << ","
+        << call.action_call_id << ",,,"
+        << call.start_iso << "," << end_iso << ",,"
+        << (success ? "true" : "false") << ","
+        << (success ? "" : csvEscape(status)) << ","
+        << (success ? "" : csvEscape(status)) << ","
+        << csvEscape(message) << ","
+        << formatDouble(duration_sec) << ","
+        << formatDouble(call.pick_x) << "," << formatDouble(call.pick_y) << "," << formatDouble(call.pick_z) << ","
+        << formatDouble(call.place_x) << "," << formatDouble(call.place_y) << "," << formatDouble(call.place_z) << ","
+        << formatDouble(duration_sec) << ",,,"
+        << (success ? "true" : "false") << "," << (success ? "true" : "false") << "\n";
   }
 
   static double orientationErrorRad(
@@ -541,13 +864,16 @@ public:
   PickPlaceActionServer()
   : Node("pickplace_action_server")
   {
-    approach_height_ = declare_parameter<double>("approach_height", 0.10);
-    open_gripper_position_ = declare_parameter<double>("open_gripper_position", 0.048);
+    approach_height_ = declare_parameter<double>("approach_height", 0.050);
+    pre_pick_z_offset_ = declare_parameter<double>("pre_pick_z_offset_m", 0.05);
+    RCLCPP_INFO(get_logger(), "PickPlace pre_pick_z_offset_m=%.4f", pre_pick_z_offset_);
+    open_gripper_position_ = declare_parameter<double>("open_gripper_position", 0.049);
     server_wait_timeout_s_ = declare_parameter<double>("server_wait_timeout_s", 5.0);
     action_result_timeout_s_ = declare_parameter<double>("action_result_timeout_s", 90.0);
 
     enable_executor_logging_ = declare_parameter<bool>("enable_executor_logging", false);
     log_root_dir_            = declare_parameter<std::string>("log_root_dir", robot_task_manager::kDefaultLogRootDir);
+    runtime_mode_            = declare_parameter<std::string>("runtime_mode", "mock");
     executor_log_dir_        = declare_parameter<std::string>(
       "executor_log_dir", robot_task_manager::executorLogBaseDir(log_root_dir_));
     executor_sample_rate_hz_ = declare_parameter<double>("executor_sample_rate_hz", 50.0);
@@ -581,7 +907,7 @@ public:
         log_tf_listener_ = std::make_shared<tf2_ros::TransformListener>(*log_tf_buffer_);
         logger_ = std::make_shared<robot_task_executor::ExecutorExperimentLogger>(
           shared_from_this(), log_tf_buffer_,
-          robot_task_manager::executorActionLogDir(log_root_dir_, executor_log_dir_, "PickPlace"),
+          robot_task_manager::executorActionLogDir(log_root_dir_, executor_log_dir_, runtime_mode_, "PickPlace"),
           executor_sample_rate_hz_,
           executor_base_frame_, executor_tcp_frame_);
       } catch (const std::exception & e) {
@@ -600,7 +926,7 @@ public:
       }
       tcp_logger_ = std::make_shared<PickPlaceTcpLogger>(
         shared_from_this(), log_tf_buffer_,
-        robot_task_manager::executorActionLogDir(log_root_dir_, executor_log_dir_, "PickPlace"),
+        robot_task_manager::executorActionLogDir(log_root_dir_, executor_log_dir_, runtime_mode_, "PickPlace"),
         executor_sample_rate_hz_,
         executor_base_frame_, executor_tcp_frame_);
     } catch (const std::exception & e) {
@@ -610,13 +936,15 @@ public:
   }
 
 private:
-  double approach_height_ = 0.10;
-  double open_gripper_position_ = 0.048;
+  double approach_height_ = 0.05;
+  double pre_pick_z_offset_ = 0.05;
+  double open_gripper_position_ = 0.049;
   double server_wait_timeout_s_ = 5.0;
   double action_result_timeout_s_ = 90.0;
 
   bool enable_executor_logging_{false};
   std::string log_root_dir_;
+  std::string runtime_mode_;
   std::string executor_log_dir_;
   double executor_sample_rate_hz_{50.0};
   std::string executor_base_frame_;
@@ -639,6 +967,51 @@ private:
   MoveToPoseCartesianGoalHandle::SharedPtr active_move_to_pose_cartesian_goal_;
   MoveGripperGoalHandle::SharedPtr active_move_gripper_goal_;
 
+  // codex.md (goal-rejected diagnosis): whether any downstream sub-goal is still
+  // held. /pickplace uses ACCEPT_AND_EXECUTE and never rejects on "busy", so this
+  // is reported for diagnostics only — it is NOT a reject condition.
+  bool downstream_busy()
+  {
+    std::lock_guard<std::mutex> lock(active_goal_mutex_);
+    return active_move_to_pose_goal_ || active_move_to_pose_cartesian_goal_ ||
+           active_move_gripper_goal_;
+  }
+
+  // codex.md (goal-rejected diagnosis): always log (RCLCPP_WARN, not gated on
+  // enable_tcp_log) the full reject reason + goal contents + current flags, so a
+  // rejected /pickplace goal is never silent again.
+  rclcpp_action::GoalResponse reject_goal(
+    const std::string & reason,
+    const std::shared_ptr<const PickPlace::Goal> & goal,
+    bool log_enabled)
+  {
+    RCLCPP_WARN(
+      get_logger(),
+      "[PickPlaceServer] reject goal reason=%s running=%s execute=%s "
+      "velocity_scale=%.4f gripper=%.4f pose_pick=(%.4f, %.4f, %.4f) "
+      "pose_place=(%.4f, %.4f, %.4f)",
+      reason.c_str(),
+      downstream_busy() ? "true" : "false",
+      goal->execute ? "true" : "false",
+      goal->velocity_scale, goal->gripper,
+      goal->pose_pick.position.x, goal->pose_pick.position.y, goal->pose_pick.position.z,
+      goal->pose_place.position.x, goal->pose_place.position.y, goal->pose_place.position.z);
+    if (logger_ && log_enabled) {
+      logger_->log_lifecycle_event(
+        "/pickplace", "action_goal_rejected", "handle_goal", "rejected",
+        reason, "", action_call_id_);
+    }
+    return rclcpp_action::GoalResponse::REJECT;
+  }
+
+  static bool pose_finite(const geometry_msgs::msg::Pose & p)
+  {
+    return std::isfinite(p.position.x) && std::isfinite(p.position.y) &&
+           std::isfinite(p.position.z) &&
+           std::isfinite(p.orientation.x) && std::isfinite(p.orientation.y) &&
+           std::isfinite(p.orientation.z) && std::isfinite(p.orientation.w);
+  }
+
   rclcpp_action::GoalResponse handle_goal(
     const rclcpp_action::GoalUUID &,
     std::shared_ptr<const PickPlace::Goal> goal)
@@ -654,29 +1027,31 @@ private:
       action_call_id_ = 0;
     }
 
+    // Note: /pickplace is ACCEPT_AND_EXECUTE and holds NO server-side busy/running
+    // flag that could reject a goal — there is no PICKPLACE_REJECT_BUSY path here.
     if (!std::isfinite(goal->velocity_scale) ||
         goal->velocity_scale <= 0.0 ||
         goal->velocity_scale > 0.2)
     {
-      RCLCPP_WARN(get_logger(), "Reject PickPlace goal: velocity_scale must be in (0, 0.2]");
-      if (logger_ && log_enabled) {
-        logger_->log_lifecycle_event(
-          "/pickplace", "action_goal_rejected", "handle_goal", "rejected",
-          "velocity_scale must be in (0, 0.2]", "", action_call_id_);
-      }
-      return rclcpp_action::GoalResponse::REJECT;
+      return reject_goal("PICKPLACE_REJECT_INVALID_VELOCITY", goal, log_enabled);
     }
 
     if (!std::isfinite(goal->gripper) || goal->gripper < 0.0) {
-      RCLCPP_WARN(get_logger(), "Reject PickPlace goal: gripper invalid");
-      if (logger_ && log_enabled) {
-        logger_->log_lifecycle_event(
-          "/pickplace", "action_goal_rejected", "handle_goal", "rejected",
-          "gripper invalid", "", action_call_id_);
-      }
-      return rclcpp_action::GoalResponse::REJECT;
+      return reject_goal("PICKPLACE_REJECT_INVALID_GRIPPER", goal, log_enabled);
     }
 
+    if (!pose_finite(goal->pose_pick)) {
+      return reject_goal("PICKPLACE_REJECT_INVALID_PICK_POSE", goal, log_enabled);
+    }
+
+    if (!pose_finite(goal->pose_place)) {
+      return reject_goal("PICKPLACE_REJECT_INVALID_PLACE_POSE", goal, log_enabled);
+    }
+
+    RCLCPP_INFO(
+      get_logger(),
+      "[PickPlaceServer] accept goal execute=%s velocity_scale=%.4f gripper=%.4f",
+      goal->execute ? "true" : "false", goal->velocity_scale, goal->gripper);
     if (logger_ && log_enabled) {
       logger_->log_lifecycle_event(
         "/pickplace", "action_goal_accepted", "handle_goal", "accepted", "",
@@ -1076,8 +1451,11 @@ void execute(
     return;
   }
 
+  // codex.md Phase 6: pre_pick uses its own configurable Z offset (default
+  // 0.05 m) so the descent above the pick object is 50 mm. The place approach
+  // keeps the original approach_height_ (unchanged by codex.md Phase 6).
   geometry_msgs::msg::Pose pick_approach = goal->pose_pick;
-  pick_approach.position.z += approach_height_;
+  pick_approach.position.z += pre_pick_z_offset_;
 
   geometry_msgs::msg::Pose place_approach = goal->pose_place;
   place_approach.position.z += approach_height_;

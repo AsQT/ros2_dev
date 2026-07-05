@@ -438,6 +438,74 @@ bool RobotGuiNode::best_wood_pose(
   return true;
 }
 
+bool RobotGuiNode::wood_candidates_base(
+  const std::string & target_frame,
+  std::vector<WoodCandidate> & candidates,
+  std::string & error) const
+{
+  candidates.clear();
+  robot_vision_pipeline_msgs::msg::WoodArray snapshot;
+  {
+    std::lock_guard<std::mutex> lock(vision_mutex_);
+    if (!have_wood_) {
+      error = "No wood detection received yet on " + wood_objects_topic_;
+      return false;
+    }
+    if ((now() - latest_wood_stamp_).seconds() > vision_timeout_sec_) {
+      error = "Wood detection is stale (older than " +
+        std::to_string(vision_timeout_sec_) + "s)";
+      return false;
+    }
+    snapshot = latest_wood_;
+  }
+
+  for (const auto & wood : snapshot.woods) {
+    WoodCandidate c;
+    c.wood_id = wood.wood_id;
+    c.confidence = wood.confidence;
+    c.valid = true;
+
+    geometry_msgs::msg::PoseStamped in;
+    in.header = snapshot.header;
+    in.pose = wood.pose;
+    geometry_msgs::msg::Pose pose_base;
+    if (in.header.frame_id.empty() || in.header.frame_id == target_frame) {
+      pose_base = in.pose;
+    } else {
+      try {
+        const auto out = tf_buffer_->transform(in, target_frame, tf2::durationFromSec(0.2));
+        pose_base = out.pose;
+      } catch (const tf2::TransformException & e) {
+        // Keep the candidate but mark it invalid so it is counted in
+        // number_of_wood_detected yet never selected (codex.md Phase 3 step 2).
+        c.valid = false;
+        c.invalid_reason = std::string("tf_transform_failed: ") + e.what();
+        candidates.push_back(c);
+        continue;
+      }
+    }
+    c.x = pose_base.position.x;
+    c.y = pose_base.position.y;
+    c.z = pose_base.position.z;
+    // codex.md Phase 5: carry the detection yaw when the (transformed)
+    // orientation is a real, non-identity quaternion. A plain axis-aligned bbox
+    // detection is published with identity orientation (see
+    // yolo_wood_center_to_world.py) -> has_yaw stays false and callers keep the
+    // default downward pick orientation (NO_TARGET_YAW_AVAILABLE).
+    const auto & q = pose_base.orientation;
+    if (std::abs(q.x) + std::abs(q.y) + std::abs(q.z) > 1e-6) {
+      double roll = 0.0;
+      double pitch = 0.0;
+      double yaw = 0.0;
+      tf2::Matrix3x3(tf2::Quaternion(q.x, q.y, q.z, q.w)).getRPY(roll, pitch, yaw);
+      c.has_yaw = true;
+      c.yaw_rad = yaw;
+    }
+    candidates.push_back(c);
+  }
+  return true;
+}
+
 bool RobotGuiNode::best_box_pose(
   const std::string & target_frame,
   geometry_msgs::msg::Pose & pose,

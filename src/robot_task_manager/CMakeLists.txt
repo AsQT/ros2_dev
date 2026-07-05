@@ -179,6 +179,7 @@ ament_target_dependencies(drl_pickplace_server
   tf2_ros
   tf2_geometry_msgs
   robot_task_executor
+  robot_vision_pipeline_msgs
 )
 target_link_libraries(drl_pickplace_server
   "${cpp_typesupport_target}"
@@ -295,6 +296,8 @@ install(PROGRAMS
   scripts/drl_pick_place_campaign_runner.py
   scripts/repeatability_test_client.py
   scripts/analyze_pickplace_tcp_logs.py
+  scripts/log_data_viewer_gui.py
+  scripts/plot_action_log.py
   DESTINATION lib/${PROJECT_NAME}
 )
 

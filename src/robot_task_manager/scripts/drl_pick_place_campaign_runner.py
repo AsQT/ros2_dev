@@ -36,6 +36,8 @@ class DrlPickPlaceCampaignRunner(Node):
         self.declare_parameter("num_runs", 20)
         self.declare_parameter("save_csv", True)
         self.declare_parameter("output_dir", "")
+        self.declare_parameter("log_root_dir", "/home/minhquang/ros2_dev/Log_robot_data")
+        self.declare_parameter("runtime_mode", "mock")
         self.declare_parameter("startup_delay_sec", 0.0)
         self.declare_parameter("grasp_tcp_offset_z", 0.015)
         self.declare_parameter("place_xyz", [0.46, 0.12, 0.12])
@@ -555,10 +557,25 @@ class DrlPickPlaceCampaignRunner(Node):
                 output_dir = Path(output_dir_param)
             else:
                 ts = datetime.now().strftime("%Y%m%d_%H%M%S")
-                output_dir = Path.home() / "ros2_dev_2" / "reports" / f"campaign_{ts}"
+                runtime_mode = str(self.get_parameter("runtime_mode").value)
+                if runtime_mode not in ("mock", "real"):
+                    runtime_mode = "mock"
+                output_dir = (
+                    Path(str(self.get_parameter("log_root_dir").value))
+                    / runtime_mode
+                    / "rl"
+                    / "pick_place_rl"
+                    / f"campaign_{ts}"
+                )
             self.get_logger().info(f"[Campaign] Output dir: {output_dir}")
         else:
-            output_dir = Path("/tmp/campaign_dry_run")
+            output_dir = (
+                Path(str(self.get_parameter("log_root_dir").value))
+                / str(self.get_parameter("runtime_mode").value)
+                / "rl"
+                / "pick_place_rl"
+                / "campaign_dry_run"
+            )
 
         startup_delay = float(self.get_parameter("startup_delay_sec").value)
         if startup_delay > 0.0:

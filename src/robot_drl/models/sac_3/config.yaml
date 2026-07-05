@@ -1,0 +1,321 @@
+# =============================================================================
+# DRL Cartesian Path Planning — Unified Configuration
+# =============================================================================
+# Single source of truth for ALL algorithms: TD3, DDPG, SAC, PPO.
+#
+# Usage:
+#   python Training/train_td3.py --config config/environment.yaml
+#   python Training/train_ddpg.py --config config/environment.yaml
+#   python Training/train_sac.py  --config config/environment.yaml
+#   python Training/train_ppo.py  --config config/environment.yaml
+#
+# Algorithm selection is done by each training script, NOT by this YAML.
+# Each script defaults to its own algorithm but reads shared env/reward settings
+# from this file.  Only the algorithm-specific hyperparameter block (td3/ddpg/sac/ppo)
+# differs per algorithm.
+# =============================================================================
+
+project:
+  name: DRL_Pathplanning_trainning
+  robot_name: FRAME_ONLY
+  unit: meter
+
+# ---------------------------------------------------------------------------
+# Environment parameters — shared by all algorithms
+# ---------------------------------------------------------------------------
+environment:
+  observation_type: frame_only  # only frame_only is supported
+  action_step: 0.01            # metres per normalised action step
+  max_episode_steps: 300       # max step() calls per episode
+
+# ---------------------------------------------------------------------------
+# Workspace / search region — shared by all algorithms
+# ---------------------------------------------------------------------------
+workspace:
+  x_min: 0.25
+  x_max: 0.5
+  y_min: -0.15
+  y_max: 0.15
+  z_min: 0.02
+  z_max: 0.3
+
+# ---------------------------------------------------------------------------
+# Start position — shared by all algorithms
+# ---------------------------------------------------------------------------
+start:
+  mode: random              # fixed | random
+  fixed_position: [0.30, 0.00, 0.30]
+  random_bounds:
+    min: [0.25, -0.15, 0.1]
+    max: [0.5, 0.15, 0.30]
+
+# ---------------------------------------------------------------------------
+# Target region — shared by all algorithms
+# ---------------------------------------------------------------------------
+target:
+  mode: random             # fixed | random
+  fixed_position: [0.30, 0.00, 0.10]
+  random_bounds:
+    min: [0.25, -0.15, 0.02]
+    max: [0.5, 0.15, 0.15]
+
+# ---------------------------------------------------------------------------
+# Obstacle / Box — shared by all algorithms
+# ---------------------------------------------------------------------------
+obstacle:
+  enabled: true        # true=include box obstacle in environment
+  mode: random          # fixed | random
+  name: small_obstacle
+  type: box
+  center: [0.0, 0.000, 0.080] # overridden by random mode
+  size: [0.100, 0.100, 0.100] # overridden by random mode
+  safety_margin: 0.03 #` minimum distance to maintain from obstacle for success
+
+  random_bounds:
+    min: [0.28, -0.10, 0.080] # overridden by fixed mode
+    max: [0.42, 0.10, 0.080] # overridden by fixed mode
+
+  size_random: # randomize box size within these bounds (overrides fixed size)
+    enabled: true 
+    length_min: 0.05 # overridden by fixed mode
+    length_max: 0.1 # overridden by fixed mode
+    width_min: 0.05
+    width_max: 0.1
+    height_min: 0.05
+    height_max: 0.15
+    place_on_table: true
+    avoid_target_overlap: true
+    overlap_margin: 0.02
+    max_resample_attempts: 50
+
+  visual:
+    enabled: true
+    color: [1.0, 0.85, 0.0, 1.0]
+
+  collision_visual:
+    enabled: true
+    color: [1.0, 0.65, 0.0, 0.25]
+    padding: [0.01, 0.01, 0.01]
+    wireframe: true
+
+# ---------------------------------------------------------------------------
+# Collision behavior — shared by all algorithms
+# ---------------------------------------------------------------------------
+collision:
+  enabled: true                # true=check collision with box & table, terminate on hit
+
+# ---------------------------------------------------------------------------
+# Termination conditions — shared by all algorithms
+# ---------------------------------------------------------------------------
+termination:
+  goal_threshold: 0.03       # success when distance < threshold (metres)
+  collision_terminate: true
+  workspace_terminate: true
+
+# ---------------------------------------------------------------------------
+# Fixed table — shared by all algorithms
+# ---------------------------------------------------------------------------
+table:
+  enabled: false
+  name: table
+  type: box
+  center: [0.030, -0.550, -0.150]
+  size: [0.330, 0.330, 0.360]
+  color: [0.0, 0.0, 0.0, 1.0]
+
+# ---------------------------------------------------------------------------
+# Ground plane — shared by all algorithms
+# ---------------------------------------------------------------------------
+plane:
+  enabled: false
+  z: -0.330
+  center: [0.150, -0.350, -0.330]
+  size: [1.0, 1.0]
+  color: [0.82, 0.82, 0.82, 0.35]
+
+# ---------------------------------------------------------------------------
+# Reward function — shared by all algorithms
+# r_t = r_success + r_collision + r_distance + r_workspace + r_episode + r_time
+#     + r_shake + r_z_guard + r_smooth_action + r_path_curvature
+# ---------------------------------------------------------------------------
+reward:
+  # Terminal rewards
+  success_bonus: 20.0
+  collision_penalty: 300.0
+  workspace_penalty: 300.0
+  timeout_penalty: 50.0
+
+  # Distance shaping
+  distance_scale: 1.5
+
+  # Time penalty per step
+  time_penalty: 0.0
+
+  # Shake penalty
+  shake_penalty_scale: 0.005
+  shake_window: 10
+  shake_dot_threshold: 0.0
+  shake_min_movement: 1.0e-6
+
+  # Z guard penalty
+  z_guard_enabled: true
+  z_guard_mode: "target"        # "target" or "workspace"
+  z_guard_margin: 0.005         # m, allow 5 mm below target/workspace guard
+  z_guard_scale: 500.0
+  z_violation_penalty: 10.0
+  terminate_on_z_violation: false
+
+  # Smoothness penalties
+  smooth_action_enabled: true
+  smooth_action_scale: 0.05
+  path_curvature_enabled: true
+  path_curvature_scale: 10.0
+
+# ---------------------------------------------------------------------------
+# Planner safety checks - applied after a policy produces a waypoint path
+# ---------------------------------------------------------------------------
+planner:
+  safety_check_enabled: true
+  max_turn_angle_deg: 120.0
+  reject_z_violation_path: true
+  reject_sharp_turn_path: true
+
+# ---------------------------------------------------------------------------
+# PyBullet visualization — shared by all algorithms
+# ---------------------------------------------------------------------------
+visualization:
+  enabled: true
+  gui: true
+  hide_debug_ui: true
+  show_workspace: true
+  show_target_region: true
+  show_start_frame: true
+  show_target_frame: true
+  show_agent_frame: true
+  show_table: true
+  show_path: true
+  show_ground_plane: true
+  show_labels: true
+  camera:
+    distance: 1.2
+    yaw: -60
+    pitch: -35
+    target: [0.150, -0.350, 0.170]
+  style:
+    frame_axis_length: 0.05
+    agent_radius: 0.015
+    path_line_width: 4
+
+# ---------------------------------------------------------------------------
+# Training configuration — shared by all algorithms
+# ---------------------------------------------------------------------------
+training:
+  algorithm: SAC           # overridden by each script (not used for selection here)
+  total_timesteps: 30000000 # 5
+  seed: 42
+  device: cuda
+  n_envs: 28
+  vec_env_type: auto
+  progress_bar: true
+  log_interval: 50
+  episode_log_interval: 10
+  eval_freq: 50000 # eval_freq = 50000 / 32 ≈ 1562
+  save_freq: 25000 # save_freq thực tế nên dùng = 25000 / 32 ≈ 781
+
+# ---------------------------------------------------------------------------
+# TD3 algorithm hyperparameters — used by train_td3.py
+# ---------------------------------------------------------------------------
+td3:
+  policy: MlpPolicy
+  learning_rate: 0.0003
+  buffer_size: 1000000
+  learning_starts: 10000
+  batch_size: 256
+  tau: 0.005
+  gamma: 0.99
+  train_freq: 1
+  gradient_steps: 1
+  policy_delay: 2
+  target_policy_noise: 0.2
+  target_noise_clip: 0.5
+  policy_kwargs:
+    net_arch: [256, 256]
+
+# ---------------------------------------------------------------------------
+# DDPG algorithm hyperparameters — used by train_ddpg.py
+# ---------------------------------------------------------------------------
+ddpg:
+  policy: MlpPolicy
+  learning_rate: 0.0003
+  buffer_size: 1000000
+  learning_starts: 10000
+  batch_size: 256
+  tau: 0.005
+  gamma: 0.99
+  train_freq: 1
+  gradient_steps: 1
+  policy_kwargs:
+    net_arch: [256, 256]
+
+# ---------------------------------------------------------------------------
+# SAC algorithm hyperparameters — used by train_sac.py
+# ---------------------------------------------------------------------------
+sac:
+  policy: MlpPolicy
+  learning_rate: 0.0003
+  buffer_size: 1000000
+  learning_starts: 10000
+  batch_size: 256
+  tau: 0.005
+  gamma: 0.99
+  train_freq: 1
+  gradient_steps: 1
+  ent_coef: auto
+  target_entropy: auto
+  policy_kwargs:
+    net_arch: [256, 256]
+
+# ---------------------------------------------------------------------------
+# PPO algorithm hyperparameters — used by train_ppo.py (on-policy, no replay buffer)
+# ---------------------------------------------------------------------------
+ppo:
+  policy: MlpPolicy
+  learning_rate: 0.0003
+  n_steps: 2048
+  batch_size: 256
+  n_epochs: 10
+  gamma: 0.99
+  gae_lambda: 0.95
+  clip_range: 0.2
+  ent_coef: 0.0
+  vf_coef: 0.5
+  max_grad_norm: 0.5
+  policy_kwargs:
+    net_arch: [256, 256]
+
+# ---------------------------------------------------------------------------
+# Action noise (exploration) — used by TD3 and DDPG only
+# SAC and PPO ignore this section
+# ---------------------------------------------------------------------------
+action_noise:
+  enabled: true
+  type: NormalActionNoise
+  mean: 0.0
+  sigma: 0.1
+
+# ---------------------------------------------------------------------------
+# Logging — shared by all algorithms
+# ---------------------------------------------------------------------------
+logging:
+  tensorboard: true
+  log_dir: Data/Training
+  save_model: true
+  save_replay_buffer: true   # off-policy (TD3/DDPG/SAC) only; ignored for PPO
+
+# ---------------------------------------------------------------------------
+# Evaluation defaults — shared by all algorithms
+# ---------------------------------------------------------------------------
+evaluation:
+  seed: 42
+  num_episodes: 100
+  export_waypoints: true

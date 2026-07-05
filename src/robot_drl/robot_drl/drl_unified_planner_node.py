@@ -1172,6 +1172,7 @@ class DrlUnifiedPlannerNode(DrlPlannerNodeBase):
                 f"final_point={np.array2string(final_point, precision=4) if final_point is not None else 'none'} | "
                 f"target={np.array2string(scene.target_base, precision=4)}"
             )
+            self._publish_last_plan_observation(result)
             if self._publish_failed_collision_path:
                 self.log_planning_result(result, source=scene.source)
                 self.publish_planning_result(result)

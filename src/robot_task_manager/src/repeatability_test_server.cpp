@@ -1,18 +1,25 @@
 #include <algorithm>
+#include <array>
 #include <chrono>
 #include <cmath>
+#include <filesystem>
+#include <fstream>
 #include <functional>
 #include <future>
+#include <iomanip>
 #include <memory>
 #include <mutex>
 #include <string>
 #include <thread>
+#include <vector>
 
 #include "rclcpp/rclcpp.hpp"
 #include "rclcpp_action/rclcpp_action.hpp"
 
 #include "geometry_msgs/msg/pose.hpp"
 #include "geometry_msgs/msg/pose_stamped.hpp"
+#include "moveit_msgs/msg/robot_trajectory.hpp"
+#include "sensor_msgs/msg/joint_state.hpp"
 
 #include "robot_task_manager/action/move_to_pose.hpp"
 #include "robot_task_manager/action/move_to_pose_cartesian.hpp"
@@ -70,17 +77,39 @@ public:
 
     enable_executor_logging_ = declare_parameter<bool>("enable_executor_logging", false);
     log_root_dir_            = declare_parameter<std::string>("log_root_dir", robot_task_manager::kDefaultLogRootDir);
+    runtime_mode_            = declare_parameter<std::string>("runtime_mode", "mock");
     executor_log_dir_        = declare_parameter<std::string>(
       "executor_log_dir", robot_task_manager::executorLogBaseDir(log_root_dir_));
     executor_sample_rate_hz_ = declare_parameter<double>("executor_sample_rate_hz", 50.0);
     executor_base_frame_     = declare_parameter<std::string>("executor_base_frame", "base_link");
     executor_tcp_frame_      = declare_parameter<std::string>("executor_tcp_frame", "tcp_link");
+    declare_parameter<bool>("use_mock", true);
+    declare_parameter<std::string>("hardware_plugin", "unknown");
+    declare_parameter<bool>("enable_log_plots", true);
 
     move_to_pose_client_ =
       rclcpp_action::create_client<MoveToPose>(this, "move_to_pose");
 
     move_to_pose_cartesian_client_ =
       rclcpp_action::create_client<MoveToPoseCartesian>(this, "move_to_pose_cartesian");
+
+    planned_trajectory_sub_ = create_subscription<moveit_msgs::msg::RobotTrajectory>(
+      "/robot_task_manager/last_planned_joint_trajectory",
+      rclcpp::QoS(10).reliable(),
+      [this](const moveit_msgs::msg::RobotTrajectory::SharedPtr msg) {
+        std::lock_guard<std::mutex> lock(planned_trajectory_mutex_);
+        latest_planned_trajectory_ = *msg;
+        planned_trajectory_seq_++;
+      });
+
+    joint_state_sub_ = create_subscription<sensor_msgs::msg::JointState>(
+      "/joint_states",
+      rclcpp::SensorDataQoS(),
+      [this](const sensor_msgs::msg::JointState::SharedPtr msg) {
+        std::lock_guard<std::mutex> lock(joint_state_mutex_);
+        latest_joint_state_ = *msg;
+        have_joint_state_ = !msg->name.empty() && !msg->position.empty();
+      });
 
     action_server_ = rclcpp_action::create_server<RepeatabilityTest>(
       this,
@@ -100,7 +129,7 @@ public:
         log_tf_listener_ = std::make_shared<tf2_ros::TransformListener>(*log_tf_buffer_);
         logger_ = std::make_shared<robot_task_executor::ExecutorExperimentLogger>(
           shared_from_this(), log_tf_buffer_,
-          robot_task_manager::executorActionLogDir(log_root_dir_, executor_log_dir_, "RepeatabilityTest"),
+          robot_task_manager::executorActionLogDir(log_root_dir_, executor_log_dir_, runtime_mode_, "RepeatabilityTest"),
           executor_sample_rate_hz_,
           executor_base_frame_, executor_tcp_frame_);
       } catch (const std::exception & e) {
@@ -116,9 +145,10 @@ public:
       }
       tcp_logger_ = std::make_shared<robot_task_manager::PerCallTcpLogger>(
         shared_from_this(), log_tf_buffer_,
-        robot_task_manager::executorActionLogDir(log_root_dir_, executor_log_dir_, "RepeatabilityTest"),
+        robot_task_manager::executorActionLogDir(log_root_dir_, executor_log_dir_, runtime_mode_, "RepeatabilityTest"),
         executor_sample_rate_hz_,
         executor_base_frame_, executor_tcp_frame_, "repeatability_test", "/repeatability_test");
+      robot_task_manager::applyLogProvenanceFromParams(this, tcp_logger_);
     } catch (const std::exception & e) {
       tcp_logger_.reset();
       RCLCPP_WARN(get_logger(), "RepeatabilityTest per-call TCP logger unavailable: %s", e.what());
@@ -136,6 +166,7 @@ private:
 
   bool enable_executor_logging_{false};
   std::string log_root_dir_;
+  std::string runtime_mode_;
   std::string executor_log_dir_;
   double executor_sample_rate_hz_{50.0};
   std::string executor_base_frame_;
@@ -149,10 +180,22 @@ private:
   rclcpp_action::Server<RepeatabilityTest>::SharedPtr action_server_;
   rclcpp_action::Client<MoveToPose>::SharedPtr move_to_pose_client_;
   rclcpp_action::Client<MoveToPoseCartesian>::SharedPtr move_to_pose_cartesian_client_;
+  rclcpp::Subscription<moveit_msgs::msg::RobotTrajectory>::SharedPtr planned_trajectory_sub_;
+  rclcpp::Subscription<sensor_msgs::msg::JointState>::SharedPtr joint_state_sub_;
 
   std::mutex active_goal_mutex_;
   MoveToPoseGoalHandle::SharedPtr active_move_to_pose_goal_;
   MoveToPoseCartesianGoalHandle::SharedPtr active_move_to_pose_cartesian_goal_;
+
+  std::mutex planned_trajectory_mutex_;
+  moveit_msgs::msg::RobotTrajectory latest_planned_trajectory_;
+  uint64_t planned_trajectory_seq_{0};
+
+  std::mutex joint_state_mutex_;
+  sensor_msgs::msg::JointState latest_joint_state_;
+  bool have_joint_state_{false};
+
+  std::mutex joint_log_mutex_;
 
   static bool is_pose_valid(const geometry_msgs::msg::PoseStamped & pose)
   {
@@ -355,6 +398,226 @@ private:
     }
 
     return true;
+  }
+
+  static std::string csv_escape(const std::string & value)
+  {
+    if (value.find_first_of(",\"\n\r") == std::string::npos) {
+      return value;
+    }
+    std::string out = "\"";
+    for (const char c : value) {
+      if (c == '"') {
+        out += "\"\"";
+      } else {
+        out += c;
+      }
+    }
+    out += "\"";
+    return out;
+  }
+
+  static std::string format_double(double value)
+  {
+    if (!std::isfinite(value)) {
+      return "";
+    }
+    std::ostringstream out;
+    out << std::fixed << std::setprecision(9) << value;
+    return out.str();
+  }
+
+  static void write_joint_header(std::ofstream & out)
+  {
+    out << "time_s,repeat_index,stage,"
+           "joint_1_set_rad,joint_2_set_rad,joint_3_set_rad,joint_4_set_rad,joint_5_set_rad,joint_6_set_rad,"
+           "joint_1_actual_rad,joint_2_actual_rad,joint_3_actual_rad,joint_4_actual_rad,joint_5_actual_rad,joint_6_actual_rad,"
+           "joint_1_error_rad,joint_2_error_rad,joint_3_error_rad,joint_4_error_rad,joint_5_error_rad,joint_6_error_rad,"
+           "joint_error_norm_rad\n";
+  }
+
+  // Pushes the repeatability accounting the logger cannot know on its own
+  // (goal axis/offset/repeat_count + how many repeats have succeeded so far)
+  // into the per-call logger so summary.csv is filled even on an early abort.
+  // failed_count is left 0 here; the logger derives it from
+  // repeat_count - success_count when the call finishes unsuccessfully.
+  void set_repeatability_summary(
+    const std::shared_ptr<robot_task_manager::PerCallTcpLogger::Call> & tcp_call,
+    const std::shared_ptr<const RepeatabilityTest::Goal> & goal,
+    int32_t success_count)
+  {
+    if (!tcp_logger_ || !tcp_call || !goal) {
+      return;
+    }
+    robot_task_manager::PerCallTcpLogger::RepeatabilitySummaryInfo info;
+    info.axis = static_cast<int>(goal->axis);
+    info.repeat_count = goal->repeat_count;
+    info.offset_m = goal->meas_offset;
+    info.success_count = success_count;
+    info.failed_count = 0;
+    tcp_logger_->setRepeatabilitySummary(tcp_call, info);
+  }
+
+  void initialize_repeatability_joint_logs(
+    const std::shared_ptr<robot_task_manager::PerCallTcpLogger::Call> & tcp_call,
+    int32_t repeat_count)
+  {
+    if (!tcp_call || repeat_count <= 0) {
+      return;
+    }
+    const auto call_dir = std::filesystem::path(tcp_call->call_dir);
+    std::lock_guard<std::mutex> lock(joint_log_mutex_);
+    {
+      std::ofstream out(call_dir / "joint_tracking.csv", std::ios::out | std::ios::trunc);
+      if (out.is_open()) {
+        write_joint_header(out);
+      }
+    }
+    for (int32_t i = 1; i <= repeat_count; ++i) {
+      std::ostringstream name;
+      name << "repeat_" << std::setw(4) << std::setfill('0') << i << "_joint.csv";
+      std::ofstream out(call_dir / name.str(), std::ios::out | std::ios::trunc);
+      if (out.is_open()) {
+        write_joint_header(out);
+      }
+    }
+  }
+
+  uint64_t planned_trajectory_seq()
+  {
+    std::lock_guard<std::mutex> lock(planned_trajectory_mutex_);
+    return planned_trajectory_seq_;
+  }
+
+  bool copy_planned_trajectory_after(
+    uint64_t seq_before,
+    moveit_msgs::msg::RobotTrajectory & out,
+    double timeout_sec = 2.0)
+  {
+    const auto deadline = std::chrono::steady_clock::now() +
+      std::chrono::duration<double>(timeout_sec);
+    while (rclcpp::ok() && std::chrono::steady_clock::now() < deadline) {
+      {
+        std::lock_guard<std::mutex> lock(planned_trajectory_mutex_);
+        if (planned_trajectory_seq_ > seq_before &&
+          !latest_planned_trajectory_.joint_trajectory.points.empty())
+        {
+          out = latest_planned_trajectory_;
+          return true;
+        }
+      }
+      std::this_thread::sleep_for(20ms);
+    }
+    return false;
+  }
+
+  bool lookup_actual_joint(
+    const sensor_msgs::msg::JointState & state,
+    const std::string & name,
+    double & value) const
+  {
+    for (size_t i = 0; i < state.name.size() && i < state.position.size(); ++i) {
+      if (state.name[i] == name) {
+        value = state.position[i];
+        return std::isfinite(value);
+      }
+    }
+    return false;
+  }
+
+  void append_repeatability_joint_row(
+    const std::shared_ptr<robot_task_manager::PerCallTcpLogger::Call> & tcp_call,
+    int32_t repeat_index,
+    const std::string & stage,
+    uint64_t trajectory_seq_before)
+  {
+    if (!tcp_call || repeat_index <= 0) {
+      return;
+    }
+
+    moveit_msgs::msg::RobotTrajectory trajectory;
+    if (!copy_planned_trajectory_after(trajectory_seq_before, trajectory)) {
+      RCLCPP_WARN(
+        get_logger(),
+        "Repeatability joint log skipped for %s: no fresh planned joint trajectory",
+        stage.c_str());
+      return;
+    }
+    if (trajectory.joint_trajectory.joint_names.size() < 6 ||
+      trajectory.joint_trajectory.points.empty())
+    {
+      RCLCPP_WARN(
+        get_logger(),
+        "Repeatability joint log skipped for %s: planned trajectory lacks 6 joints",
+        stage.c_str());
+      return;
+    }
+    const auto & point = trajectory.joint_trajectory.points.back();
+    if (point.positions.size() < 6) {
+      return;
+    }
+
+    sensor_msgs::msg::JointState actual_state;
+    {
+      std::lock_guard<std::mutex> lock(joint_state_mutex_);
+      if (!have_joint_state_) {
+        RCLCPP_WARN(
+          get_logger(),
+          "Repeatability joint log skipped for %s: no /joint_states received",
+          stage.c_str());
+        return;
+      }
+      actual_state = latest_joint_state_;
+    }
+
+    std::array<double, 6> set{};
+    std::array<double, 6> actual{};
+    std::array<double, 6> error{};
+    for (size_t i = 0; i < 6; ++i) {
+      set[i] = point.positions[i];
+      if (!lookup_actual_joint(actual_state, trajectory.joint_trajectory.joint_names[i], actual[i])) {
+        RCLCPP_WARN(
+          get_logger(),
+          "Repeatability joint log skipped for %s: /joint_states missing joint '%s'",
+          stage.c_str(),
+          trajectory.joint_trajectory.joint_names[i].c_str());
+        return;
+      }
+      error[i] = actual[i] - set[i];
+    }
+
+    double error_norm = 0.0;
+    for (const double e : error) {
+      error_norm += e * e;
+    }
+    error_norm = std::sqrt(error_norm);
+
+    std::ostringstream row;
+    row << format_double((now() - tcp_call->start_time).seconds()) << ","
+        << repeat_index << ","
+        << csv_escape(stage);
+    for (const double v : set) {
+      row << "," << format_double(v);
+    }
+    for (const double v : actual) {
+      row << "," << format_double(v);
+    }
+    for (const double v : error) {
+      row << "," << format_double(v);
+    }
+    row << "," << format_double(error_norm) << "\n";
+
+    const auto call_dir = std::filesystem::path(tcp_call->call_dir);
+    std::ostringstream repeat_name;
+    repeat_name << "repeat_" << std::setw(4) << std::setfill('0') << repeat_index << "_joint.csv";
+
+    std::lock_guard<std::mutex> lock(joint_log_mutex_);
+    for (const auto & path : {call_dir / "joint_tracking.csv", call_dir / repeat_name.str()}) {
+      std::ofstream out(path, std::ios::out | std::ios::app);
+      if (out.is_open()) {
+        out << row.str();
+      }
+    }
   }
 
   void abort_goal(
@@ -570,9 +833,13 @@ private:
            << ",\"disturb1_x\":" << goal->disturb_pose_1.pose.position.x
            << ",\"disturb1_y\":" << goal->disturb_pose_1.pose.position.y
            << ",\"disturb1_z\":" << goal->disturb_pose_1.pose.position.z
+           << ",\"joint_tracking_set_source\":\"nearest_planned_joint_point\""
+           << ",\"joint_tracking_actual_source\":\"/joint_states\""
            << "}";
       tcp_call = tcp_logger_->startCall(meta.str());
       if (tcp_call) {
+        initialize_repeatability_joint_logs(tcp_call, goal->repeat_count);
+        set_repeatability_summary(tcp_call, goal, 0);
         tcp_logger_->logEvent(tcp_call, "repeatability_start", "received", "RepeatabilityTest goal accepted");
         tcp_logger_->startSampling(tcp_call);
       }
@@ -678,6 +945,13 @@ private:
         return;
       }
 
+      // Attribute every row logged during this iteration to repeat i, so the
+      // logger routes them to repeat_<i>.csv / repeat_<i>_joint.csv without
+      // having to parse the repeat number back out of the stage string.
+      if (tcp_logger_ && tcp_call) {
+        tcp_logger_->setRepeatIndex(tcp_call, i);
+      }
+
       const std::string stage_meas_1 = "loop_" + std::to_string(i) + "_move_to_meas_1";
       if (tcp_logger_ && tcp_call) {
         tcp_logger_->updateStage(tcp_call, stage_meas_1, meas_pose);
@@ -687,6 +961,7 @@ private:
         goal_handle,
         i,
         execute_motion ? "Cartesian to meas_pose" : "Plan Cartesian to meas_pose (execution skipped)");
+      const auto traj_seq_meas_1 = planned_trajectory_seq();
       if (!call_move_to_pose_cartesian(meas_pose, goal->velocity_scale, execute_motion, error_msg)) {
         if (tcp_logger_ && tcp_call) {
           tcp_logger_->logEvent(tcp_call, stage_meas_1, "stage_failed", error_msg, &meas_pose);
@@ -694,6 +969,7 @@ private:
         abort_goal(goal_handle, result, tcp_call,fail_message("Cartesian to meas_pose", i, error_msg), completed_count);
         return;
       }
+      append_repeatability_joint_row(tcp_call, i, stage_meas_1, traj_seq_meas_1);
       if (tcp_logger_ && tcp_call) {
         tcp_logger_->logEvent(tcp_call, stage_meas_1, "stage_end", "reached meas_pose", &meas_pose);
         tcp_logger_->setStage(tcp_call, "loop_" + std::to_string(i) + "_wait_meas_1");
@@ -714,6 +990,7 @@ private:
         goal_handle,
         i,
         execute_motion ? "Cartesian back to working_retract_pose" : "Plan Cartesian back to working_retract_pose (execution skipped)");
+      const auto traj_seq_retract_1 = planned_trajectory_seq();
       if (!call_move_to_pose_cartesian(working_retract_pose, fast_velocity_scale_, execute_motion, error_msg)) {
         if (tcp_logger_ && tcp_call) {
           tcp_logger_->logEvent(tcp_call, stage_retract_1, "stage_failed", error_msg, &working_retract_pose);
@@ -721,6 +998,7 @@ private:
         abort_goal(goal_handle, result, tcp_call,fail_message("Cartesian back to working_retract_pose", i, error_msg), completed_count);
         return;
       }
+      append_repeatability_joint_row(tcp_call, i, stage_retract_1, traj_seq_retract_1);
 
       const std::string stage_disturb = "loop_" + std::to_string(i) + "_move_to_disturb";
       if (tcp_logger_ && tcp_call) {
@@ -731,6 +1009,7 @@ private:
         goal_handle,
         i,
         execute_motion ? "MoveToPose to working_disturb_pose_1" : "Plan MoveToPose to working_disturb_pose_1 (execution skipped)");
+      const auto traj_seq_disturb = planned_trajectory_seq();
       if (!call_move_to_pose(working_disturb_pose_1, fast_velocity_scale_, execute_motion, error_msg)) {
         if (tcp_logger_ && tcp_call) {
           tcp_logger_->logEvent(tcp_call, stage_disturb, "stage_failed", error_msg, &working_disturb_pose_1);
@@ -738,6 +1017,7 @@ private:
         abort_goal(goal_handle, result, tcp_call,fail_message("MoveToPose to working_disturb_pose_1", i, error_msg), completed_count);
         return;
       }
+      append_repeatability_joint_row(tcp_call, i, stage_disturb, traj_seq_disturb);
       if (tcp_logger_ && tcp_call) {
         tcp_logger_->logEvent(tcp_call, stage_disturb, "stage_end", "reached disturb pose", &working_disturb_pose_1);
       }
@@ -750,6 +1030,7 @@ private:
         goal_handle,
         i,
         execute_motion ? "MoveToPose back to working_retract_pose" : "Plan MoveToPose back to working_retract_pose (execution skipped)");
+      const auto traj_seq_retract_2 = planned_trajectory_seq();
       if (!call_move_to_pose(working_retract_pose, fast_velocity_scale_, execute_motion, error_msg)) {
         if (tcp_logger_ && tcp_call) {
           tcp_logger_->logEvent(tcp_call, stage_retract_2, "stage_failed", error_msg, &working_retract_pose);
@@ -757,6 +1038,7 @@ private:
         abort_goal(goal_handle, result, tcp_call,fail_message("MoveToPose back to working_retract_pose", i, error_msg), completed_count);
         return;
       }
+      append_repeatability_joint_row(tcp_call, i, stage_retract_2, traj_seq_retract_2);
 
       const std::string stage_meas_2 = "loop_" + std::to_string(i) + "_move_to_meas_2";
       if (tcp_logger_ && tcp_call) {
@@ -767,6 +1049,7 @@ private:
         goal_handle,
         i,
         execute_motion ? "Cartesian to meas_pose" : "Plan Cartesian to meas_pose (execution skipped)");
+      const auto traj_seq_meas_2 = planned_trajectory_seq();
       if (!call_move_to_pose_cartesian(meas_pose, goal->velocity_scale, execute_motion, error_msg)) {
         if (tcp_logger_ && tcp_call) {
           tcp_logger_->logEvent(tcp_call, stage_meas_2, "stage_failed", error_msg, &meas_pose);
@@ -774,6 +1057,7 @@ private:
         abort_goal(goal_handle, result, tcp_call,fail_message("Cartesian to meas_pose", i, error_msg), completed_count);
         return;
       }
+      append_repeatability_joint_row(tcp_call, i, stage_meas_2, traj_seq_meas_2);
       if (tcp_logger_ && tcp_call) {
         tcp_logger_->logEvent(tcp_call, stage_meas_2, "stage_end", "reached meas_pose", &meas_pose);
         tcp_logger_->setStage(tcp_call, "loop_" + std::to_string(i) + "_wait_meas_2");
@@ -794,6 +1078,7 @@ private:
         goal_handle,
         i,
         execute_motion ? "Cartesian back to working_retract_pose" : "Plan Cartesian back to working_retract_pose (execution skipped)");
+      const auto traj_seq_retract_3 = planned_trajectory_seq();
       if (!call_move_to_pose_cartesian(working_retract_pose, fast_velocity_scale_, execute_motion, error_msg)) {
         if (tcp_logger_ && tcp_call) {
           tcp_logger_->logEvent(tcp_call, stage_retract_3, "stage_failed", error_msg, &working_retract_pose);
@@ -801,8 +1086,10 @@ private:
         abort_goal(goal_handle, result, tcp_call,fail_message("Cartesian back to working_retract_pose", i, error_msg), completed_count);
         return;
       }
+      append_repeatability_joint_row(tcp_call, i, stage_retract_3, traj_seq_retract_3);
 
       completed_count = i;
+      set_repeatability_summary(tcp_call, goal, completed_count);
     }
 
     clear_active_goals();

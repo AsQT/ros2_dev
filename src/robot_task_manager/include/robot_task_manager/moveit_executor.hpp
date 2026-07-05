@@ -39,12 +39,16 @@ struct MoveItPlanMetrics
   double allowed_planning_time_s = std::numeric_limits<double>::quiet_NaN();
   int32_t num_planning_attempts = -1;
   std::vector<geometry_msgs::msg::Point> tcp_waypoints;
+  std::vector<geometry_msgs::msg::Pose> tcp_poses;
+  moveit_msgs::msg::RobotTrajectory robot_trajectory;
 };
 
 class MoveItExecutor
 {
 public:
   using FeedbackCallback = std::function<void(const std::string &, float)>;
+  using JointTrajectoryCallback =
+    std::function<void(const std::string &, const moveit_msgs::msg::RobotTrajectory &)>;
 
   MoveItExecutor() = default;
 
@@ -107,7 +111,8 @@ public:
           double planning_time = 5.0,
           bool execute = true,
           double measurement_settle_time_s = 2.0,
-          FeedbackCallback feedback_cb = nullptr);
+          FeedbackCallback feedback_cb = nullptr,
+          JointTrajectoryCallback joint_trajectory_cb = nullptr);
 
   void stop();
 
@@ -144,7 +149,9 @@ private:
     double acceleration_scale,
     double planning_time,
     bool execute,
-    const geometry_msgs::msg::Pose * planned_start_pose = nullptr);
+    const geometry_msgs::msg::Pose * planned_start_pose = nullptr,
+    const std::string & stage = "",
+    JointTrajectoryCallback joint_trajectory_cb = nullptr);
 
   uint64_t startExecutorLog(const std::string & execute_mode);
   void finishExecutorLog(
@@ -156,6 +163,8 @@ private:
   void logRefWaypoint(uint64_t call_id, const geometry_msgs::msg::Pose & pose);
   void logJointCommand(
     uint64_t call_id,
+    const moveit_msgs::msg::RobotTrajectory & trajectory);
+  void publishPlannedJointTrajectory(
     const moveit_msgs::msg::RobotTrajectory & trajectory);
   bool executeWithLogging(
     uint64_t call_id,
@@ -185,6 +194,7 @@ private:
   std::shared_ptr<tf2_ros::TransformListener> log_tf_listener_;
   std::shared_ptr<robot_task_executor::ExecutorExperimentLogger> executor_logger_;
   std::string log_action_name_;
+  rclcpp::Publisher<moveit_msgs::msg::RobotTrajectory>::SharedPtr planned_joint_trajectory_pub_;
 };
 
 }  // namespace robot_task_manager

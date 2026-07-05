@@ -97,7 +97,7 @@ def generate_launch_description() -> LaunchDescription:
             description="Unified root directory for robot log data"),
         DeclareLaunchArgument(
             "executor_log_dir",
-            default_value="/home/minhquang/ros2_dev/Log_robot_data/executor_logs/TaskExecutor",
+            default_value="/home/minhquang/ros2_dev/Log_robot_data/mock/baseline/task_executor_internal",
             description="Directory for executor experiment logs"),
         DeclareLaunchArgument(
             "executor_sample_rate_hz",

@@ -35,8 +35,9 @@ def generate_launch_description():
             "planning_group": "arm",
             "home_target": "home",
             "base_frame": "world",
+            "runtime_mode": "mock",
             "log_root_dir": "/home/minhquang/ros2_dev/Log_robot_data",
-            "executor_log_dir": "/home/minhquang/ros2_dev/Log_robot_data/executor_logs",
+            "executor_log_dir": "/home/minhquang/ros2_dev/Log_robot_data/mock/baseline/executor_internal",
         },
     ]
 
@@ -46,6 +47,7 @@ def generate_launch_description():
             "use_sim_time": True,
             "planning_group": "gripper",
             "base_frame": "link_6",
+            "runtime_mode": "mock",
             "velocity_scale": 1.0,
             "acceleration_scale": 1.0,
             "gripper_max_open": 0.05,
@@ -171,6 +173,9 @@ def generate_launch_description():
             "gripper_open_width_m": 0.0381,
             "gripper_default_close_width_m": 0.025,
             "planner_node_name": LaunchConfiguration("planner_node_name"),
+            # codex.md: PickPlaceRL plans PLAN_TO_PRE_PICK from the current TCP; do
+            # NOT drive the arm to the fixed preposition_tcp_base first.
+            "use_preposition_before_pre_pick": False,
         }],
     )
 

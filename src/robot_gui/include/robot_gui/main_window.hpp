@@ -13,6 +13,7 @@
 #include "robot_gui/robot_gui_node.hpp"
 
 class QApplication;
+class QEvent;
 class QLabel;
 class QPushButton;
 class QLineEdit;
@@ -43,6 +44,8 @@ public:
     QWidget * parent = nullptr);
   ~MainWindow() override;
 
+  bool eventFilter(QObject * watched, QEvent * event) override;
+
 Q_SIGNALS:
   void flags_received(std::vector<uint32_t> flags);
   void joint_state_received(QStringList names, QVector<double> positions_rad, QVector<double> velocities_rad_s);
@@ -64,6 +67,7 @@ private:
   void setup_defaults();
   void setup_task_mode_tabs();
   void setup_image_display();
+  void install_image_resize_filters();
   void setup_navigation();
   void setup_robot_controls();
   void setup_axis_controls();
@@ -79,6 +83,7 @@ private:
   void set_label_text(const QString & object_name, const QString & text);
   void set_image_placeholder(QLabel * label, const QString & title, const std::string & topic);
   void set_image_pixmap(QLabel * label, const QImage & image);
+  void repaint_image_label(QLabel * label);
   bool emit_image(const sensor_msgs::msg::Image::SharedPtr & msg, const char * panel_name);
   QString line_text(const QString & object_name, const QString & fallback = QString()) const;
   QPushButton * button(const QString & object_name) const;
@@ -98,6 +103,7 @@ private:
   bool raw_image_seen_{false};
   bool detection_image_seen_{false};
   bool yolo_image_seen_{false};
+  QImage latest_raw_image_;
   QImage latest_detection_image_;
   QImage latest_yolo_image_;
   QString robot_enable_default_style_;

@@ -24,12 +24,7 @@ from rclpy.qos import (
 from sensor_msgs.msg import Image
 from std_msgs.msg import String
 
-
-def normalize_yaw_0_90(angle: float) -> float:
-    angle = float(angle) % 180.0
-    if angle > 90.0:
-        angle = 180.0 - angle
-    return float(angle)
+from robot_vision_pipeline.pose_estimation.wood_normalization import normalize_wood_yaw_deg
 
 
 class YoloHoughYawEstimatorNode(Node):
@@ -247,8 +242,9 @@ class YoloHoughYawEstimatorNode(Node):
             )
         else:
             self.get_logger().info(
-                f"Hough yaw raw={yaw_raw_deg:.2f}, "
-                f"yaw_0_90={yaw_deg:.2f}, length={best_length:.1f}"
+                f"wood_yaw_raw_deg={yaw_raw_deg:.2f} "
+                f"wood_yaw_normalized_deg={yaw_deg:.2f} "
+                f"method=HoughLinesP length={best_length:.1f}"
             )
 
         cx = int(round((bx1 + bx2) * 0.5))
@@ -276,6 +272,9 @@ class YoloHoughYawEstimatorNode(Node):
             "bbox": [bx1, by1, bx2, by2],
             "center": [cx, cy],
             "yaw_deg": None if yaw_deg is None else round(float(yaw_deg), 3),
+            "yaw_raw_deg": (
+                None if yaw_raw_deg is None else round(float(yaw_raw_deg), 3)
+            ),
             "line": None if line_global is None else [int(v) for v in line_global],
             "method": "HoughLinesP",
         }
@@ -324,7 +323,7 @@ class YoloHoughYawEstimatorNode(Node):
 
         lx1, ly1, lx2, ly2 = best_line
         yaw_raw_deg = math.degrees(math.atan2(float(ly2 - ly1), float(lx2 - lx1)))
-        yaw_deg = normalize_yaw_0_90(yaw_raw_deg)
+        yaw_deg = normalize_wood_yaw_deg(yaw_raw_deg)
         arrow_angle_deg = self._stable_arrow_angle_deg(lx1, ly1, lx2, ly2)
         line_global = (
             int(lx1 + offset_x),

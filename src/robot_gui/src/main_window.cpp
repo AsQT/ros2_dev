@@ -9,6 +9,7 @@
 #include <QComboBox>
 #include <QDebug>
 #include <QDir>
+#include <QEvent>
 #include <QFrame>
 #include <QFont>
 #include <QImage>
@@ -176,6 +177,16 @@ MainWindow::MainWindow(
 
 MainWindow::~MainWindow() = default;
 
+bool MainWindow::eventFilter(QObject * watched, QEvent * event)
+{
+  if (event != nullptr && event->type() == QEvent::Resize) {
+    if (auto * image_label = qobject_cast<QLabel *>(watched)) {
+      repaint_image_label(image_label);
+    }
+  }
+  return QMainWindow::eventFilter(watched, event);
+}
+
 void MainWindow::setup_defaults()
 {
   set_label_text("ConnectStatus_label", "Disconnected");
@@ -294,6 +305,7 @@ void MainWindow::setup_image_display()
   set_image_placeholder(label("yoloPreviewWidget"), "Detection Image", node_->detection_image_topic());
   set_image_placeholder(label("yoloRLPreviewWidget"), "Detection Image", node_->detection_image_topic());
   set_image_placeholder(label("rlPosePreviewGroupLabel"), "Detection Image", node_->detection_image_topic());
+  install_image_resize_filters();
 
   // cbImageTopic lets the user pick which processed feed fills the Vision
   // tab's second cell (detectionImageView): the "detection" topic or the
@@ -333,6 +345,22 @@ void MainWindow::setup_image_display()
         QString::fromStdString(node_->detection_image_topic()))
       .arg(node_->yolo_image_topic().empty() ? "No topic configured" :
         QString::fromStdString(node_->yolo_image_topic())));
+}
+
+void MainWindow::install_image_resize_filters()
+{
+  const char * const image_labels[] = {
+    "rawImageView",
+    "detectionImageView",
+    "yoloPreviewWidget",
+    "yoloRLPreviewWidget",
+    "rlPosePreviewGroupLabel"};
+
+  for (const char * name : image_labels) {
+    if (auto * image_label = label(name)) {
+      image_label->installEventFilter(this);
+    }
+  }
 }
 
 void MainWindow::setup_navigation()
@@ -664,6 +692,7 @@ void MainWindow::update_joint_state_display(
 
 void MainWindow::update_raw_image(QImage image)
 {
+  latest_raw_image_ = image;
   set_image_pixmap(label("rawImageView"), image);
   set_status_led(label("ledCameraStatus"), true);
   if (!raw_image_seen_) {
@@ -831,6 +860,39 @@ void MainWindow::set_image_pixmap(QLabel * label, const QImage & image)
   label->setPixmap(
     target_size.isEmpty() ? pixmap :
     pixmap.scaled(target_size, Qt::KeepAspectRatio, Qt::SmoothTransformation));
+}
+
+void MainWindow::repaint_image_label(QLabel * image_label)
+{
+  if (image_label == nullptr) {
+    return;
+  }
+
+  const QString name = image_label->objectName();
+  if (name == "rawImageView") {
+    set_image_pixmap(image_label, latest_raw_image_);
+    return;
+  }
+
+  if (name == "detectionImageView") {
+    auto * combo = findChild<QComboBox *>("cbImageTopic");
+    const bool showing_yolo = combo != nullptr &&
+      combo->currentText() == QString::fromStdString(node_->yolo_image_topic()) &&
+      !node_->yolo_image_topic().empty();
+    if (showing_yolo && !latest_yolo_image_.isNull()) {
+      set_image_pixmap(image_label, latest_yolo_image_);
+      return;
+    }
+    set_image_pixmap(image_label, latest_detection_image_);
+    return;
+  }
+
+  if (name == "yoloPreviewWidget" ||
+    name == "yoloRLPreviewWidget" ||
+    name == "rlPosePreviewGroupLabel")
+  {
+    set_image_pixmap(image_label, latest_detection_image_);
+  }
 }
 
 bool MainWindow::emit_image(const sensor_msgs::msg::Image::SharedPtr & msg, const char * panel_name)
