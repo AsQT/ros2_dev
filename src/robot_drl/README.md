@@ -26,9 +26,11 @@
 | /drl/execute_forward | service/topic | DRL planner |
 | /drl/clear_trajectory | service/topic | DRL planner |
 | /drl/get_execution_status | service/topic | DRL planner |
-| /drl/forward_poses | service/topic | DRL planner |
+| /drl/forward_trajectory_poses | PoseArray topic | DRL forward trajectory |
+| /drl/backward_trajectory_poses | PoseArray topic | DRL backward trajectory |
+| /drl/last_plan_observation_15d | Float64MultiArray topic | Observation 15D của plan gần nhất |
 
-    Ghi chú interface: Service `/drl/plan`, `/drl/replan`, `/drl/execute_forward`, `/drl/execute_backward`, `/drl/execute_trajectory`, `/drl/clear_trajectory`, `/drl/get_execution_status`; service client `/compute_ik`, planning scene và `/move_cartesian_pose_sequence`; topic `/drl/forward_poses`, `/drl/backward_poses`, `/drl/next_pose`, `/drl/execution_status`, mock target/box topics.
+    Ghi chú interface: Service `/drl/plan`, `/drl/replan`, `/drl/execute_forward`, `/drl/execute_backward`, `/drl/execute_trajectory`, `/drl/clear_trajectory`, `/drl/get_execution_status`, `/drl/get_planning_status`; service client `/compute_ik`, planning scene và `/move_cartesian_pose_sequence`; topic `/drl/forward_trajectory_poses`, `/drl/backward_trajectory_poses`, `/drl/forward_trajectory_marker`, `/drl/backward_trajectory_marker`, `/drl/next_pose`, `/drl/execution_status`, `/drl/plan_stats`, `/drl/last_plan_observation_15d`, mock target/box topics.
 
     ## 6. File launch liên quan
     main.launch.py, drl_unified_planner.launch.py, mock_environment.launch.py, mock_drl.launch.py, mock_drl_rviz.launch.py, drl_mock_hw.launch.py, drl_gazebo.launch.py, rl_sim_rviz.launch.py, drl_mock_hw_obstacle_test.launch.py, drl_gazebo_obstacle_test.launch.py, rviz_drl.launch.py

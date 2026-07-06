@@ -14,8 +14,10 @@ Package này là action layer chính cho MoveIt. Các server nhận action goal,
 | `/pickplace` | `PickPlace.action` | Server composite | `src/pickplace_server.cpp` | Pick-place |
 | `/drl_pickplace` | `DrlPickPlace.action` | Server composite | `src/drl_pickplace_server.cpp` | DRL pick-place |
 | `/move_pose_rl` | `MovePoseRl.action` | Server | `src/move_pose_rl_server.cpp` | DRL move pose |
+| `/move_target_rl` | `MoveTargetRl.action` | Server | `src/move_target_rl_server.cpp` | DRL move target từ vision/fallback |
+| `/move_to_pose_obstacle` | `MoveToPoseObstacle.action` | Server | `src/move_to_pose_obstacle_server.cpp` | MoveIt baseline có obstacle |
 | `/repeatability_test` | `RepeatabilityTest.action` | Server composite | `src/repeatability_test_server.cpp` | Repeatability loop |
-| `/drl/plan`, `/drl/execute_forward`, `/drl/get_execution_status` | `std_srvs/Trigger` | Client | DRL servers | DRL backend |
+| `/drl/plan`, `/drl/execute_forward`, `/drl/get_execution_status`, `/drl/get_planning_status` | `std_srvs/Trigger` | Client | DRL servers | DRL backend |
 
 ## 3. Luồng execute chung
 GUI/client gửi goal `execute=true` -> server validate pose/velocity -> MoveIt plan hoặc DRL plan -> execute trajectory/gripper -> feedback stage/progress -> result.
@@ -55,6 +57,16 @@ Goal `execute=false` -> server vẫn plan/tính Cartesian/DRL trajectory nhưng 
 - Type: `MovePoseRl.action`.
 - Goal: `target_pose`, `velocity_scale`, `execute`.
 - Set parameter planner, gọi DRL plan, nhận trajectory và execute qua DRL service khi cần.
+
+### /move_target_rl
+- Type: `MoveTargetRl.action`.
+- Goal chọn target/obstacle qua `target_class`, `obstacle_class` hoặc fallback pose/box.
+- Subscribe `/vision/wood_objects`, `/vision/box_objects`, set parameter planner, gọi `/drl/plan` và execute nếu `execute=true`.
+
+### /move_to_pose_obstacle
+- Type: `MoveToPoseObstacle.action`.
+- Goal gồm target pose và obstacle từ vision hoặc fallback.
+- Dùng MoveIt baseline với collision object `move_to_pose_obstacle_box`; không phải policy RL.
 
 ### /repeatability_test
 - Type: `RepeatabilityTest.action`.

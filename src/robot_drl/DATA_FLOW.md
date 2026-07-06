@@ -5,7 +5,7 @@
 
     ## 2. Input
     - Launch arguments, YAML config hoặc request/action goal từ package gọi.
-    - Interface đầu vào cụ thể: Service `/drl/plan`, `/drl/replan`, `/drl/execute_forward`, `/drl/execute_backward`, `/drl/execute_trajectory`, `/drl/clear_trajectory`, `/drl/get_execution_status`; service client `/compute_ik`, planning scene và `/move_cartesian_pose_sequence`; topic `/drl/forward_poses`, `/drl/backward_poses`, `/drl/next_pose`, `/drl/execution_status`, mock target/box topics.
+    - Interface đầu vào cụ thể: Service `/drl/plan`, `/drl/replan`, `/drl/execute_forward`, `/drl/execute_backward`, `/drl/execute_trajectory`, `/drl/clear_trajectory`, `/drl/get_execution_status`, `/drl/get_planning_status`; service client `/compute_ik`, planning scene và `/move_cartesian_pose_sequence`; topic `/drl/forward_trajectory_poses`, `/drl/backward_trajectory_poses`, `/drl/next_pose`, `/drl/execution_status`, `/drl/plan_stats`, mock target/box topics.
 
     ## 3. Output
     - Node, topic, service, action result hoặc file/message được mô tả trong README.
@@ -22,7 +22,7 @@
     ```mermaid
     flowchart LR
   Target[Mock/Vision target] --> Planner[DRL unified planner]
-  Planner --> Poses[/drl/forward_poses]
+  Planner --> Poses[/drl/forward_trajectory_poses]
   Client[/drl/execute_forward] --> Executor[/move_cartesian_pose_sequence]
   Executor --> MoveIt[MoveIt trajectory]
     ```

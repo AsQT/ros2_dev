@@ -1,79 +1,69 @@
 # robot_task_manager
 
-## 1. Vai trò package
-Package action-based task execution cho robot. Nó định nghĩa action, build action servers MoveIt/gripper/composite/DRL/repeatability và cung cấp client demo/test. Source of truth là `action/*.action`, `src/*.cpp`, `include/robot_task_manager/*.hpp`, `launch/*.launch.py`.
+## Vai trò
+`robot_task_manager` định nghĩa action ROS 2 và triển khai action server C++ cho
+motion baseline, gripper, pick-place, DRL/RL task và repeatability evaluation.
+Package này là tầng nhận goal từ GUI/client rồi gọi MoveIt, gripper executor,
+vision topics hoặc DRL backend `/drl/*`.
 
-## 2. Vị trí trong hệ thống
-Nằm giữa GUI/client và MoveIt/DRL/hardware. `robot_gui` gửi action goal tới package này; `robot_bringup` và `robot_moveit` launch các action server; server gọi MoveIt qua `moveit_executor`, gripper executor hoặc gọi DRL service `/drl/*`.
+## Action definitions
+| ROS action name | Type | Executable/server | Ghi chú |
+|---|---|---|---|
+| `/gohome` | `GoHome` | `gohome_server` | Về named target `home`. |
+| `/gohome_2` | `GoHome` | `gohome_server` instance thứ hai | Về named target `home_2`, set bằng parameter `action_name`. |
+| `/move_to_pose` | `MoveToPose` | `move_to_pose_server` | PTP MoveIt; goal có `enable_tcp_log`. |
+| `/move_to_pose_cartesian` | `MoveToPoseCartesian` | `move_pose_cartesian_server` | Cartesian MoveIt; goal có `enable_tcp_log`. |
+| `/move_checker_board` | `CheckerBoard` | `checker_board_server` | Pattern đo/checker-board; goal có `enable_tcp_log`. |
+| `/move_gripper` | `MoveGripper` | `move_gripper_server` | Điều khiển gripper group. |
+| `/pickplace` | `PickPlace` | `pickplace_server` | Composite baseline: move/pre-pick, Cartesian descend/lift, gripper, place. |
+| `/drl_pickplace` | `DrlPickPlace` | `drl_pickplace_server` | PickPlaceRL: dùng DRL plan cho đoạn pick/place và gripper/cartesian sub-actions. |
+| `/move_pose_rl` | `MovePoseRl` | `move_pose_rl_server` | MoveToPoseRL trong tài liệu/yêu cầu, endpoint thực là `/move_pose_rl`. |
+| `/move_target_rl` | `MoveTargetRl` | `move_target_rl_server` | Chọn target/obstacle từ vision hoặc fallback goal rồi gọi DRL. |
+| `/move_to_pose_obstacle` | `MoveToPoseObstacle` | `move_to_pose_obstacle_server` | MoveIt baseline có obstacle box từ vision/fallback. |
+| `/repeatability_test` | `RepeatabilityTest` | `repeatability_test_server` | Loop đo repeatability, gọi action con `/move_to_pose*`. |
 
-## 3. Thành phần chính
-- Action definitions: `GoHome`, `MoveToPose`, `MoveToPoseCartesian`, `CheckerBoard`, `MoveGripper`, `PickPlace`, `DrlPickPlace`, `MovePoseRl`, `RepeatabilityTest`.
-- Libraries: `moveit_executor`, `gripper_executor`.
-- Action servers: `gohome_server`, `move_to_pose_server`, `move_pose_cartesian_server`, `checker_board_server`, `move_gripper_server`, `pickplace_server`, `drl_pickplace_server`, `move_pose_rl_server`, `repeatability_test_server`.
-- Clients/scripts: `task_manager_client`, `drl_pick_place_box_demo_client.py`, `drl_pick_place_random_test_client.py`, `repeatability_test_client.py`.
-- Launch: `task_servers.launch.py`, `task_servers_sim.launch.py`, `repeatability_test_client.launch.py`, `drl_pick_place_random_test.launch.py`.
-- Tài liệu liên quan: `Call_action.md` và các report hiện có nên được xem như tham khảo, còn file này đồng bộ theo source hiện tại.
+## DRL và vision
+Các server RL dùng `planner_node_name`/`drl_planner_node_name` để set parameter
+cho `drl_unified_planner_node`, rồi gọi:
+- `/drl/clear_trajectory`
+- `/drl/plan`
+- `/drl/execute_forward`
+- `/drl/get_execution_status`
+- `/drl/get_planning_status`
 
-## 4. Node / executable
-| Node / executable | Nguồn | Vai trò |
-|---|---|---|
-| `gohome_server` | `src/gohome_server.cpp` | Action `/gohome` |
-| `move_to_pose_server` | `src/move_to_pose_server.cpp` | Action `/move_to_pose` |
-| `move_pose_cartesian_server` | `src/move_to_pose_cartesian_server.cpp` | Action `/move_to_pose_cartesian` |
-| `checker_board_server` | `src/move_checker_board_server.cpp` | Action `/move_checker_board` |
-| `move_gripper_server` | `src/move_gripper_server.cpp` | Action `/move_gripper` |
-| `pickplace_server` | `src/pickplace_server.cpp` | Composite pick-place |
-| `drl_pickplace_server` | `src/drl_pickplace_server.cpp` | DRL pick-place composite |
-| `move_pose_rl_server` | `src/move_pose_rl_server.cpp` | DRL move pose action |
-| `repeatability_test_server` | `src/repeatability_test_server.cpp` | Repeatability loop |
-| `task_manager_client` | `src/task_manager_client.cpp` | CLI/test client |
+Các action có vision đọc topic:
+- `/vision/wood_objects` (`robot_vision_pipeline_msgs/WoodArray`)
+- `/vision/box_objects` (`robot_vision_pipeline_msgs/BoxArray`)
 
-## 5. Topic / Service / Action
-| Interface | Type | Vai trò |
-|---|---|---|
-| `/gohome` | `GoHome.action` | Move home/named target |
-| `/move_to_pose` | `MoveToPose.action` | PTP pose |
-| `/move_to_pose_cartesian` | `MoveToPoseCartesian.action` | Cartesian pose |
-| `/move_checker_board` | `CheckerBoard.action` | Checker-board pattern |
-| `/move_gripper` | `MoveGripper.action` | Gripper target |
-| `/pickplace` | `PickPlace.action` | Pick-place sequence |
-| `/drl_pickplace` | `DrlPickPlace.action` | DRL pick-place sequence |
-| `/move_pose_rl` | `MovePoseRl.action` | DRL move-to-pose |
-| `/repeatability_test` | `RepeatabilityTest.action` | Measurement loop |
-| `/drl/plan`, `/drl/execute_forward`, `/drl/get_execution_status` | `std_srvs/Trigger` | DRL backend service clients |
+Nếu vision không chạy, `MoveTargetRl` và `MoveToPoseObstacle` có fallback fields
+trong goal để test mock/Gazebo.
 
-## 6. File launch liên quan
-`task_servers.launch.py`, `task_servers_sim.launch.py`, `repeatability_test_client.launch.py`, `drl_pick_place_random_test.launch.py`.
+## Logging CSV
+Code hiện có ba hướng log chính:
+- `StandardActionLogger`: tạo `summary.csv`, `events.csv`, `metadata.json` theo cấu trúc
+  `Log_robot_data/<mock|real>/<evaluation_group>/<ActionDisplay>/run_.../call_.../`.
+- `PerCallTcpLogger`: opt-in qua `enable_tcp_log` cho `MoveToPose`,
+  `MoveToPoseCartesian`, `CheckerBoard`, `RepeatabilityTest` để ghi TCP/joint/error
+  tracking theo từng call.
+- Logger riêng/metrics cho `PickPlace`, `DrlPickPlace`, `MovePoseRl`,
+  `MoveTargetRl`, `MoveToPoseObstacle` khi goal bật `enable_tcp_log` hoặc
+  `enable_metrics_log` tùy action.
 
-## 7. File cấu hình liên quan
-Không có YAML config package-level; tham số chủ yếu nằm trong launch và source `declare_parameter`.
+Mặc định `log_root_dir` trong C++ được dẫn xuất từ `$HOME/ros2_dev/Log_robot_data`;
+launch trong workspace này vẫn truyền `/home/minhquang/ros2_dev/Log_robot_data`.
 
-## 8. Cách build riêng package
+## Chạy nhanh
 ```bash
 cd ~/ros2_dev
 colcon build --packages-select robot_task_manager
 source install/setup.bash
-```
 
-## 9. Cách chạy nhanh
-```bash
-source ~/ros2_dev/install/setup.bash
 ros2 launch robot_task_manager task_servers.launch.py
-```
-Simulation:
-```bash
 ros2 launch robot_task_manager task_servers_sim.launch.py
 ```
 
-## 10. Ghi chú kỹ thuật / giới hạn hiện tại
-- Cần `move_group` và controller đã chạy trước khi action MoveIt execute thành công.
-- `execute=false` dùng để plan-only.
-- DRL actions cần `drl_unified_planner_node` và service `/drl/*` khả dụng.
-- Repeatability test gọi action con `/move_to_pose` và `/move_to_pose_cartesian` theo loop.
-
-## 11. TCP CSV logging
-`/pickplace` (luôn log riêng) và `/move_to_pose`, `/move_to_pose_cartesian`,
-`/repeatability_test`, `/move_checker_board` (opt-in qua `goal.enable_tcp_log`, cần thêm tham số
-launch `enable_executor_logging:=true`) đều hỗ trợ ghi 1 file CSV set/actual TCP pose riêng cho
-mỗi lần gọi action, dùng để đánh giá độ chính xác bám quỹ đạo. Xem hướng dẫn chi tiết tại
-[docs/tcp_csv_logging_usage.md](docs/tcp_csv_logging_usage.md).
+## Giới hạn cần chú ý
+- MoveIt/controller phải sẵn sàng trước khi execute.
+- `execute=false` là plan-only ở các action hỗ trợ trường này.
+- DRL actions cần `drl_unified_planner_node`, venv/model DRL và services `/drl/*`.
+- Real robot path có code/launch hỗ trợ, nhưng mức kiểm chứng thực tế cần xác nhận với phần cứng.

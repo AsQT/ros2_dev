@@ -1,77 +1,58 @@
-    # robot_bringup
+# robot_bringup
 
-    ## 1. Vai trò package
-    Package launch tổng hợp để khởi động robot ở chế độ simulation, real hardware và demo DRL pick-place. Source of truth: `launch/*.launch.py` và `package.xml` hiện tại.
+## Vai trò
+`robot_bringup` là package orchestration cho các mode chạy chính của workspace:
+mock hardware, Gazebo simulation, real hardware, vision/static TF và các demo/campaign
+DRL pick-place. Package này không build node riêng; nó include launch file và node
+từ `robot_moveit`, `robot_gazebo`, `robot_task_manager`, `robot_task_executor`,
+`robot_drl`, `robot_drl_executor`, `robot_vision_pipeline` và `tf2_ros`.
 
-    ## 2. Vị trí trong hệ thống
-    Đứng ở tầng orchestration: include `robot_description`, `robot_control`, `robot_moveit`, `robot_task_manager`, `robot_drl`, `robot_drl_executor`, RViz/Gazebo tùy mode.
+## Launch hiện có
+| Launch file | Mục đích chính |
+|---|---|
+| `mock.launch.py` | MoveIt mock hardware + task servers + `robot_task_executor`; vision tùy chọn qua `use_vision:=true`. |
+| `sim.launch.py` | Gazebo + MoveIt + task servers sim + controller spawners; vision tùy chọn. |
+| `real.launch.py` | MoveIt GUI/task servers với `use_mock=false`, `runtime_mode=real`; vision mặc định bật theo launch hiện tại. |
+| `aruco_world_static_tf.launch.py` | Publish static TF tạm thời từ YAML `config/aruco_world_to_base.yaml`. |
+| `rl_pick_place_box_gazebo_demo.launch.py` | Demo Gazebo cho `/drl_pickplace` với wood/obstacle box, DRL planner và demo client. |
+| `rl_pick_place_campaign.launch.py` | Campaign nhiều lần chạy DRL pick-place trong Gazebo, xuất CSV telemetry theo tham số `output_dir`. |
 
-    ## 3. Thành phần chính
-- `launch/sim.launch.py`: Gazebo từ `robot_gazebo` + MoveIt + task servers simulation + controller spawner.
-- `launch/real.launch.py`: MoveIt GUI + task servers với `use_mock=false`.
-- `launch/drl_test.launch.py`: Gazebo + MoveIt + `robot_drl_executor` + DRL planner + RViz.
-- `launch/rl_pick_place_box_gazebo_demo.launch.py`: demo pick-place hộp trong Gazebo, spawn box bằng `robot_gazebo` và client demo.
-- `config/common.yaml`, `config/ros2_controllers.yaml`: cấu hình dùng kèm bringup/controller.
+## Luồng tổng quát
+```mermaid
+flowchart LR
+  Bringup[robot_bringup launch] --> MoveIt[robot_moveit]
+  Bringup --> Task[robot_task_manager actions]
+  Bringup --> Exec[robot_task_executor]
+  Bringup --> Gazebo[robot_gazebo]
+  Bringup --> DRL[robot_drl + robot_drl_executor]
+  Bringup --> Vision[robot_vision_pipeline]
+  Bringup --> TF[aruco_world static TF]
+```
 
-    ## 4. Node / executable
-    | Node / executable | Nguồn | Vai trò |
-    |---|---|---|
-    | Không build executable riêng; launch file khởi tạo node từ package khác như `move_group`, `drl_unified_planner_node`, `robot_drl_executor_node`, `task_servers_*`, controller spawner và RViz. | package source/launch | Runtime của package hoặc node được launch |
+## Chạy nhanh
+```bash
+cd ~/ros2_dev
+source install/setup.bash
 
-    ## 5. Topic / Service / Action
-    | Interface | Type | Vai trò |
-    |---|---|---|
-    | Xem mô tả bên dưới | runtime interface | package dependent |
+ros2 launch robot_bringup mock.launch.py
+ros2 launch robot_bringup sim.launch.py
+ros2 launch robot_bringup real.launch.py
+```
 
-    Ghi chú interface: Không định nghĩa topic/service/action riêng. Các interface runtime đến từ package được include: action của `robot_task_manager`, service `/move_cartesian_pose_sequence`, topic Gazebo/ROS bridge và controller.
+Bật vision trong `mock`/`sim`:
+```bash
+ros2 launch robot_bringup mock.launch.py use_vision:=true
+ros2 launch robot_bringup sim.launch.py use_vision:=true
+```
 
-    ## 6. File launch liên quan
-    sim.launch.py, real.launch.py, drl_test.launch.py, rl_pick_place_box_gazebo_demo.launch.py
+Chạy demo/campaign DRL pick-place trong Gazebo:
+```bash
+ros2 launch robot_bringup rl_pick_place_box_gazebo_demo.launch.py
+ros2 launch robot_bringup rl_pick_place_campaign.launch.py num_runs:=20
+```
 
-    ## 7. File cấu hình liên quan
-    config/common.yaml, config/ros2_controllers.yaml
-
-    ## 8. Cách build riêng package
-    ```bash
-    cd ~/ros2_dev
-    colcon build --packages-select robot_bringup
-    source install/setup.bash
-    ```
-
-    ## 9. Cách chạy nhanh
-    ```bash
-    source ~/ros2_dev/install/setup.bash
-    ros2 launch robot_bringup sim.launch.py
-    ```
-    Nếu package không có launch/runtime node, dùng nó bằng cách phụ thuộc interface hoặc include file từ package khác.
-
-    ## 10. Ghi chú kỹ thuật / giới hạn hiện tại
-    - Source of truth là source code hiện tại trong `robot_bringup`.
-    - Tài liệu này không thay thế kiểm tra runtime bằng `ros2 node list`, `ros2 topic list`, `ros2 service list`, `ros2 action list` sau khi launch.
-    - Bringup không gọi MoveIt trực tiếp trong code, nhưng launch `move_group`, `task_servers_*`, `robot_drl_executor_node` và GUI/client. Thất bại thường đến từ include thiếu package, controller chưa active hoặc action/server chưa sẵn sàng.
-
-
-Lấy Data PickPlace
-
-ros2 launch robot_bringup rl_pick_place_campaign.launch.py \ num_runs:=50 \
-  output_dir:=/home/minhquang/rl_eval_runs/experiment_01
-
-Cần bạn chạy lệnh này trong terminal (cần nhập password sudo một lần):
-
-
-echo "minhquang ALL=(ALL) NOPASSWD: /sbin/shutdown" | sudo tee /etc/sudoers.d/shutdown-nopasswd
-Sau đó kiểm tra lại:
-
-
-sudo -n /bin/true && echo "OK"
-Khi OK rồi, quy trình chạy campaign 100 lần:
-
-Terminal 1:
-
-
-ros2 launch robot_bringup rl_pick_place_campaign.launch.py num_runs:=100
-Terminal 2 (chạy ngay sau hoặc trước cũng được):
-
-
-/home/minhquang/shutdown_after_campaign.sh
-Script sẽ tự chờ campaign runner xuất hiện, rồi đợi nó chạy xong 100 lần, rồi đếm ngược 60s rồi tắt máy.
+## Ghi chú trạng thái
+- `mock.launch.py` là đường chạy không cần camera/robot thật; vision mặc định tắt.
+- `sim.launch.py` dùng Gazebo + `gz_ros2_control`; không có simulated camera feed mặc định, nên các action vision/RL có thể dùng fallback goal hoặc ground-truth object từ demo/campaign.
+- `real.launch.py` đặt `runtime_mode=real` cho task servers và dùng `use_mock=false`; mức độ kiểm chứng với robot thật cần xác nhận khi có phần cứng.
+- Các launch DRL dùng Python venv cố định `/home/minhquang/venvs/ros_rl/bin/python3`; cần xác nhận đường dẫn này khi chạy trên máy khác.

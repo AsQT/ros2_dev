@@ -30,7 +30,7 @@ flowchart LR
 - Axis jog/run nhập degree hoặc degree/s; hardware service nhận rad hoặc rad/s.
 
 ## 6. Interface chính
-Action clients tới `/gohome`, `/move_to_pose`, `/move_to_pose_cartesian`, `/move_gripper`, `/pickplace`, `/move_checker_board`, `/move_pose_rl`, `/repeatability_test`. Hardware service clients tới `/robot_hw/*`.
+Action clients tới `/gohome`, `/gohome_2`, `/move_to_pose`, `/move_to_pose_cartesian`, `/move_to_pose_obstacle`, `/move_gripper`, `/pickplace`, `/drl_pickplace`, `/move_checker_board`, `/move_pose_rl`, `/repeatability_test`. GUI cũng dùng `/vision/wood_objects` và `/vision/box_objects` cho các tab vision/pick-place. Hardware service clients tới `/robot_hw/*`.
 
 ## 7. Rủi ro runtime
 GUI mở được không đảm bảo server đã chạy. Nếu action/service chưa available, log sẽ báo timeout hoặc send goal fail.

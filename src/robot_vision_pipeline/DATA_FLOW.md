@@ -22,8 +22,8 @@ flowchart LR
   Adapter --> Mapper[pixel_to_base_mapper]
   Yaw --> Mapper
   Depth[Depth + CameraInfo] --> Mapper
-  Mapper --> Objects[WoodArray/BoxArray]
-  Mapper --> Markers[MarkerArray]
+  Mapper --> Objects[/vision/wood_objects + /vision/box_objects]
+  Mapper --> Markers[/vision/object_markers]
 ```
 
 ## 6. Liên kết với package khác

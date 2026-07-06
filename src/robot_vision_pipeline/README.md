@@ -33,7 +33,8 @@ Pipeline perception Python dùng YOLO, ArUco, depth/intrinsic/extrinsic và mark
 | `/camera/camera/aligned_depth_to_color/image_raw` | Image | Depth đầu vào |
 | `/vision/yolo/detections_json` | String | YOLO detections JSON |
 | `/vision/yolo/hough_yaw_json` | String | Yaw estimation JSON |
-| `/vision/woods`, `/vision/boxes` | WoodArray/BoxArray | Object pose output |
+| `/vision/wood_detection`, `/vision/box_detection` | BoxDetection | Detection + depth adapter output |
+| `/vision/wood_objects`, `/vision/box_objects` | WoodArray/BoxArray | Object pose output used by GUI/task/DRL |
 | `/vision/object_markers` | MarkerArray | RViz visualization |
 
 ## 6. File launch liên quan

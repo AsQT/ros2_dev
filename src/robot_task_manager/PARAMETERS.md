@@ -1,33 +1,44 @@
 # robot_task_manager - Parameters
 
-## 1. Tổng quan
-Parameter lấy từ launch và `declare_parameter` trong server/client scripts.
+## Launch-level
+| Parameter | Default | Nơi khai báo | Ý nghĩa |
+|---|---:|---|---|
+| `enable_drl_backend` | `true` | `task_servers*.launch.py` | Launch `drl_unified_planner_node` kèm task servers. |
+| `planner_node_name` | `/drl_unified_planner_node` | `task_servers*.launch.py` | Tên node DRL planner cho service set parameters. |
+| `drl_calibrated_start_tcp_base` | `[0.375, 0.000, 0.250]` | `task_servers*.launch.py` | Start TCP default truyền vào DRL backend. |
+| `runtime_mode` | `mock` | `task_servers.launch.py` | Nhánh log `mock` hoặc `real`; sim launch hardcode `mock`. |
+| `enable_standard_logging` | `true` | `task_servers.launch.py` | Bật `StandardActionLogger`. |
+| `enable_debug_logging` | `false` | `task_servers.launch.py` | Bật log debug ở các server có hỗ trợ. |
+| `enable_executor_logging` | `false` | `task_servers.launch.py` | Bật executor/per-call logger ở các server có hỗ trợ. |
+| `log_root_dir` | `/home/minhquang/ros2_dev/Log_robot_data` | launch | Root log. |
+| `executor_log_dir` | `.../executor_internal` | launch | Được forward nhưng `log_paths.hpp` chuẩn hóa theo action log dir ở nhiều server. |
+| `executor_sample_rate_hz` | `50.0` | launch/source | Tần số sample TCP/joint log. |
+| `executor_base_frame` | `base_link` | launch/source | Base frame cho logger. |
+| `executor_tcp_frame` | `tcp_link` | launch/source | TCP frame cho logger. |
 
-## 2. Bảng parameter
-| Parameter | Default | Type | Nơi khai báo | Nơi sử dụng | Ý nghĩa |
-|---|---:|---|---|---|---|
-| `enable_drl_backend` | `true` | bool | `task_servers*.launch.py` | launch DRL backend | Bật `drl_unified_planner_node` kèm task servers |
-| `planner_node_name` | `/drl_unified_planner_node` | string | `task_servers*.launch.py` | DRL servers | Tên node planner để set parameters |
-| `drl_calibrated_start_tcp_base` | `[0.375,...]` | array | `task_servers*.launch.py` | DRL backend | TCP start cho planner |
-| `server_wait_timeout_s` | `5.0` | double | `repeatability_test_server.cpp` | repeatability | Chờ action con sẵn sàng |
-| `action_result_timeout_s` | `120.0` | double | `repeatability_test_server.cpp` | repeatability | Timeout result action con |
-| `measurement_settle_time_s` | `2.0` | double | `repeatability_test_server.cpp` | repeatability | Delay ổn định đo |
-| `fast_velocity_scale` | `0.1` | double | `repeatability_test_server.cpp` | repeatability | Vận tốc retract/disturb |
-| `task_name` | `gohome` | string | `task_manager_client.cpp` | client | Chọn action test |
-| `execute` | `true` | bool | client/scripts | action goal | Plan-only hoặc execute |
-| `number_of_trials` | `20` | int | `drl_pick_place_random_test_client.py` | random test | Số lần test |
-| `gripper_close_width_m` | `0.028` | double | random/demo clients | pick-place | Độ đóng gripper theo mét |
+## Server parameters đáng chú ý
+| Parameter | Default | Server | Ý nghĩa |
+|---|---:|---|---|
+| `planning_group` | `arm` | MoveIt action servers | Planning group. |
+| `home_target` | `home` / `home_2` | `gohome_server` | Named target SRDF. |
+| `action_name` | `gohome` / `gohome_2` | `gohome_server` | Endpoint action cho GoHome. |
+| `planning_frame` | `base_link` | RL/composite servers | Frame planning cho DRL actions. |
+| `ee_link` | `tcp_link` | RL/composite servers | TCP/end-effector link. |
+| `target_class` | `wood` | `move_target_rl_server` | Class target vision mặc định. |
+| `obstacle_class` | `box` | `move_target_rl_server`, `move_to_pose_obstacle_server`, RL servers | Class obstacle mặc định. |
+| `wood_objects_topic` | `/vision/wood_objects` | `move_target_rl_server` | Topic WoodArray. |
+| `box_objects_topic` | `/vision/box_objects` | RL/obstacle servers | Topic BoxArray. |
+| `vision_timeout_sec` | `1.0` | vision-dependent servers | Thời gian chờ detection. |
+| `drl_timeout_sec` | `120.0` mock, `300.0` sim | RL servers | Timeout DRL plan/execute. |
+| `drl_plan_attempts` | `3` | RL servers | Số lần thử plan. |
+| `sub_action_timeout_sec` | `60.0` hoặc `180.0` | composite/RL servers | Timeout action con. |
+| `use_preposition_before_pre_pick` | `false` | `drl_pickplace_server` | Không ép về preposition cố định trước PLAN_TO_PRE_PICK theo launch hiện tại. |
 
-## 3. Parameter theo launch file
-- `task_servers.launch.py`, `task_servers_sim.launch.py`: DRL backend và planner node name.
-- `repeatability_test_client.launch.py`: `axis`, `repeat_count`, `meas_offset`, `velocity_scale`, `execute`, `frame_id`.
-- `drl_pick_place_random_test.launch.py`: `use_gazebo`, `number_of_trials`, `random_seed`, `gripper_close_width_m`, `execute`.
+## Goal flags
+- `execute=false`: plan-only khi action hỗ trợ.
+- `enable_tcp_log`: có trong `MoveToPose`, `MoveToPoseCartesian`, `CheckerBoard`, `PickPlace`, `RepeatabilityTest`.
+- `enable_metrics_log`: có trong `MovePoseRl`, `MoveTargetRl`, `MoveToPoseObstacle`, `DrlPickPlace`.
 
-## 4. Parameter theo YAML config
-Không có YAML config riêng trong package.
-
-## 5. Giá trị mặc định quan trọng
-`velocity_scale=0.1`, `execute=true` ở client, timeout repeatability `120s`.
-
-## 6. Ghi chú thay đổi / rủi ro cấu hình
-Sai `planner_node_name` làm DRL action không set được parameter hoặc không gọi được service. Timeout quá thấp dễ fail khi MoveIt/Gazebo khởi động chậm.
+## Cần xác nhận
+- Các giá trị timeout/tolerance tối ưu cho robot thật cần xác nhận bằng chạy thực tế.
+- `hardware_plugin` default là `unknown` nếu launch không truyền thêm.

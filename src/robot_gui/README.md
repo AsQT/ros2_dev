@@ -24,7 +24,7 @@
     |---|---|---|
     | Xem mô tả bên dưới | runtime interface | package dependent |
 
-    Ghi chú interface: Subscribe `/joint_states`, `/robot_hw/flags`, camera image topics; service clients `/robot_hw/servo_all`, `/robot_hw/home`, `/robot_hw/jog`, `/robot_hw/run_axis`, `/robot_hw/stop_axis`, `/robot_hw/stop_all`; publish `arm_controller/joint_trajectory`, `gripper_controller/joint_trajectory`; action clients `/gohome`, `/move_to_pose`, `/move_to_pose_cartesian`, `/move_gripper`, `/pickplace`, `/move_checker_board`, `/move_pose_rl`, `/repeatability_test`.
+    Ghi chú interface: Subscribe `/joint_states`, `/robot_hw/flags`, camera image topics, `/vision/wood_objects`, `/vision/box_objects`; service clients `/robot_hw/servo_all`, `/robot_hw/home`, `/robot_hw/jog`, `/robot_hw/run_axis`, `/robot_hw/stop_axis`, `/robot_hw/stop_all`; publish `arm_controller/joint_trajectory`, `gripper_controller/joint_trajectory`; action clients `/gohome`, `/gohome_2`, `/move_to_pose`, `/move_to_pose_cartesian`, `/move_to_pose_obstacle`, `/move_gripper`, `/pickplace`, `/drl_pickplace`, `/move_checker_board`, `/move_pose_rl`, `/repeatability_test`.
 
     ## 6. File launch liên quan
     robot_gui.launch.py, embedded_rviz_cpp_test.launch.py
